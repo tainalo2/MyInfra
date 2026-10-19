@@ -14,6 +14,12 @@ import { PodActions } from "./pods";
 import { TofuFiles } from "./tofu";
 import { Button, ErrorText, Field, Fold, Icon, IconButton, Input, LoadingLines, PageTitle, SectionTitle, Select, TextArea, TextButton, podFailed, podHealth, statusLabel, useTrail } from "./ui";
 
+type RedundancyPreview = {
+  plan: { scaled: string[]; failover: string[]; database: string[]; alone: string[] };
+  nodes: number;
+  storageNodes: number;
+};
+
 export function NewApp({ onCancel }: { onCancel?: () => void }) {
   const navigate = useNavigate();
   const [search, setSearch] = useSearchParams();
@@ -22,6 +28,7 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
     { label: text("crumb.newApp") },
   ]);
   const [servers, setServers] = useState<Server[]>([]);
+  const [linked, setLinked] = useState<Server[]>([]);
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [name, setName] = useState("");
   const [zones, setZones] = useState<DnsZone[]>([]);
@@ -38,12 +45,39 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
   const [destination, setDestination] = useState("server");
   const [serverId, setServerId] = useState("");
   const [clusterId, setClusterId] = useState("");
-  const [replicas, setReplicas] = useState("1");
+  const [copies, setCopies] = useState(1);
+  const [preview, setPreview] = useState<RedundancyPreview | null>(null);
   const [listen, setListen] = useState("");
   const [variables, setVariables] = useState("");
   const [services, setServices] = useState<AppService[]>([]);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
+
+  const nodes = linked.filter((server) => server.clusterId === clusterId).length;
+  // What each service becomes is decided by the server, which knows how each
+  // image keeps its data.
+  useEffect(() => {
+    if (destination !== "cluster" || copies <= 1 || (sourceKind === "catalogue" ? !article : !source.trim())) {
+      setPreview(null);
+      return;
+    }
+    let stop = false;
+    const body = sourceKind === "catalogue" ? { clusterId, article: article?.id } : { clusterId, image: source.trim() };
+    api<RedundancyPreview>("/api/redundancy/preview", { method: "POST", body: JSON.stringify(body) })
+      .then((next) => {
+        if (!stop) setPreview(next);
+      })
+      .catch(() => {
+        if (!stop) setPreview(null);
+      });
+    return () => {
+      stop = true;
+    };
+  }, [destination, copies, clusterId, sourceKind, source, article]);
+
+  useEffect(() => {
+    if (copies > Math.max(1, nodes)) setCopies(1);
+  }, [nodes, copies]);
 
   useEffect(() => {
     Promise.all([api<Server[]>("/api/servers"), api<Cluster[]>("/api/clusters")])
@@ -51,6 +85,7 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
         const lone = nextServers.filter((server) => !server.clusterId);
         const created = nextClusters.filter((cluster) => cluster.origin !== "imported");
         setServers(lone);
+        setLinked(nextServers.filter((server) => server.status === "linked"));
         setClusters(created);
         if (lone[0]) setServerId(lone[0].id);
         if (created[0]) setClusterId(created[0].id);
@@ -124,6 +159,7 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
             clusterId: destination === "cluster" ? clusterId : "",
             inputs,
             tag,
+            copies: destination === "cluster" ? copies : 1,
           }),
         });
         navigate(`/applications/${created.id}`);
@@ -139,7 +175,7 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
           destinationKind: destination,
           serverId: destination === "server" ? serverId : "",
           clusterId: destination === "cluster" ? clusterId : "",
-          replicas: Number(replicas) || 1,
+          replicas: destination === "cluster" ? copies : 1,
           variables: vars,
           services,
           listen: Number(listen) || 0,
@@ -351,6 +387,40 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
             </Select>
           </Field>
         )}
+        {destination === "cluster" && clusters.length > 0 ? (
+          <div className="flex flex-col gap-3">
+            <Field label={text("field.redundancy")}>
+              <Select value={copies} onChange={(e) => setCopies(Number(e.target.value))}>
+                <option value={1}>{text("redundancy.single")}</option>
+                {Array.from({ length: Math.max(0, nodes - 1) }, (_, i) => i + 2).map((count) => (
+                  <option key={count} value={count}>
+                    {text("redundancy.option", { count })}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            {copies <= 1 ? <p className="text-faint">{text("redundancy.createHint")}</p> : null}
+            {preview && preview.plan.failover.length + preview.plan.database.length > 0 && preview.nodes < preview.storageNodes ? (
+              <p className="text-warn">{text("redundancy.storageShort", { count: preview.storageNodes })}</p>
+            ) : null}
+            {preview ? (
+              <ul>
+                {preview.plan.scaled.map((name) => (
+                  <li key={name} className="border-t border-line py-2 text-muted">{text("redundancy.scaled", { name, count: copies })}</li>
+                ))}
+                {preview.plan.database.map((name) => (
+                  <li key={name} className="border-t border-line py-2 text-muted">{text("redundancy.databaseNew", { name, count: copies })}</li>
+                ))}
+                {preview.plan.failover.map((name) => (
+                  <li key={name} className="border-t border-line py-2 text-muted">{text("redundancy.failover", { name })}</li>
+                ))}
+                {preview.plan.alone.map((name) => (
+                  <li key={name} className="border-t border-line py-2 text-muted">{text("redundancy.alone", { name })}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
         {sourceKind === "catalogue" ? null : (
         <div>
           <button type="button" className="inline-flex items-center gap-2 text-muted" onClick={() => setOpen((value) => !value)}>
@@ -359,10 +429,6 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
           </button>
           {open ? (
             <div className="mt-6 flex flex-col gap-6">
-              <Field label={text("field.redundancy")}>
-                <Input value={replicas} onChange={(e) => setReplicas(e.target.value)} inputMode="numeric" />
-              </Field>
-              <p className="text-faint">{text("app.replicasHint")}</p>
               {sourceKind === "image" && services.length === 0 ? (
                 <>
                   <Field label={text("app.port")}>

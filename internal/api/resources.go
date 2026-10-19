@@ -618,6 +618,14 @@ func (a *API) createApplication(w http.ResponseWriter, r *http.Request) {
 		services[0].Listen = body.Listen
 	}
 	fillFromImages(r.Context(), services, implicit)
+	clusterID := ""
+	if body.DestinationKind == "cluster" {
+		clusterID = strings.TrimSpace(body.ClusterID)
+	}
+	if err := a.shapeRedundancy(r.Context(), userID(r.Context()), clusterID, services, body.Replicas); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	in := store.NewApplication{
 		ID: newID(), OwnerID: userID(r.Context()), Name: name,
 		SourceKind: body.SourceKind, Source: source, DestinationKind: body.DestinationKind,

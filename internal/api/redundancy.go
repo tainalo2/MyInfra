@@ -238,12 +238,7 @@ func distinctLines(out string) int {
 // would each have their own data.
 func (a *API) shapeRedundancy(ctx context.Context, owner, clusterID string, services []store.Service, copies int) error {
 	if copies <= 1 {
-		for i := range services {
-			if services[i].Disk {
-				services[i].Replicas = 1
-			}
-		}
-		return nil
+		return shapeServices(services, copies, 0)
 	}
 	if clusterID == "" {
 		return errors.New("Une machine seule n'a qu'un serveur : choisissez un cluster pour répartir l'application.")
@@ -252,7 +247,22 @@ func (a *API) shapeRedundancy(ctx context.Context, owner, clusterID string, serv
 	if err != nil {
 		return err
 	}
+	return shapeServices(services, copies, nodes)
+}
+
+func shapeServices(services []store.Service, copies, nodes int) error {
+	if copies <= 1 {
+		for i := range services {
+			if services[i].Disk {
+				services[i].Replicas = 1
+			}
+		}
+		return nil
+	}
 	if copies > nodes {
+		if nodes <= 1 {
+			return errors.New("Ce cluster n'a qu'un serveur lié : il n'y a pas d'autre serveur où mettre une copie.")
+		}
 		return fmt.Errorf("Ce cluster a %d serveurs liés : choisissez au plus %d copies.", nodes, nodes)
 	}
 	plan := redundancyPlan(services)

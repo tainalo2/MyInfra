@@ -747,6 +747,9 @@ func (a *API) createRunApp(ctx context.Context, owner string, run *blueprint.Run
 		return err
 	}
 	fillFromImages(ctx, stored, len(services) == 0)
+	if err := a.shapeRedundancy(ctx, owner, clusterID, stored, app.Replicas); err != nil {
+		return err
+	}
 	in := store.NewApplication{
 		ID: newID(), OwnerID: owner, Name: name,
 		SourceKind: app.SourceKind, Source: source, DestinationKind: "cluster", ClusterID: clusterID,

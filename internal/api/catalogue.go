@@ -38,6 +38,8 @@ func (a *API) installCatalogue(w http.ResponseWriter, r *http.Request) {
 		ClusterID       string            `json:"clusterId"`
 		Inputs          map[string]string `json:"inputs"`
 		Tag             string            `json:"tag"`
+		// Copies is the redundancy asked: 0 or 1 keeps the article's own.
+		Copies int `json:"copies"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
@@ -156,6 +158,12 @@ func (a *API) installCatalogue(w http.ResponseWriter, r *http.Request) {
 			ID: newID(), Name: svc.Name, Image: svc.Image, Published: svc.Published, Disk: svc.Disk,
 			DiskPath: svc.DiskPath, DiskGi: svc.DiskGi, Listen: svc.Listen, Args: svc.Args, Replicas: svc.Replicas,
 		})
+	}
+	if body.Copies > 1 {
+		if err := a.shapeRedundancy(r.Context(), in.OwnerID, in.ClusterID, in.Services, body.Copies); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 	}
 	sealed, err := a.sealVars(in.Variables)
 	if err != nil {
