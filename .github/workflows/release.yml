@@ -152,11 +152,30 @@ jobs:
           grep -aqF "$IMAGE" "$out" || { echo "::error::Version absente de $out"; exit 1; }
           if [ "${{ matrix.external }}" != "true" ]; then
             go version -m "$out" | grep -q -- "-tags=postgresembed" || { echo "::error::PostgreSQL n'est pas embarqué dans $out"; exit 1; }
-          fi
-          if [ "${{ matrix.goos }}-${{ matrix.goarch }}" = "linux-amd64" ]; then
-            test "$("./$out" --version)" = "$VERSION"
+            # L'archive embarquée doit contenir PostgreSQL, pas seulement exister.
+            tar -tzf internal/boot/postgres.tar.gz | grep -Eq '(^|/)bin/postgres(\.exe)?$' || { echo "::error::Archive PostgreSQL vide pour $out"; exit 1; }
           fi
           ls -lh "$out"
+      - name: Démarrage
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        run: |
+          out="dist/myinfra_${VERSION}_linux_amd64"
+          test "$("./$out" --version)" = "$VERSION"
+          # Sans DATABASE_URL, l'exécutable démarre son propre PostgreSQL.
+          home=$(mktemp -d)
+          HOME="$home" MYINFRA_NO_BROWSER=1 MYINFRA_ADDR=127.0.0.1:8080 "./$out" > boot.log 2>&1 &
+          pid=$!
+          for i in $(seq 1 90); do
+            if curl -sf http://127.0.0.1:8080/api/health > /dev/null; then
+              echo "Démarré en ${i}s avec PostgreSQL embarqué."
+              kill "$pid"
+              exit 0
+            fi
+            sleep 1
+          done
+          cat boot.log
+          echo "::error::L'exécutable ne démarre pas avec son PostgreSQL."
+          exit 1
       - uses: actions/upload-artifact@v4
         with:
           name: myinfra-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -210,9 +229,11 @@ jobs:
       IMAGE: ${{ needs.version.outputs.image }}
     steps:
       - uses: actions/checkout@v4
+      # Seulement les exécutables : l'action Docker dépose aussi son propre artefact.
       - uses: actions/download-artifact@v4
         with:
           path: dist
+          pattern: myinfra-*
           merge-multiple: true
       - name: Fichiers
         run: |

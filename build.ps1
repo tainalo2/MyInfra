@@ -27,11 +27,21 @@ function Get-Postgres($goos, $goarch) {
   try {
     $jar = Join-Path $tmp "pg.jar"
     Invoke-WebRequest -Uri $url -OutFile $jar -UseBasicParsing
-    $txz = (tar -tf $jar | Select-String -Pattern '\.txz$').Line
-    tar -xOf $jar $txz > (Join-Path $tmp "postgres.txz")
-    New-Item -ItemType Directory -Path (Join-Path $tmp "root") | Out-Null
-    tar -xJf (Join-Path $tmp "postgres.txz") -C (Join-Path $tmp "root")
-    tar -czf (Join-Path $PSScriptRoot "internal/boot/postgres.tar.gz") -C (Join-Path $tmp "root") .
+    # The .jar is a zip, which the tar of Windows reads. Files are extracted to
+    # disk: a PowerShell redirection would rewrite the bytes as text.
+    $txz = (tar -tf $jar | Select-String -Pattern '\.txz$' | Select-Object -First 1).Line
+    if (-not $txz) { throw "Pas d'archive PostgreSQL dans $url" }
+    tar -xf $jar -C $tmp $txz
+    if ($LASTEXITCODE -ne 0) { throw "Archive PostgreSQL illisible." }
+    $root = Join-Path $tmp "root"
+    New-Item -ItemType Directory -Path $root | Out-Null
+    tar -xJf (Join-Path $tmp $txz) -C $root
+    if ($LASTEXITCODE -ne 0) { throw "Archive PostgreSQL illisible." }
+    if (-not ((Test-Path (Join-Path $root "bin/postgres")) -or (Test-Path (Join-Path $root "bin/postgres.exe")))) {
+      throw "PostgreSQL absent de l'archive pour $goos/$goarch."
+    }
+    tar -czf (Join-Path $PSScriptRoot "internal/boot/postgres.tar.gz") -C $root .
+    if ($LASTEXITCODE -ne 0) { throw "PostgreSQL ne s'empaquette pas." }
   } finally {
     Remove-Item -Recurse -Force $tmp
   }

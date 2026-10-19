@@ -9,8 +9,8 @@
 set -eu
 cd "$(dirname "$0")"
 
-if ! command -v go >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
-  echo "Go et npm sont requis." >&2
+if ! command -v go >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1 || ! command -v unzip >/dev/null 2>&1; then
+  echo "Go, npm et unzip sont requis." >&2
   exit 1
 fi
 
@@ -38,18 +38,29 @@ build_one() {
   echo "$out"
 }
 
+# fetch_postgres packs the PostgreSQL of a system into the executable. It is
+# called inside an if, where set -e does not apply: each step stops by itself,
+# otherwise an empty archive would be embedded without a word.
 fetch_postgres() {
   art=$(postgres_artifact "$1" "$2") || return 1
   ver=16.15.0
   url="https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-${art}/${ver}/embedded-postgres-binaries-${art}-${ver}.jar"
   tmp=$(mktemp -d)
-  curl -fL -A "myinfra-build" -o "$tmp/pg.jar" "$url" || exit 1
-  txz=$(tar -tf "$tmp/pg.jar" | grep '\.txz$' | head -n 1)
-  tar -xOf "$tmp/pg.jar" "$txz" > "$tmp/postgres.txz"
+  curl -fsSL -A "myinfra-build" -o "$tmp/pg.jar" "$url" || die "PostgreSQL ne se télécharge pas : $url"
+  # The .jar is a zip: GNU tar cannot read it, unzip reads it everywhere.
+  txz=$(unzip -Z1 "$tmp/pg.jar" | grep '\.txz$' | head -n 1)
+  [ -n "$txz" ] || die "Pas d'archive PostgreSQL dans $url"
+  unzip -p "$tmp/pg.jar" "$txz" > "$tmp/postgres.txz" || die "Archive PostgreSQL illisible."
   mkdir "$tmp/root"
-  tar -xJf "$tmp/postgres.txz" -C "$tmp/root"
-  tar -czf internal/boot/postgres.tar.gz -C "$tmp/root" .
+  tar -xJf "$tmp/postgres.txz" -C "$tmp/root" || die "Archive PostgreSQL illisible."
+  [ -f "$tmp/root/bin/postgres" ] || [ -f "$tmp/root/bin/postgres.exe" ] || die "PostgreSQL absent de l'archive pour $1/$2."
+  tar -czf internal/boot/postgres.tar.gz -C "$tmp/root" . || die "PostgreSQL ne s'empaquette pas."
   rm -rf "$tmp"
+}
+
+die() {
+  echo "$1" >&2
+  exit 1
 }
 
 postgres_artifact() {

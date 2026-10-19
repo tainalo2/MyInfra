@@ -14,11 +14,12 @@ function watch(page: Page) {
 
 async function signIn(page: Page) {
   await page.goto("/");
-  const field = page.locator('input[type="password"]');
+  // The first password is typed twice; signing in asks it once.
+  const fields = page.locator('input[type="password"]');
   const shell = page.locator("aside");
-  await expect(field.or(shell).first()).toBeVisible();
-  if (await field.isVisible()) {
-    await field.fill(password);
+  await expect(fields.first().or(shell).first()).toBeVisible();
+  if (await fields.first().isVisible()) {
+    for (const field of await fields.all()) await field.fill(password);
     await page.locator('button[type="submit"]').click();
     await page.waitForURL((url) => !/\/(depart|entree)$/.test(url.pathname));
   }
