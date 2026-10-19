@@ -443,6 +443,11 @@ const guides: Record<string, Guide> = {
   },
 };
 
+// hasGuide tells whether a guide exists, so that no link opens nothing.
+export function hasGuide(kind: string, provider: string) {
+  return Boolean(guideFor(kind, provider));
+}
+
 function guideFor(kind: string, provider: string) {
   if (kind === "provider_token") return guides[provider];
   return guides[`${kind}:${provider}`];

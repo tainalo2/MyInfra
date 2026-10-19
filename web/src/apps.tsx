@@ -1,7 +1,9 @@
 import { FormEvent, useEffect, useState } from "react";
+import { ConfirmDialog, Spinner, StatusBadge, Steps, appHealth, useToast } from "./kit";
+import { usePoll } from "./poll";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ChevronDown, ChevronUp, Copy, ExternalLink, Plus, Trash2 } from "lucide-react";
-import { api, peek, type AppRuntime, type AppService, type Application, type CatalogueCard, type CatalogueVersions, type Cluster, type Destruction, type DnsZone, type Server } from "./api";
+import { api, type AppRuntime, type AppService, type Application, type CatalogueCard, type CatalogueVersions, type Cluster, type Destruction, type DnsZone, type Server } from "./api";
 import { localizeCard } from "./catalogue-copy";
 import { knownMessage, text } from "./i18n";
 import { AppLogo } from "./app-logo";
@@ -11,8 +13,9 @@ import { podCpu, size } from "./measure";
 import { ImageEditor } from "./images";
 import { AppSecretLinks } from "./secrets";
 import { PodActions } from "./pods";
+import { NameList } from "./names";
 import { TofuFiles } from "./tofu";
-import { Button, ErrorText, Field, Fold, Icon, IconButton, Input, LoadingLines, PageTitle, SectionTitle, Select, TextArea, TextButton, podFailed, podHealth, statusLabel, useTrail } from "./ui";
+import { ActionsMenu, Button, ErrorText, Field, Fold, Group, Icon, IconButton, Input, LoadingLines, MenuItem, PageTitle, SectionTitle, Select, TextArea, TextButton, focus, podFailed, podHealth, statusLabel, useTrail } from "./ui";
 
 type RedundancyPreview = {
   plan: { scaled: string[]; failover: string[]; database: string[]; alone: string[] };
@@ -24,7 +27,7 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
   const navigate = useNavigate();
   const [search, setSearch] = useSearchParams();
   useTrail([
-    { label: text("nav.apps"), to: "/" },
+    { label: text("nav.apps"), to: "/applications" },
     { label: text("crumb.newApp") },
   ]);
   const [servers, setServers] = useState<Server[]>([]);
@@ -50,10 +53,12 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
   const [listen, setListen] = useState("");
   const [variables, setVariables] = useState("");
   const [services, setServices] = useState<AppService[]>([]);
+  const [creating, setCreating] = useState(false);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
 
   const nodes = linked.filter((server) => server.clusterId === clusterId).length;
+  const placed = destination === "server" ? Boolean(serverId) : Boolean(clusterId);
   // What each service becomes is decided by the server, which knows how each
   // image keeps its data.
   useEffect(() => {
@@ -87,7 +92,8 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
         setServers(lone);
         setLinked(nextServers.filter((server) => server.status === "linked"));
         setClusters(created);
-        if (lone[0]) setServerId(lone[0].id);
+        const usable = lone.find((server) => server.status === "linked") ?? lone[0];
+        if (usable) setServerId(usable.id);
         if (created[0]) setClusterId(created[0].id);
         if (!lone[0] && created[0]) setDestination("cluster");
       })
@@ -131,24 +137,26 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
+    if (creating) return;
     setError("");
     const vars: Record<string, string> = {};
-    for (const line of variables.split("\n")) {
+    for (const [index, line] of variables.split("\n").entries()) {
       const trimmed = line.trim();
       if (!trimmed) continue;
       const cut = trimmed.indexOf("=");
       if (cut <= 0) {
-        setError(text("ui.uneVariableSEcritCleValeur"));
+        setError(`${text("ui.uneVariableSEcritCleValeur")} ${text("apps.badLine", { line: index + 1 })}`);
         return;
       }
       vars[trimmed.slice(0, cut)] = trimmed.slice(cut + 1);
     }
+    if (sourceKind === "catalogue" && !article) {
+      setError(text("ui.choisissezUneApplicationDuCatalogue"));
+      return;
+    }
+    setCreating(true);
     try {
-      if (sourceKind === "catalogue") {
-        if (!article) {
-          setError(text("ui.choisissezUneApplicationDuCatalogue"));
-          return;
-        }
+      if (sourceKind === "catalogue" && article) {
         const created = await api<{ id: string }>(`/api/catalogue/${article.id}`, {
           method: "POST",
           body: JSON.stringify({
@@ -177,17 +185,18 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
           clusterId: destination === "cluster" ? clusterId : "",
           replicas: destination === "cluster" ? copies : 1,
           variables: vars,
-          services,
+          services: sourceKind === "image" ? services : [],
           listen: Number(listen) || 0,
         }),
       });
       navigate(`/applications/${created.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : text("common.error"));
+      setCreating(false);
     }
   }
 
-  const sourceLabel = sourceKind === "git" ? text("ui.depot") : sourceKind === "template" ? "Modèle" : text("common.image");
+  const sourceLabel = sourceKind === "git" ? text("ui.depot") : sourceKind === "template" ? text("common.template") : text("common.image");
 
   function cancelSelection() {
     setArticle(null);
@@ -217,288 +226,290 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
         }
       />
       <form onSubmit={onSubmit} className="flex max-w-[720px] flex-col gap-6">
-        <Field label={text("field.source")}>
-          <Select
-            value={sourceKind}
-            onChange={(e) => {
-              setSourceKind(e.target.value);
-              setArticle(null);
-            }}
-          >
-            <option value="catalogue">{text("common.catalogue")}</option>
-            <option value="image">{text("common.image")}</option>
-            <option value="git">{text("common.git")}</option>
-            <option value="template">{text("common.template")}</option>
-          </Select>
-        </Field>
-        {sourceKind === "catalogue" ? (
-          article ? (
-            <>
-              <div className="flex items-start justify-between gap-4 rounded-md border border-line bg-surface p-4">
-                <span className="flex items-center gap-3">
-                  <AppLogo slug={article.logo} name={article.name} size={40} />
-                  <span>
-                    <span className="font-medium">{article.name}</span>
-                    <p className="mt-1 text-muted">{localizeCard(article).summary}</p>
-                  </span>
-                </span>
-                <Link to={`/catalogue/${article.id}`} className="shrink-0 text-ink">
-                  {text("apps.more")}
-                </Link>
-              </div>
-              <div>
-                <TextButton type="button" onClick={cancelSelection}>
-                  {text("common.clear")}
-                </TextButton>
-              </div>
-              <p>{localizeCard(article).description}</p>
-              <Field label={text("field.version")}>
-                <Select
-                  value={tag}
-                  onChange={(e) => {
-                    setTagTouched(true);
-                    setTag(e.target.value);
-                  }}
-                >
-                  {(versions?.tags?.length ? versions.tags : [tag]).map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              {versions?.detail ? <p className="text-bad">{knownMessage(versions.detail)}</p> : null}
-              {article.inputs.map((input) => (
-                <Field key={input.key} label={input.label}>
-                  <Input value={inputs[input.key] ?? ""} onChange={(e) => setInputs((current) => ({ ...current, [input.key]: e.target.value }))} required />
-                </Field>
-              ))}
-            </>
-          ) : (
-            <CatalogueBrowser
-              selected=""
-              onSelect={(card) => {
-                setArticle(card);
-                setInputs({});
-                if (!nameTouched) setName(card.name);
-              }}
-            />
-          )
-        ) : (
-          <Field label={sourceLabel}>
-            <Input value={source} onChange={(e) => setSource(e.target.value)} required />
-          </Field>
-        )}
-        <Field label={text("field.name")}>
-          <Input
-            value={name}
-            onChange={(e) => {
-              setNameTouched(true);
-              setName(e.target.value);
-            }}
-            required
-          />
-        </Field>
-        <Field label={text("field.domain")}>
-          {!zonesReady ? (
-            <LoadingLines lines={1} label={text("apps.domains")} />
-          ) : zones.length === 0 ? (
-            <p className="text-muted">
-              {text("apps.noDomain")} <Link to="/dns">{text("apps.linkDns")}</Link>
-            </p>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {names.map((item, index) => (
-                <div key={index} className="flex items-stretch">
-                  <input
-                    value={item.subdomain}
-                    placeholder="sous-domaine"
-                    onChange={(e) =>
-                      setNames((current) => current.map((row, i) => (i === index ? { ...row, subdomain: e.target.value } : row)))
-                    }
-                    className="min-w-0 flex-1 rounded-l-md rounded-r-none border border-line bg-surface px-3 py-2 outline-none focus:border-focus"
-                  />
-                  <span className="flex items-center border-y border-line bg-surface px-2 text-muted">.</span>
-                  <select
-                    value={item.zone}
-                    onChange={(e) =>
-                      setNames((current) => current.map((row, i) => (i === index ? { ...row, zone: e.target.value } : row)))
-                    }
-                    className="max-w-[55%] rounded-l-none rounded-r-md border border-l-0 border-line bg-surface px-3 py-2 outline-none focus:border-focus"
-                  >
-                    {zones.map((zone) => (
-                      <option key={zone.accountId + zone.name} value={zone.name}>
-                        {zone.name}
-                      </option>
-                    ))}
-                  </select>
-                  {names.length > 1 ? (
-                    <span className="ml-3 self-center">
-                      <TextButton type="button" onClick={() => setNames((current) => current.filter((_, i) => i !== index))}>
-                        {text("common.remove")}
-                      </TextButton>
-                    </span>
-                  ) : null}
-                </div>
-              ))}
-              <div>
-                <TextButton type="button" onClick={() => setNames((current) => [...current, { subdomain: "", zone: zones[0].name }])}>
-                  <Icon icon={Plus} />
-                  {text("field.addName")}
-                </TextButton>
-              </div>
-            </div>
-          )}
-        </Field>
-        <Field label={text("field.where")}>
-          <Select value={destination} onChange={(e) => setDestination(e.target.value)}>
-            <option value="server">{text("common.oneMachine")}</option>
-            <option value="cluster">{text("common.oneCluster")}</option>
-          </Select>
-        </Field>
-        {destination === "server" ? (
-          servers.length === 0 ? (
-            <p className="text-muted">
-              {text("apps.noMachine")} <Link to="/clusters">{text("apps.addMachine")}</Link>
-            </p>
-          ) : (
-            <Field label={text("field.machine")}>
-              <Select value={serverId} onChange={(e) => setServerId(e.target.value)}>
-                {servers.map((server) => (
-                  <option key={server.id} value={server.id}>
-                    {server.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          )
-        ) : clusters.length === 0 ? (
-          <p className="text-muted">
-            {text("apps.noCluster")} <Link to="/clusters">{text("apps.createCluster")}</Link>
-          </p>
-        ) : (
-          <Field label={text("field.cluster")}>
-            <Select value={clusterId} onChange={(e) => setClusterId(e.target.value)}>
-              {clusters.map((cluster) => (
-                <option key={cluster.id} value={cluster.id}>
-                  {cluster.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        )}
-        {destination === "cluster" && clusters.length > 0 ? (
-          <div className="flex flex-col gap-3">
-            <Field label={text("field.redundancy")}>
-              <Select value={copies} onChange={(e) => setCopies(Number(e.target.value))}>
-                <option value={1}>{text("redundancy.single")}</option>
-                {Array.from({ length: Math.max(0, nodes - 1) }, (_, i) => i + 2).map((count) => (
-                  <option key={count} value={count}>
-                    {text("redundancy.option", { count })}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            {copies <= 1 ? <p className="text-faint">{text("redundancy.createHint")}</p> : null}
-            {preview && preview.plan.failover.length + preview.plan.database.length > 0 && preview.nodes < preview.storageNodes ? (
-              <p className="text-warn">{text("redundancy.storageShort", { count: preview.storageNodes })}</p>
-            ) : null}
-            {preview ? (
-              <ul>
-                {preview.plan.scaled.map((name) => (
-                  <li key={name} className="border-t border-line py-2 text-muted">{text("redundancy.scaled", { name, count: copies })}</li>
-                ))}
-                {preview.plan.database.map((name) => (
-                  <li key={name} className="border-t border-line py-2 text-muted">{text("redundancy.databaseNew", { name, count: copies })}</li>
-                ))}
-                {preview.plan.failover.map((name) => (
-                  <li key={name} className="border-t border-line py-2 text-muted">{text("redundancy.failover", { name })}</li>
-                ))}
-                {preview.plan.alone.map((name) => (
-                  <li key={name} className="border-t border-line py-2 text-muted">{text("redundancy.alone", { name })}</li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-        ) : null}
-        {sourceKind === "catalogue" ? null : (
-        <div>
-          <button type="button" className="inline-flex items-center gap-2 text-muted" onClick={() => setOpen((value) => !value)}>
-            <Icon icon={open ? ChevronUp : ChevronDown} />
-            {open ? text("ui.masquerLesReglages") : text("ui.reglages")}
-          </button>
-          {open ? (
-            <div className="mt-6 flex flex-col gap-6">
-              {sourceKind === "image" && services.length === 0 ? (
+        <Steps
+          steps={[
+            {
+              title: text("steps.what"),
+              ready: sourceKind !== "catalogue" || article !== null,
+              content: (
                 <>
-                  <Field label={text("app.port")}>
-                    <Input value={listen} onChange={(e) => setListen(e.target.value.replace(/[^0-9]/g, ""))} inputMode="numeric" placeholder={text("app.portDetected")} />
+                  <Field label={text("field.source")}>
+                    <Select
+                      value={sourceKind}
+                      onChange={(e) => {
+                        setSourceKind(e.target.value);
+                        setArticle(null);
+                      }}
+                    >
+                      <option value="catalogue">{text("common.catalogue")}</option>
+                      <option value="image">{text("common.image")}</option>
+                      <option value="git">{text("common.git")}</option>
+                      <option value="template">{text("common.template")}</option>
+                    </Select>
                   </Field>
-                  <p className="text-faint">{text("app.portHint")}</p>
+                  {sourceKind === "catalogue" ? (
+                    article ? (
+                      <>
+                        <div className="flex items-start justify-between gap-4 rounded-md border border-line bg-surface p-4">
+                          <span className="flex items-center gap-3">
+                            <AppLogo slug={article.logo} name={article.name} size={40} />
+                            <span>
+                              <span className="font-medium">{article.name}</span>
+                              <p className="mt-1 text-muted">{localizeCard(article).summary}</p>
+                            </span>
+                          </span>
+                          <Link to={`/catalogue/${article.id}`} className="shrink-0 text-ink underline">
+                            {text("catalogue.details")}
+                          </Link>
+                        </div>
+                        <div>
+                          <TextButton type="button" onClick={cancelSelection}>
+                            {text("common.clear")}
+                          </TextButton>
+                        </div>
+                        <p>{localizeCard(article).description}</p>
+                        <Field label={text("field.version")}>
+                          <Select
+                            value={tag}
+                            onChange={(e) => {
+                              setTagTouched(true);
+                              setTag(e.target.value);
+                            }}
+                          >
+                            {(versions?.tags?.length ? versions.tags : [tag]).map((item) => (
+                              <option key={item} value={item}>
+                                {item}
+                              </option>
+                            ))}
+                          </Select>
+                        </Field>
+                        {versions?.detail ? <p className="text-bad">{knownMessage(versions.detail)}</p> : null}
+                        {article.inputs.map((input) => (
+                          <Field key={input.key} label={input.label}>
+                            <Input value={inputs[input.key] ?? ""} onChange={(e) => setInputs((current) => ({ ...current, [input.key]: e.target.value }))} required />
+                          </Field>
+                        ))}
+                      </>
+                    ) : (
+                      <CatalogueBrowser
+                        selected=""
+                        onSelect={(card) => {
+                          setArticle(card);
+                          setInputs({});
+                          if (!nameTouched) setName(card.name);
+                        }}
+                      />
+                    )
+                  ) : (
+                    <Field label={sourceLabel}>
+                      <Input value={source} onChange={(e) => setSource(e.target.value)} required />
+                    </Field>
+                  )}
+                  <Field label={text("field.name")}>
+                    <Input
+                      value={name}
+                      onChange={(e) => {
+                        setNameTouched(true);
+                        setName(e.target.value);
+                      }}
+                      required
+                    />
+                  </Field>
                 </>
-              ) : null}
-              <Field label={text("app.variables")}>
-                <TextArea value={variables} onChange={(e) => setVariables(e.target.value)} placeholder={"NOM=valeur"} />
-              </Field>
-              <div className="flex flex-col gap-3">
-                <span className="text-muted">{text("field.services")}</span>
-                <p className="text-faint">{text("apps.serviceHint")}</p>
-                {services.map((service, index) => (
-                  <div key={index} className="flex flex-col gap-2 rounded-md border border-line p-3">
-                    <Input
-                      value={service.name}
-                      placeholder="nom"
-                      onChange={(e) => setServices((current) => current.map((item, i) => (i === index ? { ...item, name: e.target.value } : item)))}
-                    />
-                    <Input
-                      value={service.image}
-                      placeholder="image"
-                      onChange={(e) => setServices((current) => current.map((item, i) => (i === index ? { ...item, image: e.target.value } : item)))}
-                    />
-                    <label className="flex items-center gap-2 text-muted">
-                      <input
-                        type="checkbox"
-                        checked={service.published}
-                        onChange={() =>
-                          setServices((current) => current.map((item, i) => ({ ...item, published: i === index })))
-                        }
-                      />
-                      {text("status.ready")}
-                    </label>
-                    <label className="flex items-center gap-2 text-muted">
-                      <input
-                        type="checkbox"
-                        checked={service.disk}
-                        onChange={(e) => setServices((current) => current.map((item, i) => (i === index ? { ...item, disk: e.target.checked } : item)))}
-                      />
-                      {text("common.disk")}
-                    </label>
-                    <TextButton type="button" onClick={() => setServices((current) => current.filter((_, i) => i !== index))}>
-                      {text("common.remove")}
-                    </TextButton>
-                  </div>
-                ))}
-                <div>
-                  <TextButton
-                    type="button"
-                    onClick={() => setServices((current) => [...current, { name: "", image: "", published: current.length === 0, disk: false }])}
-                  >
-                    <Icon icon={Plus} />
-                    {text("ui.ajouterUnService")}
-                  </TextButton>
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </div>
-        )}
-        {error ? <ErrorText>{error}</ErrorText> : null}
-        <div>
-          <Button type="submit">
-            <Icon icon={Plus} />
-            {text("common.create")}
-          </Button>
-        </div>
+              ),
+            },
+            {
+              title: text("steps.address"),
+              content: (
+                <>
+                  {!zonesReady ? (
+                    <LoadingLines lines={1} label={text("apps.domains")} />
+                  ) : zones.length === 0 ? (
+                    <Group label={text("field.domain")}>
+                      <p className="text-muted">
+                        {text("apps.noDomain")} <Link to="/dns" className="text-ink underline">{text("apps.linkDns")}</Link>
+                      </p>
+                    </Group>
+                  ) : (
+                    <NameList names={names} zones={zones} onChange={setNames} keepOne />
+                  )}
+                </>
+              ),
+            },
+            {
+              title: text("steps.where"),
+              ready: placed,
+              content: (
+                <>
+                  <Field label={text("field.where")}>
+                    <Select value={destination} onChange={(e) => setDestination(e.target.value)}>
+                      <option value="server">{text("common.oneMachine")}</option>
+                      <option value="cluster">{text("common.oneCluster")}</option>
+                    </Select>
+                  </Field>
+                  {destination === "server" ? (
+                    servers.length === 0 ? (
+                      <p className="text-muted">
+                        {text("apps.noMachine")} <Link to="/clusters" className="text-ink underline">{text("apps.addMachine")}</Link>
+                      </p>
+                    ) : (
+                      <Field label={text("field.machine")}>
+                        <Select value={serverId} onChange={(e) => setServerId(e.target.value)}>
+                          {servers.map((server) => (
+                            <option key={server.id} value={server.id}>
+                              {server.status === "linked" ? server.name : `${server.name} · ${statusLabel(server.status).text}`}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                    )
+                  ) : clusters.length === 0 ? (
+                    <p className="text-muted">
+                      {text("apps.noCluster")} <Link to="/clusters" className="text-ink underline">{text("apps.createCluster")}</Link>
+                    </p>
+                  ) : (
+                    <Field label={text("field.cluster")}>
+                      <Select value={clusterId} onChange={(e) => setClusterId(e.target.value)}>
+                        {clusters.map((cluster) => (
+                          <option key={cluster.id} value={cluster.id}>
+                            {cluster.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                  )}
+                  {destination === "cluster" && clusters.length > 0 ? (
+                    <div className="flex flex-col gap-3">
+                      <Field label={text("field.redundancy")}>
+                        <Select value={copies} onChange={(e) => setCopies(Number(e.target.value))}>
+                          <option value={1}>{text("redundancy.single")}</option>
+                          {Array.from({ length: Math.max(0, nodes - 1) }, (_, i) => i + 2).map((count) => (
+                            <option key={count} value={count}>
+                              {text("redundancy.option", { count })}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                      {copies <= 1 ? <p className="text-faint">{text("redundancy.createHint")}</p> : null}
+                      {preview && preview.plan.failover.length + preview.plan.database.length > 0 && preview.nodes < preview.storageNodes ? (
+                        <p className="text-warn">{text("redundancy.storageShort", { count: preview.storageNodes })}</p>
+                      ) : null}
+                      {preview ? (
+                        <ul>
+                          {preview.plan.scaled.map((name) => (
+                            <li key={name} className="border-t border-line py-2 text-muted">{text("redundancy.scaled", { name, count: copies })}</li>
+                          ))}
+                          {preview.plan.database.map((name) => (
+                            <li key={name} className="border-t border-line py-2 text-muted">{text("redundancy.databaseNew", { name, count: copies })}</li>
+                          ))}
+                          {preview.plan.failover.map((name) => (
+                            <li key={name} className="border-t border-line py-2 text-muted">{text("redundancy.failover", { name })}</li>
+                          ))}
+                          {preview.plan.alone.map((name) => (
+                            <li key={name} className="border-t border-line py-2 text-muted">{text("redundancy.alone", { name })}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </>
+              ),
+            },
+            ...(sourceKind === "catalogue"
+              ? []
+              : [
+                  {
+                    title: text("steps.settings"),
+                    content: (
+                      <>
+                        {sourceKind === "catalogue" ? null : (
+                        <div>
+                          <button type="button" className="inline-flex items-center gap-2 text-muted" onClick={() => setOpen((value) => !value)}>
+                            <Icon icon={open ? ChevronUp : ChevronDown} />
+                            {open ? text("ui.masquerLesReglages") : text("ui.reglages")}
+                          </button>
+                          {open ? (
+                            <div className="mt-6 flex flex-col gap-6">
+                              {sourceKind === "image" && services.length === 0 ? (
+                                <>
+                                  <Field label={text("app.port")}>
+                                    <Input value={listen} onChange={(e) => setListen(e.target.value.replace(/[^0-9]/g, ""))} inputMode="numeric" placeholder={text("app.portDetected")} />
+                                  </Field>
+                                  <p className="text-faint">{text("app.portHint")}</p>
+                                </>
+                              ) : null}
+                              <Field label={text("app.variables")}>
+                                <TextArea value={variables} onChange={(e) => setVariables(e.target.value)} placeholder={"NOM=valeur"} />
+                              </Field>
+                              {sourceKind === "image" ? (
+                              <div className="flex flex-col gap-3">
+                                <span className="text-muted">{text("field.services")}</span>
+                                <p className="text-faint">{text("apps.serviceHint")}</p>
+                                {services.map((service, index) => (
+                                  <div key={index} className="flex flex-col gap-2 rounded-md border border-line p-3">
+                                    <Input
+                                      value={service.name}
+                                      placeholder={text("field.name")}
+                                      aria-label={text("field.name")}
+                                      onChange={(e) => setServices((current) => current.map((item, i) => (i === index ? { ...item, name: e.target.value } : item)))}
+                                    />
+                                    <Input
+                                      value={service.image}
+                                      placeholder={text("common.image")}
+                                      aria-label={text("common.image")}
+                                      onChange={(e) => setServices((current) => current.map((item, i) => (i === index ? { ...item, image: e.target.value } : item)))}
+                                    />
+                                    <label className="flex items-center gap-2 text-muted">
+                                      <input
+                                        type="checkbox"
+                                        checked={service.published}
+                                        onChange={() =>
+                                          setServices((current) => current.map((item, i) => ({ ...item, published: i === index })))
+                                        }
+                                      />
+                                      {text("apps.servicePublic")}
+                                    </label>
+                                    <label className="flex items-center gap-2 text-muted">
+                                      <input
+                                        type="checkbox"
+                                        checked={service.disk}
+                                        onChange={(e) => setServices((current) => current.map((item, i) => (i === index ? { ...item, disk: e.target.checked } : item)))}
+                                      />
+                                      {text("common.disk")}
+                                    </label>
+                                    <TextButton type="button" onClick={() => setServices((current) => current.filter((_, i) => i !== index))}>
+                                      {text("common.remove")}
+                                    </TextButton>
+                                  </div>
+                                ))}
+                                <div>
+                                  <TextButton
+                                    type="button"
+                                    onClick={() => setServices((current) => [...current, { name: "", image: "", published: current.length === 0, disk: false }])}
+                                  >
+                                    <Icon icon={Plus} />
+                                    {text("ui.ajouterUnService")}
+                                  </TextButton>
+                                </div>
+                              </div>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                        )}
+                      </>
+                    ),
+                  },
+                ]),
+          ]}
+          error={error ? <ErrorText>{error}</ErrorText> : null}
+          submit={
+            <Button type="submit" disabled={creating || !placed || (sourceKind === "catalogue" && !article)}>
+              {creating ? <Spinner /> : <Icon icon={Plus} />}
+              {text("common.create")}
+            </Button>
+          }
+        />
       </form>
     </>
   );
@@ -507,114 +518,50 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
 export function ApplicationPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [app, setApp] = useState<Application | null>(() => peek<Application>(`/api/applications/${id}`));
-  const [runtime, setRuntime] = useState<AppRuntime | null>(() => peek<AppRuntime>(`/api/applications/${id}/runtime`));
-  const [error, setError] = useState("");
+  const toast = useToast();
+  const appPoll = usePoll<Application>(id ? `/api/applications/${id}` : null, 8000);
+  const app = appPoll.data;
+  const setApp = appPoll.setData;
+  const runtimePoll = usePoll<AppRuntime>(id ? `/api/applications/${id}/runtime` : null, 8000);
+  const runtime = runtimePoll.data ?? (runtimePoll.error ? emptyRuntime : null);
   const [copied, setCopied] = useState("");
-  const [confirm, setConfirm] = useState(false);
-  const [typed, setTyped] = useState("");
-  const [removing, setRemoving] = useState(false);
+  const [confirm, setConfirm] = useState<"" | "delete" | "pause">("");
   const [pausing, setPausing] = useState(false);
-  const [pauseError, setPauseError] = useState("");
 
+  // A new version is followed closely until it answers.
   useEffect(() => {
-    if (!id) return;
-    let stop = false;
-    api<Application>(`/api/applications/${id}`)
-      .then((next) => {
-        if (!stop) setApp(next);
-      })
-      .catch((err) => {
-        if (!stop) setError(err.message);
-      });
-    return () => {
-      stop = true;
-    };
-  }, [id]);
-
-  useEffect(() => {
-    if (!id || app?.rollout !== "updating") return;
-    let stop = false;
-    const timer = window.setInterval(() => {
-      api<Application>(`/api/applications/${id}`)
-        .then((next) => {
-          if (!stop) setApp(next);
-        })
-        .catch(() => undefined);
-    }, 4000);
-    return () => {
-      stop = true;
-      window.clearInterval(timer);
-    };
-  }, [id, app?.rollout]);
-
-  useEffect(() => {
-    if (!id) return;
-    let stop = false;
-    const load = () => {
-      api<AppRuntime>(`/api/applications/${id}/runtime`)
-        .then((next) => {
-          if (!stop) setRuntime(next);
-        })
-        .catch(() => {
-          if (!stop) setRuntime({ measured: false, cpu: { used: 0, total: 0 }, memory: { used: 0, total: 0 }, disk: { used: 0, total: 0 }, pods: [] });
-        });
-    };
-    load();
-    const timer = window.setInterval(load, 8000);
-    return () => {
-      stop = true;
-      window.clearInterval(timer);
-    };
-  }, [id]);
+    if (app?.rollout !== "updating") return;
+    const timer = window.setInterval(() => void appPoll.reload(), 4000);
+    return () => window.clearInterval(timer);
+  }, [app?.rollout, appPoll.reload]);
 
   async function copy(record: string) {
     await navigator.clipboard.writeText(record);
     setCopied(record);
   }
 
-  useEffect(() => {
-    if (!confirm) return;
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape" && !removing) setConfirm(false);
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [confirm, removing]);
-
-  async function destroy(event: FormEvent) {
-    event.preventDefault();
-    const phrase = app?.guarded ? text("destroy.phrase") : app?.name;
-    if (!app || typed !== phrase) return;
-    setRemoving(true);
-    setError("");
-    try {
-      const job = await api<Destruction & { status?: string }>(`/api/applications/${app.id}`, { method: "DELETE", body: JSON.stringify({ name: typed }) });
-      if (app.guarded) {
-        setError("");
-        setConfirm(false);
-        setApp({ ...app, runStatus: "failed" });
-        setRemoving(false);
-        return;
-      }
-      navigate(`/destructions/${job.id}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : text("common.error"));
-      setRemoving(false);
-    }
-  }
-
-  if (error) return <ErrorText>{error}</ErrorText>;
+  if (appPoll.error && !app) return <ErrorText>{appPoll.error}</ErrorText>;
   if (!app) return <LoadingLines lines={4} />;
 
-  async function togglePause() {
+  async function destroy() {
+    if (!app) return;
+    const typed = app.guarded ? text("destroy.phrase") : app.name;
+    const job = await api<Destruction & { status?: string }>(`/api/applications/${app.id}`, { method: "DELETE", body: JSON.stringify({ name: typed }) });
+    if (app.guarded) {
+      setConfirm("");
+      setApp({ ...app, runStatus: "removing" });
+      return;
+    }
+    navigate(`/destructions/${job.id}`);
+  }
+
+  async function setPaused(paused: boolean) {
     if (!app || app.guarded) return;
     setPausing(true);
-    setPauseError("");
     try {
-      setApp(await api<Application>(`/api/applications/${app.id}/pause`, { method: "POST", body: JSON.stringify({ paused: !app.paused }) }));
-    } catch (err) {
-      setPauseError(err instanceof Error ? err.message : text("common.error"));
+      setApp(await api<Application>(`/api/applications/${app.id}/pause`, { method: "POST", body: JSON.stringify({ paused }) }));
+      setConfirm("");
+      toast(paused ? text("apps.pausedDone", { name: app.name }) : text("apps.resumedDone", { name: app.name }));
     } finally {
       setPausing(false);
     }
@@ -622,31 +569,43 @@ export function ApplicationPage() {
 
   const where = app.destinationKind === "cluster" ? app.clusterName : app.serverName;
   const address = app.domains?.find((domain) => domain.kind === "custom" && domain.status === "ready")?.hostname ?? app.domains?.find((domain) => domain.kind === "custom")?.hostname ?? "";
-  const health = app.paused ? "paused" : runtime?.pods.some((pod) => podFailed(pod)) ? "failed" : runtime?.status || app.runStatus;
+  const pods = runtime?.pods ?? [];
+  const health = appHealth(app, runtime?.status, pods);
+  const failing = pods.some((pod) => podFailed(pod));
 
   return (
     <div className="max-w-[720px]">
       <PageTitle title={app.name} mark={<AppLogo slug={app.logo ?? ""} name={app.name} size={40} />} />
-      {address ? (
-        <p className="mb-2">
-          <a href={`https://${address}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 font-mono text-[13px] underline">
+      <div className="-mt-3 flex flex-col gap-2 md:-mt-8">
+        <StatusBadge status={health} />
+        {health !== "running" && health !== "paused" && app.runDetail ? <p className="text-muted">{app.runDetail}</p> : null}
+        {address ? (
+          <a href={`https://${address}`} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-2 break-all font-mono text-[13px] underline">
             {address}
             <Icon icon={ExternalLink} />
           </a>
+        ) : null}
+        <p className="break-all text-muted">
+          {app.source} · {where}
         </p>
-      ) : null}
-      <p className="text-muted">
-        {app.source} · {where}
-      </p>
-      {health ? <p className={`mt-3 ${statusLabel(health).tone}`}>{statusLabel(health).text}</p> : null}
-      {health !== "running" && health !== "paused" && app.runDetail ? <p className="mt-1 text-muted">{app.runDetail}</p> : null}
+      </div>
       {app.guarded ? null : (
-        <div className="mt-4 flex flex-col items-start gap-2">
-          <p className="text-muted">{text("apps.pauseHint")}</p>
-          {pauseError ? <ErrorText>{pauseError}</ErrorText> : null}
-          <Button type="button" onClick={togglePause} disabled={pausing}>
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          {address ? (
+            <a href={`https://${address}`} target="_blank" rel="noreferrer" className={`inline-flex min-h-11 items-center gap-2 rounded-md bg-ink px-4 py-2 text-canvas sm:min-h-0 ${focus}`}>
+              <Icon icon={ExternalLink} />
+              {text("apps.open")}
+            </a>
+          ) : null}
+          <Button type="button" variant="secondary" onClick={() => (app.paused ? void setPaused(false) : setConfirm("pause"))} disabled={pausing}>
+            {pausing ? <Spinner /> : null}
             {app.paused ? text("home.resume") : text("apps.pauseAction")}
           </Button>
+          <ActionsMenu label={text("apps.more")}>
+            <MenuItem tone="danger" onClick={() => setConfirm("delete")}>
+              {text("common.delete")}
+            </MenuItem>
+          </ActionsMenu>
         </div>
       )}
       <div className="mt-8">
@@ -659,7 +618,7 @@ export function ApplicationPage() {
             <p className="text-muted">{text("apps.selfCopies")}</p>
             {(app.services ?? []).map((service) => (
               <p key={service.name} className="font-mono text-[13px]">
-                {service.name} · {service.image} · {service.replicas || 1} {service.replicas === 1 ? "copie" : "copies"}
+                {service.name} · {service.image} · {text(service.replicas === 1 ? "apps.copyOne" : "apps.copyMany", { count: service.replicas || 1 })}
               </p>
             ))}
           </div>
@@ -669,17 +628,15 @@ export function ApplicationPage() {
           <p className="mt-4 text-muted">{text("apps.noService")}</p>
         )}
       </section>
-      {app.guarded ? null : <AppVariables app={app} />}
-      {app.guarded ? null : <AppSecretLinks appId={app.id} />}
       <div className="mt-10">
-        <Fold title="Pods">
+        <Fold title={text("apps.instances")} defaultOpen={failing}>
           <ul className="flex flex-col">
-            {(runtime?.pods ?? []).map((pod) => {
+            {pods.map((pod) => {
               const state = podHealth(pod);
               return (
                 <li key={pod.name} className="border-t border-line py-4">
-                  <div className="flex items-baseline justify-between gap-6">
-                    <span className="font-mono text-[13px]">{pod.name}</span>
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+                    <span className="break-all font-mono text-[13px]">{pod.name}</span>
                     <span className={state.tone}>{state.text}</span>
                   </div>
                   <p className="mt-1 text-muted">
@@ -690,66 +647,74 @@ export function ApplicationPage() {
               );
             })}
           </ul>
-          {!runtime ? <LoadingLines lines={2} label="Pods" /> : runtime.pods.length === 0 ? <p className="text-muted">{runtime.measured ? text("common.noPod") : text("common.noMeasure")}</p> : null}
+          {!runtime ? <LoadingLines lines={2} label={text("apps.instances")} /> : pods.length === 0 ? <p className="text-muted">{runtime.measured ? text("common.noPod") : text("common.noMeasure")}</p> : null}
         </Fold>
       </div>
-      <ul className="mt-12 flex flex-col">
-        {app.domains?.map((domain) => {
-          const label = statusLabel(domain.status);
-          return (
-            <li key={domain.hostname} className="border-t border-line py-4">
-              <div className="flex items-baseline justify-between gap-6">
-                <a href={`https://${domain.hostname}`} target="_blank" rel="noreferrer" className="font-mono text-[13px] underline">
-                  {domain.hostname}
-                </a>
-                <span className={label.tone}>{label.text}</span>
-              </div>
-              {domain.detail ? <p className={`mt-2 ${domain.status === "ready" ? "text-muted" : "text-bad"}`}>{domain.detail}</p> : null}
-              {domain.zone ? <TofuFiles path={`/api/dns/${domain.hostname}/tofu`} /> : null}
-              {domain.record ? (
-                <div className="mt-3 flex items-center gap-4">
-                  <code className="font-mono text-[13px] text-muted">{domain.record}</code>
-                  <IconButton icon={Copy} label={text("common.copy")} onClick={() => copy(domain.record!)} />
-                  {copied === domain.record ? <span className="text-muted">{text("common.copied")}</span> : null}
+      {app.domains && app.domains.length > 0 ? (
+        <section className="mt-10">
+          <SectionTitle>{text("apps.addresses")}</SectionTitle>
+          <ul className="mt-2 flex flex-col">
+            {app.domains.map((domain) => (
+              <li key={domain.hostname} className="border-t border-line py-4">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+                  <a href={`https://${domain.hostname}`} target="_blank" rel="noreferrer" className="break-all font-mono text-[13px] underline">
+                    {domain.hostname}
+                  </a>
+                  <StatusBadge status={domain.status} />
                 </div>
-              ) : null}
-          </li>
-        );
-      })}
-      </ul>
-      <div className="mt-10">
-        <TextButton type="button" onClick={() => { setTyped(""); setConfirm(true); }}>
-          <Icon icon={Trash2} />
-          {text("common.delete")}
-        </TextButton>
-      </div>
-      {confirm ? (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-ink/40 px-6" role="dialog" aria-modal="true" aria-labelledby="delete-app-title">
-          <form onSubmit={destroy} className="w-full max-w-md rounded-md border border-line bg-surface p-6">
-            <h2 id="delete-app-title" className="mb-3 text-lg">{app.guarded ? text("apps.removeSelf") : text("apps.removeNamed", { name: app.name })}</h2>
-            <p className="mb-6 text-muted">
-              {app.guarded
-                ? text("apps.selfWarn", { phrase: text("destroy.phrase") })
-                : text("apps.confirmName")}
-            </p>
-            <Field label={app.guarded ? text("field.confirm") : text("field.appName")}>
-              <Input value={typed} autoFocus onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
-            </Field>
-            <div className="mt-6 flex items-center gap-4">
-              <Button type="submit" disabled={typed !== (app.guarded ? text("destroy.phrase") : app.name) || removing}>
-                {removing ? <span className="size-4 animate-spin rounded-full border border-current border-t-transparent" /> : null}
-                {text("common.delete")}
-              </Button>
-              <TextButton type="button" onClick={() => setConfirm(false)} disabled={removing}>
-                {text("common.cancel")}
-              </TextButton>
-            </div>
-          </form>
+                {domain.detail ? <p className={`mt-2 ${domain.status === "ready" ? "text-muted" : "text-bad"}`}>{domain.detail}</p> : null}
+                {domain.record ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-4">
+                    <code className="break-all font-mono text-[13px] text-muted">{domain.record}</code>
+                    <IconButton icon={Copy} label={text("common.copy")} onClick={() => copy(domain.record!)} />
+                    {copied === domain.record ? <span className="text-muted">{text("common.copied")}</span> : null}
+                  </div>
+                ) : null}
+                {domain.zone ? (
+                  <div className="mt-3">
+                    <Fold title={text("common.advanced")}>
+                      <TofuFiles path={`/api/dns/${domain.hostname}/tofu`} />
+                    </Fold>
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {app.guarded ? null : <AppVariables app={app} />}
+      {app.guarded ? null : <AppSecretLinks appId={app.id} />}
+      {app.guarded ? (
+        <div className="mt-10">
+          <TextButton type="button" tone="danger" onClick={() => setConfirm("delete")}>
+            <Icon icon={Trash2} />
+            {text("common.delete")}
+          </TextButton>
         </div>
+      ) : null}
+      {confirm === "pause" ? (
+        <ConfirmDialog title={text("apps.pauseTitle", { name: app.name })} confirmLabel={text("apps.pauseAction")} onConfirm={() => setPaused(true)} onClose={() => setConfirm("")}>
+          {text("apps.pauseHint")}
+        </ConfirmDialog>
+      ) : null}
+      {confirm === "delete" ? (
+        <ConfirmDialog
+          title={app.guarded ? text("apps.removeSelf") : text("apps.removeNamed", { name: app.name })}
+          confirmLabel={text("common.delete")}
+          danger
+          phrase={app.guarded ? text("destroy.phrase") : app.name}
+          phraseLabel={app.guarded ? text("field.confirm") : text("field.appName")}
+          onConfirm={destroy}
+          onClose={() => setConfirm("")}
+        >
+          {app.guarded ? text("apps.selfWarn", { phrase: text("destroy.phrase") }) : text("apps.confirmName")}
+        </ConfirmDialog>
       ) : null}
     </div>
   );
 }
+
+const emptyRuntime: AppRuntime = { measured: false, cpu: { used: 0, total: 0 }, memory: { used: 0, total: 0 }, disk: { used: 0, total: 0 }, pods: [] };
 
 const masked = "••••••••";
 
@@ -776,7 +741,7 @@ function AppVariables({ app }: { app: Application }) {
       <Fold title={text("app.variables")}>
         <ul className="flex flex-col">
           {entries.map(([name, value]) => (
-            <li key={name} className="flex items-center justify-between gap-6 border-t border-line py-3">
+            <li key={name} className="flex flex-wrap items-center justify-between gap-6 border-t border-line py-3">
               <span className="font-mono text-[13px]">{name}</span>
               <span className="flex min-w-0 items-center gap-3">
                 <span className="truncate font-mono text-[13px] text-muted">{shown[name] ?? value}</span>

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Earth, History } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, peek, type InfraEvent } from "./api";
-import { text } from "./i18n";
+import { currentLocale, text } from "./i18n";
 import { ErrorText, Icon, LoadingLines, PageTitle } from "./ui";
 
 export function HistoryPage() {
@@ -69,5 +69,5 @@ function levelTone(level: string) {
 function when(iso: string) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" });
+  return date.toLocaleString(currentLocale(), { dateStyle: "medium", timeStyle: "short" });
 }

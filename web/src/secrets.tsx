@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { Plus, Shield, Trash2 } from "lucide-react";
 import { api, type AppSecret, type Application } from "./api";
 import { text } from "./i18n";
+import { ConfirmDialog, Spinner, useToast } from "./kit";
 import { Button, EmptyList, ErrorText, Field, Icon, Input, ItemList, ListActions, LoadingCards, PageTitle, SectionTitle, TextArea, TextButton, entryClass, useListMode, useTrail } from "./ui";
 
 function parseEntries(source: string) {
@@ -132,7 +133,9 @@ export function SecretPage() {
   const [entries, setEntries] = useState("");
   const [removed, setRemoved] = useState<string[]>([]);
   const [granted, setGranted] = useState<string[]>([]);
-  const [confirm, setConfirm] = useState("");
+  const [confirm, setConfirm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
 
@@ -163,7 +166,9 @@ export function SecretPage() {
 
   async function save(event: FormEvent) {
     event.preventDefault();
+    if (saving) return;
     setError("");
+    setSaving(true);
     try {
       const set = entries.trim() ? parseEntries(entries) : {};
       await api(`/api/app-secrets/${id}`, {
@@ -171,20 +176,18 @@ export function SecretPage() {
         body: JSON.stringify({ name, set, remove: removed, apps: granted }),
       });
       await reload();
+      toast(text("common.savedDone"));
     } catch (err) {
       setError(err instanceof Error ? err.message : text("common.error"));
+    } finally {
+      setSaving(false);
     }
   }
 
-  async function remove(event: FormEvent) {
-    event.preventDefault();
-    setError("");
-    try {
-      await api(`/api/app-secrets/${id}`, { method: "DELETE", body: JSON.stringify({ confirmedName: confirm }) });
-      navigate("/secrets");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : text("common.error"));
-    }
+  async function remove() {
+    await api(`/api/app-secrets/${id}`, { method: "DELETE", body: JSON.stringify({ confirmedName: secret?.name }) });
+    toast(text("secret.removed", { name: secret?.name ?? "" }));
+    navigate("/secrets");
   }
 
   if (!ready) return <LoadingCards />;
@@ -212,7 +215,7 @@ export function SecretPage() {
           ) : (
             <ul className="mt-4 flex flex-col gap-2">
               {keys.map((key) => (
-                <li key={key} className="flex items-center justify-between gap-4">
+                <li key={key} className="flex flex-wrap items-center justify-between gap-4">
                   <span className="font-mono text-[13px]">{key}</span>
                   <TextButton type="button" onClick={() => setRemoved((current) => [...current, key])}>
                     {text("common.remove")}
@@ -243,22 +246,30 @@ export function SecretPage() {
           )}
         </section>
         <div>
-          <Button type="submit">{text("common.save")}</Button>
-        </div>
-      </form>
-      <form onSubmit={remove} className="mt-16 flex flex-col gap-6 border-t border-line pt-8">
-        <SectionTitle>{text("common.delete")}</SectionTitle>
-        <p className="text-muted">{text("secret.deleteHint", { name: secret.name })}</p>
-        <Field label={text("field.confirm")}>
-          <Input value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-        </Field>
-        <div>
-          <Button type="submit" disabled={confirm !== secret.name}>
-            <Icon icon={Trash2} />
-            {text("common.delete")}
+          <Button type="submit" disabled={saving}>
+            {saving ? <Spinner /> : null}
+            {text("common.save")}
           </Button>
         </div>
       </form>
+      <div className="mt-16 border-t border-line pt-8">
+        <TextButton type="button" tone="danger" onClick={() => setConfirm(true)}>
+          <Icon icon={Trash2} />
+          {text("common.delete")}
+        </TextButton>
+      </div>
+      {confirm ? (
+        <ConfirmDialog
+          title={text("server.removeNamed", { name: secret.name })}
+          confirmLabel={text("common.delete")}
+          danger
+          phrase={secret.name}
+          onConfirm={remove}
+          onClose={() => setConfirm(false)}
+        >
+          {text("secret.deleteHint", { name: secret.name })}
+        </ConfirmDialog>
+      ) : null}
     </div>
   );
 }

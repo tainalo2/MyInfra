@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { Download, KeyRound, Plus, Trash2 } from "lucide-react";
 import { api, type Secret } from "./api";
 import { text } from "./i18n";
+import { ConfirmDialog, useToast } from "./kit";
 import { Button, EmptyList, ErrorText, Field, Icon, Input, ItemList, ListActions, LoadingCards, PageTitle, TextArea, TextButton, entryClass, useListMode } from "./ui";
 
 export function Keys() {
@@ -14,6 +15,8 @@ export function Keys() {
   const [ready, setReady] = useState(false);
   const [creating, setCreating] = useState(false);
   const [mode, toggleMode] = useListMode();
+  const [removing, setRemoving] = useState<Secret | null>(null);
+  const toast = useToast();
 
   async function reload() {
     const rows = await api<Secret[]>("/api/secrets");
@@ -77,14 +80,11 @@ export function Keys() {
     URL.revokeObjectURL(url);
   }
 
-  async function remove(id: string) {
-    setError("");
-    try {
-      await api(`/api/secrets/${id}`, { method: "DELETE" });
-      await reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : text("common.error"));
-    }
+  async function remove(secret: Secret) {
+    await api(`/api/secrets/${secret.id}`, { method: "DELETE" });
+    setSecrets((current) => current.filter((item) => item.id !== secret.id));
+    setRemoving(null);
+    toast(text("key.removed", { name: secret.name }));
   }
 
   return (
@@ -160,7 +160,7 @@ export function Keys() {
                     {text("ui.telecharger")}
                   </TextButton>
                 ) : null}
-                <TextButton type="button" onClick={() => remove(secret.id)}>
+                <TextButton type="button" tone="danger" onClick={() => setRemoving(secret)}>
                   <Icon icon={Trash2} />
                   {text("common.delete")}
                 </TextButton>
@@ -169,6 +169,17 @@ export function Keys() {
           ))}
         </ItemList>
       )}
+      {removing ? (
+        <ConfirmDialog
+          title={text("server.removeNamed", { name: removing.name })}
+          confirmLabel={text("common.delete")}
+          danger
+          onConfirm={() => remove(removing)}
+          onClose={() => setRemoving(null)}
+        >
+          {text("key.deleteHint")}
+        </ConfirmDialog>
+      ) : null}
     </>
   );
 }

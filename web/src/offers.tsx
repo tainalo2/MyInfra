@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Offer } from "./api";
-import { Field, Select } from "./ui";
-import { text, currentLocale } from "./i18n";
+import { Field, Input, Select } from "./ui";
+import { text, text as say, currentLocale } from "./i18n";
 
 export type OfferSort = "price" | "cpu" | "memory" | "disk" | "name";
 
@@ -12,16 +12,16 @@ export function formatPrice(raw: string | undefined, hour: boolean, currency = "
   const digits = value < 0.001 ? 6 : hour && value < 1 ? 4 : 2;
   const text = value.toLocaleString(currentLocale(), { minimumFractionDigits: digits, maximumFractionDigits: digits });
   const unit = currency === "USD" ? "$" : "€";
-  return hour ? `${text} ${unit}/h` : `${text} ${unit}/mois`;
+  return hour ? `${text} ${unit}/h` : `${text} ${unit}/${say("unit.month")}`;
 }
 
-function memory(mb: number) {
-  if (mb >= 1024) return `${(mb / 1024).toLocaleString(currentLocale(), { maximumFractionDigits: 1 })} Go`;
-  return `${mb} Mo`;
+export function memory(mb: number) {
+  if (mb >= 1024) return `${(mb / 1024).toLocaleString(currentLocale(), { maximumFractionDigits: 1 })} ${say("unit.gb")}`;
+  return `${mb} ${say("unit.mb")}`;
 }
 
 export function offerOptionLabel(offer: Offer, currency: string) {
-  const disk = offer.diskGb > 0 ? ` · ${offer.diskGb} Go` : "";
+  const disk = offer.diskGb > 0 ? ` · ${offer.diskGb} ${say("unit.gb")}` : "";
   const hourly = offer.hourly ? ` · ${formatPrice(offer.hourly, true, currency)}` : "";
   return `${offer.name} · ${offer.vcpu} vCPU · ${memory(offer.memoryMb)}${disk}${hourly}`;
 }
@@ -87,4 +87,81 @@ export function OfferFields({
       </Field>
     </>
   );
+}
+
+// OfferStorage asks for the storage an offer takes: its size when the offer
+// needs one, or an optional extra volume with its price per GB.
+export function OfferStorage({
+  offer,
+  period,
+  currency,
+  storageId,
+  storageGb,
+  onChange,
+}: {
+  offer: Offer;
+  period: string;
+  currency: string;
+  storageId: string;
+  storageGb: string;
+  onChange: (storageId: string, storageGb: string) => void;
+}) {
+  const options = offer.storage ?? [];
+  const required = options.find((item) => item.required);
+  const optional = options.filter((item) => !item.required);
+  const selected = required ?? optional.find((item) => item.id === storageId);
+  if (!required && optional.length === 0) return null;
+  const perGb = (item: NonNullable<Offer["storage"]>[number]) =>
+    period === "month" && item.monthlyPerGb
+      ? `${formatPrice(item.monthlyPerGb, false, currency)}/${say("unit.gb")}`
+      : period !== "month" && item.hourlyPerGb
+        ? `${formatPrice(item.hourlyPerGb, true, currency)}/${say("unit.gb")}`
+        : "";
+  return (
+    <>
+      {required ? null : (
+        <Field label={text("field.extraStorage")}>
+          <Select
+            value={storageId}
+            onChange={(e) => {
+              const next = optional.find((item) => item.id === e.target.value);
+              onChange(e.target.value, next ? String(next.minGb) : "");
+            }}
+          >
+            <option value="">{text("common.none")}</option>
+            {optional.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
+                {perGb(item) ? ` · ${perGb(item)}` : ""}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      )}
+      {selected ? (
+        <Field label={required ? `${required.label} (${say("unit.gb")})` : text("field.sizeGb")} hint={required && perGb(required) ? perGb(required) : undefined}>
+          <Input
+            type="number"
+            inputMode="numeric"
+            min={selected.minGb}
+            max={selected.maxGb || undefined}
+            value={storageGb || String(selected.minGb)}
+            onChange={(e) => onChange(selected.id, e.target.value)}
+            required
+          />
+        </Field>
+      ) : null}
+    </>
+  );
+}
+
+// chosenStorage is the storage to ask for: the one the offer needs, or the
+// extra volume picked, at its smallest size when none was typed.
+export function chosenStorage(offer: Offer | undefined, storageId: string, storageGb: string) {
+  const options = offer?.storage ?? [];
+  const required = options.find((item) => item.required);
+  const selected = required ?? options.find((item) => item.id === storageId);
+  if (!selected) return { id: "", gb: 0 };
+  const size = Number(storageGb);
+  return { id: selected.id, gb: Number.isFinite(size) && size > 0 ? size : selected.minGb };
 }

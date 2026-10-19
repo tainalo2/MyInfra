@@ -330,15 +330,39 @@ export function WorldMap({
       return { x: event.clientX - rect.left, y: event.clientY - rect.top };
     }
 
+    // Two fingers on a phone zoom, as the wheel does.
+    const touches = new Map<number, { x: number; y: number }>();
+    let spread = 0;
+
+    function pinchSpread() {
+      const [a, b] = [...touches.values()];
+      return Math.hypot(a.x - b.x, a.y - b.y);
+    }
+
     function onDown(event: PointerEvent) {
+      touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      canvas!.setPointerCapture(event.pointerId);
+      if (touches.size === 2) {
+        spread = pinchSpread();
+        dragged = true;
+        return;
+      }
       dragging = true;
       dragged = false;
       lastX = event.clientX;
       lastY = event.clientY;
-      canvas!.setPointerCapture(event.pointerId);
     }
 
     function onMove(event: PointerEvent) {
+      if (touches.has(event.pointerId)) touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (touches.size === 2) {
+        const next = pinchSpread();
+        const [a, b] = [...touches.values()];
+        const rect = canvas!.getBoundingClientRect();
+        if (spread > 0) zoomAt((a.x + b.x) / 2 - rect.left, (a.y + b.y) / 2 - rect.top, next / spread);
+        spread = next;
+        return;
+      }
       if (!dragging) {
         const { x, y } = local(event);
         canvas!.style.cursor = hitAt(x, y) ? "pointer" : "grab";
@@ -357,6 +381,16 @@ export function WorldMap({
     }
 
     function onUp(event: PointerEvent) {
+      touches.delete(event.pointerId);
+      if (touches.size > 0) {
+        // One finger left after a pinch: it drags on from where it is.
+        spread = 0;
+        const [rest] = [...touches.values()];
+        lastX = rest.x;
+        lastY = rest.y;
+        return;
+      }
+      spread = 0;
       if (!dragging) return;
       dragging = false;
       canvas!.style.cursor = "grab";

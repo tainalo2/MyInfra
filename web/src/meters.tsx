@@ -46,11 +46,19 @@ function Meter({ label, used, total, ratio }: { label: string; used: string; tot
       <div className="mb-2 flex items-baseline justify-between gap-3">
         <span>{label}</span>
         <span className="whitespace-nowrap text-muted">
-          {used} / {total}
+          {used} / {total} · {Math.round(ratio * 100)} %
         </span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-line" role="img" aria-label={`${label} ${used} sur ${total}`}>
-        <div className="h-full rounded-full bg-ink" style={{ width: `${ratio * 100}%` }} />
+      <div
+        className="h-2 overflow-hidden rounded-full bg-line"
+        role="meter"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(ratio * 100)}
+        aria-valuetext={`${used} / ${total}`}
+      >
+        <div className={`h-full rounded-full ${ratio >= 0.9 ? "bg-bad" : ratio >= 0.75 ? "bg-warn" : "bg-ink"}`} style={{ width: `${ratio * 100}%` }} />
       </div>
     </div>
   );

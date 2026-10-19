@@ -16,8 +16,11 @@ import {
   type TemplateServer,
 } from "./api";
 import { CancelDeployment } from "./deployments";
-import { text, currentLocale, knownMessage } from "./i18n";
-import { OfferFields } from "./offers";
+import { text, knownMessage } from "./i18n";
+import { OfferFields, OfferStorage, formatPrice } from "./offers";
+import { ConfirmDialog, Spinner, Steps, useToast } from "./kit";
+import { usePoll } from "./poll";
+import { NameList } from "./names";
 import { ProviderSelect } from "./provider-select";
 import { ToolInstall } from "./tools";
 import {
@@ -46,7 +49,7 @@ export function Templates() {
   const [rows, setRows] = useState<Template[] | null>(() => peek<Template[]>("/api/templates"));
   const [error, setError] = useState("");
   const [removing, setRemoving] = useState<Template | null>(null);
-  const [typed, setTyped] = useState("");
+  const toast = useToast();
 
   function reload() {
     return api<Template[]>("/api/templates").then(setRows);
@@ -67,12 +70,12 @@ export function Templates() {
     }
   }
 
-  async function remove(event: FormEvent) {
-    event.preventDefault();
-    if (!removing || typed !== removing.name) return;
-    await api(`/api/templates/${removing.id}`, { method: "DELETE" });
+  async function remove(row: Template) {
+    await api(`/api/templates/${row.id}`, { method: "DELETE" });
+    setRows((current) => current?.filter((item) => item.id !== row.id) ?? current);
     setRemoving(null);
-    await reload();
+    toast(text("template.removed", { name: row.name }));
+    void reload().catch(() => undefined);
   }
 
   return (
@@ -128,15 +131,12 @@ export function Templates() {
                 <p className="mt-2 text-muted">{summary(row.body)}</p>
               </Link>
               <div className="absolute right-3 top-3">
-                <ActionsMenu label={`Actions de ${row.name}`}>
+                <ActionsMenu label={text("apps.more")}>
                   <MenuItem onClick={() => navigate(`/templates/${row.id}/deploy`)}>{text("template.deploy")}</MenuItem>
-                  <MenuItem onClick={() => void download(row)}>{text("template.export")}</MenuItem>
-                  <MenuItem
-                    onClick={() => {
-                      setTyped("");
-                      setRemoving(row);
-                    }}
-                  >
+                  <MenuItem onClick={() => void download(row).catch((err) => toast(err instanceof Error ? err.message : text("common.error"), "bad"))}>
+                    {text("template.export")}
+                  </MenuItem>
+                  <MenuItem tone="danger" onClick={() => setRemoving(row)}>
                     {text("common.delete")}
                   </MenuItem>
                 </ActionsMenu>
@@ -146,23 +146,17 @@ export function Templates() {
         </ul>
       )}
       {removing ? (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-ink/40 px-6" role="dialog" aria-modal="true">
-          <form onSubmit={remove} className="w-full max-w-md rounded-md border border-line bg-surface p-6">
-            <h2 className="mb-3 text-lg">Supprimer {removing.name}</h2>
-            <p className="mb-6 text-muted">{text("template.deleteHint")}</p>
-            <Field label={text("template.name")}>
-              <Input value={typed} autoFocus onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
-            </Field>
-            <div className="mt-6 flex items-center gap-4">
-              <Button type="submit" disabled={typed !== removing.name}>
-                {text("common.delete")}
-              </Button>
-              <TextButton type="button" onClick={() => setRemoving(null)}>
-                {text("common.cancel")}
-              </TextButton>
-            </div>
-          </form>
-        </div>
+        <ConfirmDialog
+          title={text("server.removeNamed", { name: removing.name })}
+          confirmLabel={text("common.delete")}
+          danger
+          phrase={removing.name}
+          phraseLabel={text("template.name")}
+          onConfirm={() => remove(removing)}
+          onClose={() => setRemoving(null)}
+        >
+          {text("template.deleteHint")}
+        </ConfirmDialog>
       ) : null}
     </>
   );
@@ -178,6 +172,8 @@ export function TemplateEditor() {
   const [zones, setZones] = useState<DnsZone[]>([]);
   const [error, setError] = useState("");
   const [ready, setReady] = useState(!id);
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     api<Secret[]>("/api/secrets")
@@ -208,15 +204,21 @@ export function TemplateEditor() {
 
   async function save(event: FormEvent) {
     event.preventDefault();
+    if (saving) return;
     setError("");
+    setSaving(true);
     const payload = { name, ...body };
     try {
       const saved = id
         ? await api<Template>(`/api/templates/${id}`, { method: "PUT", body: JSON.stringify(payload) })
         : await api<Template>("/api/templates", { method: "POST", body: JSON.stringify(payload) });
-      navigate(`/templates/${saved.id}/deploy`);
+      // Saving keeps the editor open: deploying is a choice of its own.
+      toast(text("template.saved", { name: saved.name }));
+      if (!id) navigate(`/templates/${saved.id}`, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : text("common.error"));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -228,73 +230,110 @@ export function TemplateEditor() {
     <>
       <PageTitle title={id ? name || "Template" : text("crumb.newTemplate")} icon={LayoutTemplate} />
       <form onSubmit={save} className="flex max-w-[720px] flex-col gap-10">
-        <Field label={text("template.name")}>
-          <Input value={name} onChange={(e) => setName(e.target.value)} required />
-        </Field>
-        <section className="flex flex-col gap-4">
-          <SectionTitle>{text("field.cluster")}</SectionTitle>
-          <Field label={text("cluster.name")}>
-            <Input
-              value={body.clusterName ?? ""}
-              placeholder={text("ui.videPourChoisirUnClusterAu")}
-              onChange={(e) => setBody({ ...body, clusterName: e.target.value })}
-            />
-          </Field>
-        </section>
-        <section className="flex flex-col gap-4">
-          <SectionTitle>{text("cluster.servers")}</SectionTitle>
-          {servers.map((server, index) => (
-            <div key={index} className="flex flex-col gap-4 rounded-md border border-line p-4">
-              <MachineFields
-                server={server}
-                providers={providers}
-                keys={keys}
-                onChange={(next) => setBody({ ...body, servers: servers.map((item, i) => (i === index ? next : item)) })}
-              />
-              <TextButton type="button" onClick={() => setBody({ ...body, servers: servers.filter((_, i) => i !== index) })}>
-                {text("common.remove")}
-              </TextButton>
-            </div>
-          ))}
-          <div>
-            <TextButton
-              type="button"
-              onClick={() => setBody({ ...body, servers: [...servers, { ...emptyServer(), controlPlane: !servers.some((server) => server.controlPlane) }] })}
-            >
-              <Icon icon={Plus} />
-              {text("ui.ajouterUnServeur")}
-            </TextButton>
-          </div>
-          {servers.length > 0 ? <p className="text-faint">{text("template.planesHint")}</p> : null}
-          {servers.filter((server) => server.controlPlane).length % 2 === 0 && servers.some((server) => server.controlPlane) ? (
-            <p className="text-warn">{text("server.evenPlanes")}</p>
-          ) : null}
-        </section>
-        <section className="flex flex-col gap-4">
-          <SectionTitle>{text("nav.apps")}</SectionTitle>
-          {apps.map((app, index) => (
-            <div key={index} className="flex flex-col gap-4 rounded-md border border-line p-4">
-              <AppFields
-                app={app}
-                zones={zones}
-                onChange={(next) => setBody({ ...body, applications: apps.map((item, i) => (i === index ? next : item)) })}
-              />
-              <TextButton type="button" onClick={() => setBody({ ...body, applications: apps.filter((_, i) => i !== index) })}>
-                {text("common.remove")}
-              </TextButton>
-            </div>
-          ))}
-          <div>
-            <TextButton type="button" onClick={() => setBody({ ...body, applications: [...apps, emptyApp()] })}>
-              <Icon icon={Plus} />
-              {text("ui.ajouterUneApplication")}
-            </TextButton>
-          </div>
-        </section>
-        {error ? <ErrorText>{error}</ErrorText> : null}
-        <div>
-          <Button type="submit">{text("common.save")}</Button>
-        </div>
+        <Steps
+          steps={[
+            {
+              title: text("steps.cluster"),
+              content: (
+                <>
+                <Field label={text("template.name")}>
+                  <Input value={name} onChange={(e) => setName(e.target.value)} required />
+                </Field>
+                <section className="flex flex-col gap-4">
+                  <div className="hidden md:block">
+                    <SectionTitle>{text("field.cluster")}</SectionTitle>
+                  </div>
+                  <Field label={text("cluster.name")}>
+                    <Input
+                      value={body.clusterName ?? ""}
+                      placeholder={text("ui.videPourChoisirUnClusterAu")}
+                      onChange={(e) => setBody({ ...body, clusterName: e.target.value })}
+                    />
+                  </Field>
+                </section>
+                </>
+              ),
+            },
+            {
+              title: text("steps.servers"),
+              content: (
+                <section className="flex flex-col gap-4">
+                  <div className="hidden md:block">
+                    <SectionTitle>{text("cluster.servers")}</SectionTitle>
+                  </div>
+                  {servers.map((server, index) => (
+                    <div key={index} className="flex flex-col gap-4 rounded-md border border-line p-4">
+                      <MachineFields
+                        server={server}
+                        providers={providers}
+                        keys={keys}
+                        onChange={(next) => setBody({ ...body, servers: servers.map((item, i) => (i === index ? next : item)) })}
+                      />
+                      <TextButton type="button" tone="danger" onClick={() => setBody({ ...body, servers: servers.filter((_, i) => i !== index) })}>
+                        {text("common.remove")}
+                      </TextButton>
+                    </div>
+                  ))}
+                  <div>
+                    <TextButton
+                      type="button"
+                      onClick={() => setBody({ ...body, servers: [...servers, { ...emptyServer(), controlPlane: !servers.some((server) => server.controlPlane) }] })}
+                    >
+                      <Icon icon={Plus} />
+                      {text("ui.ajouterUnServeur")}
+                    </TextButton>
+                  </div>
+                  {servers.length > 0 ? <p className="text-faint">{text("template.planesHint")}</p> : null}
+                  {servers.filter((server) => server.controlPlane).length % 2 === 0 && servers.some((server) => server.controlPlane) ? (
+                    <p className="text-warn">{text("server.evenPlanes")}</p>
+                  ) : null}
+                </section>
+              ),
+            },
+            {
+              title: text("steps.apps"),
+              content: (
+                <section className="flex flex-col gap-4">
+                  <div className="hidden md:block">
+                    <SectionTitle>{text("nav.apps")}</SectionTitle>
+                  </div>
+                  {apps.map((app, index) => (
+                    <div key={index} className="flex flex-col gap-4 rounded-md border border-line p-4">
+                      <AppFields
+                        app={app}
+                        zones={zones}
+                        onChange={(next) => setBody({ ...body, applications: apps.map((item, i) => (i === index ? next : item)) })}
+                      />
+                      <TextButton type="button" tone="danger" onClick={() => setBody({ ...body, applications: apps.filter((_, i) => i !== index) })}>
+                        {text("common.remove")}
+                      </TextButton>
+                    </div>
+                  ))}
+                  <div>
+                    <TextButton type="button" onClick={() => setBody({ ...body, applications: [...apps, emptyApp()] })}>
+                      <Icon icon={Plus} />
+                      {text("ui.ajouterUneApplication")}
+                    </TextButton>
+                  </div>
+                </section>
+              ),
+            },
+          ]}
+          error={error ? <ErrorText>{error}</ErrorText> : null}
+          submit={
+            <Button type="submit" disabled={saving}>
+              {saving ? <Spinner /> : null}
+              {text("common.save")}
+            </Button>
+          }
+        />
+        {id ? (
+          <p>
+            <Link to={`/templates/${id}/deploy`} className="text-muted underline">
+              {text("template.deploy")}
+            </Link>
+          </p>
+        ) : null}
       </form>
     </>
   );
@@ -307,6 +346,7 @@ export function TemplateLaunch() {
   const [body, setBody] = useState<TemplateBody>({});
   const [target, setTarget] = useState("");
   const [phase, setPhase] = useState<"fill" | "summary">("fill");
+  const [launching, setLaunching] = useState(false);
   const [providers, setProviders] = useState<Secret[]>([]);
   const [keys, setKeys] = useState<Secret[]>([]);
   const [zones, setZones] = useState<DnsZone[]>([]);
@@ -340,7 +380,9 @@ export function TemplateLaunch() {
   }, [id]);
 
   async function validate() {
+    if (launching) return;
     setError("");
+    setLaunching(true);
     try {
       const run = await api<TemplateRun>(`/api/templates/${id}/runs`, {
         method: "POST",
@@ -349,11 +391,12 @@ export function TemplateLaunch() {
       navigate(`/templates/suivis/${run.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : text("common.error"));
+      setLaunching(false);
     }
   }
 
   if (!ready) return <LoadingLines lines={4} />;
-  if (!template) return <ErrorText>{error || "Introuvable."}</ErrorText>;
+  if (!template) return <ErrorText>{error || text("common.notFound")}</ErrorText>;
   const servers = body.servers ?? [];
   const apps = body.applications ?? [];
   const missing = hasGaps(body, zones);
@@ -430,14 +473,14 @@ export function TemplateLaunch() {
               <Input value={body.clusterName} onChange={(e) => setBody({ ...body, clusterName: e.target.value })} required />
             </Field>
           ) : (
-            <p>Cluster {choices.find((cluster) => cluster.id === target)?.name}</p>
+            <p>{text("field.cluster")} {choices.find((cluster) => cluster.id === target)?.name}</p>
           )}
           {servers.map((server, index) => {
             const marked = servers.some((item) => item.controlPlane);
             const control = server.controlPlane || (!marked && index === 0 && Boolean(body.clusterName));
             return (
             <div key={index} className="flex flex-col gap-2 border-t border-line pt-4">
-              <Field label={control ? "Control plane" : "Serveur"}>
+              <Field label={control ? text("template.controlServer") : text("template.server")}>
                 <Input
                   value={server.name}
                   onChange={(e) => setBody({ ...body, servers: servers.map((item, i) => (i === index ? { ...item, name: e.target.value } : item)) })}
@@ -461,13 +504,13 @@ export function TemplateLaunch() {
               </Field>
               <p className="text-muted">
                 {app.sourceKind === "git" ? text("ui.depot") : text("common.image")} {app.source}
-                {(app.replicas ?? 1) > 1 ? ` · Redondance ${app.replicas}` : ""}
+                {(app.replicas ?? 1) > 1 ? ` · ${text("template.copies", { count: app.replicas ?? 1 })}` : ""}
               </p>
               {(app.services ?? []).map((service) => (
                 <p key={service.name} className="text-muted">
                   {service.name} · {service.image}
-                  {service.published ? " · publié" : " · interne"}
-                  {service.disk ? " · disque" : ""}
+                  {` · ${service.published ? text("template.published") : text("template.internal")}`}
+                  {service.disk ? ` · ${text("template.disk")}` : ""}
                 </p>
               ))}
               {(app.names ?? []).map((name, nameIndex) => (
@@ -486,7 +529,8 @@ export function TemplateLaunch() {
             })}
           />
           <div className="flex items-center gap-4">
-            <Button type="button" onClick={() => void validate()}>
+            <Button type="button" onClick={() => void validate()} disabled={launching}>
+              {launching ? <Spinner /> : null}
               {text("ui.valider")}
             </Button>
             {missing || needsCluster(body) ? (
@@ -503,32 +547,17 @@ export function TemplateLaunch() {
 
 export function TemplateRunPage() {
   const { id = "" } = useParams();
-  const [run, setRun] = useState<TemplateRun | null>(null);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let stop = false;
-    const load = () => {
-      api<TemplateRun>(`/api/template-runs/${id}`)
-        .then((next) => {
-          if (!stop) setRun(next);
-        })
-        .catch((err) => {
-          if (!stop) setError(err.message);
-        });
-    };
-    load();
-    const timer = window.setInterval(load, 3000);
-    return () => {
-      stop = true;
-      window.clearInterval(timer);
-    };
-  }, [id]);
+  const { data: run, setData: setRun, error: loadError, reload } = usePoll<TemplateRun>(`/api/template-runs/${id}`, 3000, {
+    stopWhen: (next) => next.status === "done" || next.status === "failed" || next.status === "cancelled",
+  });
+  const [actionError, setError] = useState("");
+  const error = actionError || loadError;
 
   async function resume() {
     setError("");
     try {
       setRun(await api<TemplateRun>(`/api/template-runs/${id}/resume`, { method: "POST" }));
+      await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : text("common.error"));
     }
@@ -536,7 +565,7 @@ export function TemplateRunPage() {
 
   if (!run && !error) return <LoadingLines lines={4} />;
   if (!run) return <ErrorText>{error}</ErrorText>;
-  const label = run.status === "done" ? "Terminé" : run.status === "failed" ? "Échec" : run.status === "cancelled" ? text("deploy.cancelled") : text("ui.enCours");
+  const label = run.status === "done" ? text("status.done") : run.status === "failed" ? text("status.failed") : run.status === "cancelled" ? text("deploy.cancelled") : text("ui.enCours");
 
   return (
     <>
@@ -692,7 +721,7 @@ function MachineFields({
       </Field>
       <label className="flex items-center gap-2">
         <input type="checkbox" checked={Boolean(server.controlPlane)} onChange={(e) => onChange({ ...server, controlPlane: e.target.checked })} />
-        Control plane
+        {text("server.controlPlaneLabel")}
       </label>
       <ProviderSelect
         label={text("ui.provider")}
@@ -782,6 +811,7 @@ function MachineFields({
   );
 }
 
+
 function StorageFields({
   offer,
   server,
@@ -793,56 +823,28 @@ function StorageFields({
   currency: string;
   onChange: (server: TemplateServer) => void;
 }) {
-  const required = offer.storage?.find((item) => item.required);
-  const optional = (offer.storage ?? []).filter((item) => !item.required);
-  const selected = required ?? offer.storage?.find((item) => item.id === server.storageId);
-  if (!required && optional.length === 0) return null;
   return (
-    <>
-      {required ? null : (
-        <Field label={text("field.extraStorage")}>
-          <Select
-            value={server.storageId ?? ""}
-            onChange={(e) => {
-              const next = optional.find((item) => item.id === e.target.value);
-              onChange({ ...server, storageId: e.target.value, storageGb: next?.minGb ?? 0 });
-            }}
-          >
-            <option value="">{text("common.none")}</option>
-            {optional.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      )}
-      {selected ? (
-        <Field label={text("field.sizeGb")}>
-          <Input
-            type="number"
-            min={selected.minGb}
-            max={selected.maxGb || undefined}
-            value={server.storageGb || selected.minGb}
-            onChange={(e) => onChange({ ...server, storageId: selected.id, storageGb: Number(e.target.value) })}
-            required
-          />
-          <span className="text-muted">
-            {server.period === "month" && selected.monthlyPerGb ? price(selected.monthlyPerGb, false, currency) + "/Go" : ""}
-            {server.period !== "month" && selected.hourlyPerGb ? price(selected.hourlyPerGb, true, currency) + "/Go" : ""}
-          </span>
-        </Field>
-      ) : null}
-    </>
+    <OfferStorage
+      offer={offer}
+      period={server.period ?? "hour"}
+      currency={currency}
+      storageId={server.storageId ?? ""}
+      storageGb={server.storageGb ? String(server.storageGb) : ""}
+      onChange={(storageId, storageGb) => onChange({ ...server, storageId, storageGb: Number(storageGb) || 0 })}
+    />
   );
 }
 
 function AppFields({ app, zones, onChange }: { app: TemplateApp; zones: DnsZone[]; onChange: (app: TemplateApp) => void }) {
   const names = app.names ?? [];
   const services = app.services ?? [];
-  const variables = Object.entries(app.variables ?? {})
-    .map(([key, value]) => `${key}=${value}`)
-    .join("\n");
+  // The text is kept as typed: a line being written has no "=" yet, and
+  // rebuilding it from the parsed values would erase it.
+  const [variables, setVariables] = useState(() =>
+    Object.entries(app.variables ?? {})
+      .map(([key, value]) => `${key}=${value}`)
+      .join("\n"),
+  );
   return (
     <>
       <Field label={text("field.name")}>
@@ -857,46 +859,13 @@ function AppFields({ app, zones, onChange }: { app: TemplateApp; zones: DnsZone[
       <Field label={app.sourceKind === "git" ? text("ui.depot") : text("common.image")}>
         <Input value={app.source} onChange={(e) => onChange({ ...app, source: e.target.value })} required />
       </Field>
-      {names.map((name, index) => (
-        <div key={index} className="flex items-stretch">
-          <input
-            value={name.subdomain}
-            placeholder="sous-domaine"
-            onChange={(e) => onChange({ ...app, names: names.map((item, i) => (i === index ? { ...item, subdomain: e.target.value } : item)) })}
-            className="min-w-0 flex-1 rounded-l-md rounded-r-none border border-line bg-surface px-3 py-2 outline-none focus:border-focus"
-          />
-          <span className="flex items-center border-y border-line bg-surface px-2 text-muted">.</span>
-          <select
-            value={name.zone}
-            onChange={(e) => onChange({ ...app, names: names.map((item, i) => (i === index ? { ...item, zone: e.target.value } : item)) })}
-            className="max-w-[55%] rounded-l-none rounded-r-md border border-l-0 border-line bg-surface px-3 py-2 outline-none focus:border-focus"
-          >
-            <option value="">{text("field.domain")}</option>
-            {zones.map((zone) => (
-              <option key={zone.accountId + zone.name} value={zone.name}>
-                {zone.name}
-              </option>
-            ))}
-          </select>
-          <span className="ml-3 self-center">
-            <TextButton type="button" onClick={() => onChange({ ...app, names: names.filter((_, i) => i !== index) })}>
-              {text("common.remove")}
-            </TextButton>
-          </span>
-        </div>
-      ))}
-      <div>
-        <TextButton type="button" onClick={() => onChange({ ...app, names: [...names, { subdomain: "", zone: zones[0]?.name ?? "" }] })}>
-          <Icon icon={Plus} />
-          {text("field.addName")}
-        </TextButton>
-      </div>
+      <NameList names={names} zones={zones} onChange={(next) => onChange({ ...app, names: next })} />
       <Fold title={text("field.services")}>
         <div className="flex flex-col gap-3">
           {services.map((service, index) => (
             <div key={index} className="flex flex-col gap-2 rounded-md border border-line p-3">
-              <Input value={service.name} placeholder="nom" onChange={(e) => onChange({ ...app, services: services.map((item, i) => (i === index ? { ...item, name: e.target.value } : item)) })} />
-              <Input value={service.image} placeholder="image" onChange={(e) => onChange({ ...app, services: services.map((item, i) => (i === index ? { ...item, image: e.target.value } : item)) })} />
+              <Input value={service.name} placeholder={text("field.name")} aria-label={text("field.name")} onChange={(e) => onChange({ ...app, services: services.map((item, i) => (i === index ? { ...item, name: e.target.value } : item)) })} />
+              <Input value={service.image} placeholder={text("common.image")} aria-label={text("common.image")} onChange={(e) => onChange({ ...app, services: services.map((item, i) => (i === index ? { ...item, image: e.target.value } : item)) })} />
               <label className="flex items-center gap-2 text-muted">
                 <input type="checkbox" checked={service.published} onChange={() => onChange({ ...app, services: services.map((item, i) => ({ ...item, published: i === index })) })} />
                 {text("status.ready")}
@@ -929,7 +898,10 @@ function AppFields({ app, zones, onChange }: { app: TemplateApp; zones: DnsZone[
         <TextArea
           value={variables}
           placeholder={"NOM=valeur"}
-          onChange={(e) => onChange({ ...app, variables: parseVariables(e.target.value) })}
+          onChange={(e) => {
+            setVariables(e.target.value);
+            onChange({ ...app, variables: parseVariables(e.target.value) });
+          }}
         />
       </Field>
     </>
@@ -952,7 +924,7 @@ function ServerLine({ server, providers, keys }: { server: TemplateServer; provi
       .then((catalog) => {
         if (cancel) return;
         const found = priceOf(catalog, server);
-        setQuote(found ? price(String(found.amount), found.period !== "month", found.currency) : "");
+        setQuote(found ? formatPrice(String(found.amount), found.period !== "month", found.currency) : "");
       })
       .catch(() => {
         if (!cancel) setQuote("");
@@ -1039,7 +1011,7 @@ function Cost({ servers }: { servers: TemplateServer[] }) {
       <p className="mb-2">{text("template.estimate")}</p>
       {totals.map((total) => (
         <p key={total.currency + total.period} className="text-muted">
-          {price(String(total.amount), total.period !== "month", total.currency)}
+          {formatPrice(String(total.amount), total.period !== "month", total.currency)}
         </p>
       ))}
       <p className="mt-2 text-faint">{text("template.price")}</p>
@@ -1085,14 +1057,14 @@ function knownZone(zone: string, zones: DnsZone[]) {
 function summary(body: TemplateBody) {
   const servers = body.servers?.length ?? 0;
   const apps = body.applications?.length ?? 0;
-  const cluster = body.clusterName ? `Cluster ${body.clusterName}` : text("ui.clusterAuLancement");
-  return `${cluster} · ${servers} serveur${servers > 1 ? "s" : ""} · ${apps} application${apps > 1 ? "s" : ""}`;
+  const cluster = body.clusterName ? `${text("field.cluster")} ${body.clusterName}` : text("ui.clusterAuLancement");
+  return `${cluster} · ${text(servers > 1 ? "template.serversMany" : "template.serversOne", { count: servers })} · ${text(apps > 1 ? "template.appsMany" : "template.appsOne", { count: apps })}`;
 }
 
 function stepText(status: string) {
   if (status === "cancelled") return text("deploy.cancelled");
-  if (status === "done") return "Fait";
-  if (status === "failed") return "Échec";
+  if (status === "done") return text("status.done");
+  if (status === "failed") return text("status.failed");
   if (status === "running") return text("ui.enCours");
   return text("status.pending");
 }
@@ -1109,19 +1081,10 @@ function parseVariables(value: string) {
   return vars;
 }
 
-function price(raw: string | undefined, hour: boolean, currency = "EUR") {
-  if (!raw) return "";
-  const value = Number(raw);
-  if (!Number.isFinite(value)) return raw;
-  const digits = value < 0.001 ? 6 : hour && value < 1 ? 4 : 2;
-  const text = value.toLocaleString(currentLocale(), { minimumFractionDigits: digits, maximumFractionDigits: digits });
-  const unit = currency === "USD" ? "$" : "€";
-  return hour ? `${text} ${unit}/h` : `${text} ${unit}/mois`;
-}
 
 async function download(row: Template) {
   const res = await fetch(`/api/templates/${row.id}/export`);
-  if (!res.ok) return;
+  if (!res.ok) throw new Error(knownMessage((await res.text()).trim()) || text("common.error"));
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");

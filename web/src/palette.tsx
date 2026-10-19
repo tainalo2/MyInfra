@@ -4,7 +4,7 @@ import { Search } from "lucide-react";
 import { api, type Application, type Cluster, type Server } from "./api";
 import { text, type MsgKey } from "./i18n";
 import { useI18n } from "./lang";
-import { Icon } from "./ui";
+import { Icon, focus } from "./ui";
 
 const openEvent = "myinfra:palette";
 
@@ -141,12 +141,12 @@ export function Palette() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 px-4 pt-[12vh]" onMouseDown={close}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/30 sm:px-4 sm:pt-[12vh]" onMouseDown={close}>
       <div
         role="dialog"
         aria-modal="true"
         aria-label={text("palette.title")}
-        className="w-full max-w-[560px] overflow-hidden rounded-md border border-line bg-surface shadow-lg"
+        className="flex h-[100dvh] w-full max-w-[560px] flex-col overflow-hidden border-line bg-surface pt-[env(safe-area-inset-top)] shadow-lg sm:h-auto sm:rounded-md sm:border sm:pt-0"
         onMouseDown={(event) => event.stopPropagation()}
         onKeyDown={onKey}
       >
@@ -167,8 +167,11 @@ export function Palette() {
             aria-activedescendant={found[current] ? `palette-${current}` : undefined}
             className="min-w-0 flex-1 bg-transparent outline-none"
           />
+          <button type="button" onClick={close} className={`-m-2 rounded-md p-2 text-muted sm:hidden ${focus}`}>
+            {text("common.cancel")}
+          </button>
         </label>
-        <ul id="palette-results" role="listbox" className="max-h-[50vh] overflow-y-auto p-1">
+        <ul id="palette-results" role="listbox" className="min-h-0 flex-1 overflow-y-auto p-1 sm:max-h-[50vh] sm:flex-none">
           {found.length === 0 ? <li className="px-3 py-2 text-muted">{text("palette.empty")}</li> : null}
           {found.map((entry, index) => (
             <li
@@ -178,7 +181,7 @@ export function Palette() {
               aria-selected={index === current}
               onMouseEnter={() => setActive(index)}
               onClick={() => go(entry)}
-              className={`flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 ${index === current ? "bg-status" : ""}`}
+              className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-3 py-2 sm:min-h-0 ${index === current ? "bg-status" : ""}`}
             >
               <span className="w-16 shrink-0 text-muted">{text(entry.kind)}</span>
               <span className="min-w-0 flex-1 truncate">{entry.label}</span>

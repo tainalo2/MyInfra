@@ -3,6 +3,8 @@ import { Network, Plus, Server as ServerIcon } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, peek, type Application, type ArgoApp, type Cluster, type ClusterUsage, type Destruction, type Server, type Template } from "./api";
 import { text } from "./i18n";
+import { ConfirmDialog, Spinner, useToast } from "./kit";
+import { usePoll } from "./poll";
 import { usageText } from "./measure";
 import { RemovalNotice } from "./destructions";
 import { ServerCard, ServerForm, billText } from "./servers";
@@ -20,6 +22,9 @@ export function Clusters() {
   const [kubeconfig, setKubeconfig] = useState("");
   const [creatingServer, setCreatingServer] = useState("");
   const [mode, toggleMode] = useListMode();
+  const [busy, setBusy] = useState(false);
+  const [fresh, setFresh] = useState("");
+  const toast = useToast();
 
   async function reload() {
     const [nextClusters, nextServers] = await Promise.all([api<Cluster[]>("/api/clusters"), api<Server[]>("/api/servers")]);
@@ -34,6 +39,7 @@ export function Clusters() {
   }, []);
 
   function close() {
+    setFresh("");
     setCreatingCluster(false);
     setImporting(false);
     setCreatingServer("");
@@ -42,28 +48,41 @@ export function Clusters() {
     setError("");
   }
 
+  // A new cluster is empty: its first server is asked for at once, in the
+  // same place, instead of leaving the person to find "New server".
   async function add(event: FormEvent) {
     event.preventDefault();
+    if (busy) return;
     setError("");
+    setBusy(true);
     try {
-      await api("/api/clusters", { method: "POST", body: JSON.stringify({ name }) });
+      const created = await api<Cluster>("/api/clusters", { method: "POST", body: JSON.stringify({ name }) });
+      await reload();
       setName("");
       setCreatingCluster(false);
-      await reload();
+      setFresh(created.id);
+      setCreatingServer(created.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : text("common.error"));
+    } finally {
+      setBusy(false);
     }
   }
 
   async function importCluster(event: FormEvent) {
     event.preventDefault();
+    if (busy) return;
     setError("");
+    setBusy(true);
     try {
       await api("/api/clusters/import", { method: "POST", body: JSON.stringify({ name, kubeconfig }) });
+      toast(text("cluster.imported", { name }));
       close();
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : text("common.error"));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -82,7 +101,7 @@ export function Clusters() {
               {text("common.cancel")}
             </TextButton>
           ) : ready && clusters.length > 0 ? (
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-4">
               <TextButton type="button" onClick={() => setImporting(true)}>
                 {text("cluster.import")}
               </TextButton>
@@ -101,12 +120,12 @@ export function Clusters() {
           <Field label={text("cluster.name")}>
             <Input value={name} onChange={(e) => setName(e.target.value)} required />
           </Field>
-          <Field label="Kubeconfig">
+          <Field label={text("cluster.kubeconfig")}>
             <TextArea value={kubeconfig} onChange={(e) => setKubeconfig(e.target.value)} required />
           </Field>
           <div>
-            <Button type="submit">
-              <Icon icon={Plus} />
+            <Button type="submit" disabled={busy}>
+              {busy ? <Spinner /> : <Icon icon={Plus} />}
               {text("cluster.import")}
             </Button>
           </div>
@@ -117,8 +136,8 @@ export function Clusters() {
             <Input value={name} onChange={(e) => setName(e.target.value)} required />
           </Field>
           <div>
-            <Button type="submit">
-              <Icon icon={Plus} />
+            <Button type="submit" disabled={busy}>
+              {busy ? <Spinner /> : <Icon icon={Plus} />}
               {text("ui.creerLeCluster")}
             </Button>
           </div>
@@ -130,7 +149,7 @@ export function Clusters() {
         </>
       ) : creatingServer && target ? (
         <>
-          <p className="mb-8 text-muted">{target.name}</p>
+          <p className="mb-8 text-muted">{fresh === target.id ? text("cluster.firstServer", { name: target.name }) : target.name}</p>
           <ServerForm clusterId={target.id} />
         </>
       ) : !ready ? (
@@ -157,7 +176,7 @@ export function Clusters() {
       )}
       {ready && !creating ? (
         <section className="mt-12">
-          <div className="mb-6 flex items-center justify-between gap-4">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <h2 className="flex items-center gap-3 text-lg">
               <Icon icon={ServerIcon} className="text-muted" />
               {text("server.aloneList")}
@@ -200,10 +219,9 @@ function ClusterCard({
 }) {
   const navigate = useNavigate();
   const removal = removalOf(useDestructions(), "cluster", cluster.id);
-  const [usage, setUsage] = useState<ClusterUsage | null | undefined>(undefined);
+  const { data: usageData, error: usageError } = usePoll<ClusterUsage>(cluster.origin === "imported" ? null : `/api/clusters/${cluster.id}/usage`, 10000);
+  const usage = usageData ?? (usageError ? null : undefined);
   const [confirm, setConfirm] = useState(false);
-  const [typed, setTyped] = useState("");
-  const [removing, setRemoving] = useState(false);
   const [apps, setApps] = useState<Application[] | null>(null);
   const [dialogError, setDialogError] = useState("");
 
@@ -224,55 +242,18 @@ function ClusterCard({
     };
   }, [confirm, cluster.id, servers]);
 
-  useEffect(() => {
-    if (!confirm) return;
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape" && !removing) setConfirm(false);
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [confirm, removing]);
-
   const hostsSelf = apps?.some((app) => app.guarded || app.id === "myinfra") ?? false;
   const confirmText = hostsSelf ? text("destroy.phrase") : cluster.name;
 
-  async function destroy(event: FormEvent) {
-    event.preventDefault();
-    if (typed !== confirmText || !apps) return;
-    setRemoving(true);
-    setDialogError("");
-    try {
-      const job = await api<Destruction>(`/api/clusters/${cluster.id}`, { method: "DELETE", body: JSON.stringify({ name: typed }) });
-      navigate(`/destructions/${job.id}`);
-    } catch (err) {
-      setDialogError(err instanceof Error ? err.message : text("common.error"));
-      setRemoving(false);
-    }
+  async function destroy() {
+    if (!apps) throw new Error(text("cluster.contents"));
+    const job = await api<Destruction>(`/api/clusters/${cluster.id}`, { method: "DELETE", body: JSON.stringify({ name: confirmText }) });
+    navigate(`/destructions/${job.id}`);
   }
-
-  useEffect(() => {
-    if (cluster.origin === "imported") return;
-    let stop = false;
-    const load = () => {
-      api<ClusterUsage>(`/api/clusters/${cluster.id}/usage`)
-        .then((next) => {
-          if (!stop) setUsage(next);
-        })
-        .catch(() => {
-          if (!stop) setUsage(null);
-        });
-    };
-    load();
-    const timer = window.setInterval(load, 10000);
-    return () => {
-      stop = true;
-      window.clearInterval(timer);
-    };
-  }, [cluster.id, cluster.origin]);
 
   return (
     <li className={entryClass(mode, "stack")}>
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <span className="flex items-center gap-3">
           <Icon icon={Network} className="text-muted" />
           {cluster.name}
@@ -284,7 +265,7 @@ function ClusterCard({
               {text("ui.nouveauServeur")}
             </Button>
           )}
-          <ActionsMenu label={`Actions de ${cluster.name}`}>
+          <ActionsMenu label={text("apps.more")}>
             {cluster.origin === "imported" ? null : (
               <MenuItem
                 onClick={() => {
@@ -297,8 +278,8 @@ function ClusterCard({
               </MenuItem>
             )}
             <MenuItem
+              tone="danger"
               onClick={() => {
-                setTyped("");
                 setApps(null);
                 setDialogError("");
                 setConfirm(true);
@@ -346,66 +327,53 @@ function ClusterCard({
         <p className="text-muted">{text("cluster.noServer")}</p>
       )}
       {confirm ? (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-ink/40 px-6" role="dialog" aria-modal="true" aria-labelledby="delete-cluster-title">
-          <form onSubmit={destroy} className="flex max-h-[80vh] w-full max-w-md flex-col rounded-md border border-line bg-surface p-6">
-            <h2 id="delete-cluster-title" className="mb-3 text-lg">Détruire {cluster.name}</h2>
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              {dialogError ? (
-                <div className="mb-6">
-                  <ErrorText>{dialogError}</ErrorText>
-                </div>
-              ) : null}
-              {cluster.origin === "imported" ? <p className="mb-6 text-muted">{text("cluster.importedStays")}</p> : null}
-              {apps === null && !dialogError ? <LoadingLines lines={3} label={text("cluster.contents")} /> : null}
-              {apps && servers.length > 0 ? (
-                <div className="mb-6">
-                  <p className="mb-2">{text("cluster.servers")}</p>
-                  <ul>
-                    {servers.map((server) => (
-                      <li key={server.id} className="border-t border-line py-2 text-muted">
-                        {server.name}
-                        {server.address ? ` · ${server.address}` : ""}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-              {apps && apps.length > 0 ? (
-                <div>
-                  <p className="mb-2">{text("nav.apps")}</p>
-                  <ul>
-                    {apps.map((app) => (
-                      <li key={app.id} className="border-t border-line py-2 text-muted">
-                        {app.name}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
+        <ConfirmDialog
+          title={text("server.removeNamed", { name: cluster.name })}
+          confirmLabel={text("common.delete")}
+          danger
+          phrase={confirmText}
+          phraseLabel={hostsSelf ? text("field.confirm") : text("cluster.name")}
+          onConfirm={destroy}
+          onClose={() => setConfirm(false)}
+        >
+          {dialogError ? (
+            <div className="mb-6">
+              <ErrorText>{dialogError}</ErrorText>
             </div>
-            <div className="mt-6">
-              <p className="mb-6 text-muted">
-                {hostsSelf
-                  ? text("cluster.selfWarn", { phrase: text("destroy.phrase") })
-                  : text("ui.tapezLeNomDuClusterPour")}
-                {servers.some((server) => server.providerId) ? " Les machines chez le provider sont détruites avec lui." : ""}
-                {apps && apps.length > 0 ? " Les noms de domaine de ces applications sont retirés." : ""}
-              </p>
-              <Field label={hostsSelf ? "Confirmation" : text("cluster.name")}>
-                <Input value={typed} autoFocus onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
-              </Field>
-              <div className="mt-6 flex items-center gap-4">
-                <Button type="submit" disabled={typed !== confirmText || removing || apps === null}>
-                  {removing ? <span className="size-4 animate-spin rounded-full border border-current border-t-transparent" /> : null}
-                  Détruire
-                </Button>
-                <TextButton type="button" onClick={() => setConfirm(false)} disabled={removing}>
-                  {text("common.cancel")}
-                </TextButton>
-              </div>
+          ) : null}
+          {cluster.origin === "imported" ? <p className="mb-6">{text("cluster.importedStays")}</p> : null}
+          {apps === null && !dialogError ? <LoadingLines lines={3} label={text("cluster.contents")} /> : null}
+          {apps && servers.length > 0 ? (
+            <div className="mb-6">
+              <p className="mb-2 text-ink">{text("cluster.servers")}</p>
+              <ul>
+                {servers.map((server) => (
+                  <li key={server.id} className="border-t border-line py-2">
+                    {server.name}
+                    {server.address ? ` · ${server.address}` : ""}
+                  </li>
+                ))}
+              </ul>
             </div>
-          </form>
-        </div>
+          ) : null}
+          {apps && apps.length > 0 ? (
+            <div className="mb-6">
+              <p className="mb-2 text-ink">{text("nav.apps")}</p>
+              <ul>
+                {apps.map((app) => (
+                  <li key={app.id} className="border-t border-line py-2">
+                    {app.name}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          <p>
+            {hostsSelf ? text("cluster.selfWarn", { phrase: text("destroy.phrase") }) : text("ui.tapezLeNomDuClusterPour")}
+            {servers.some((server) => server.providerId) ? ` ${text("cluster.machinesGo")}` : ""}
+            {apps && apps.length > 0 ? ` ${text("cluster.domainsGo")}` : ""}
+          </p>
+        </ConfirmDialog>
       ) : null}
     </li>
   );

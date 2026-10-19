@@ -11,7 +11,8 @@
   --color-ink: #1c1917;
   --color-muted: #57534e;
   --color-faint: #78716c;
-  --color-focus: #a8a29e;
+  /* At least 3:1 against the page: a focus ring must be seen. */
+  --color-focus: #57534e;
   --color-ok: #3f6212;
   --color-warn: #92400e;
   --color-bad: #991b1b;
@@ -30,13 +31,19 @@
   --color-line: #44403c;
   --color-ink: #fafaf9;
   --color-muted: #a8a29e;
-  --color-faint: #78716c;
-  --color-focus: #a8a29e;
+  /* #78716c read at 3.2:1 on the dark surface, below what text needs. */
+  --color-faint: #9c958f;
+  --color-focus: #d6d3d1;
   --color-ok: #c5d4a4;
   --color-warn: #e7c9a1;
   --color-bad: #e7b4b4;
   --color-status: #35302c;
   --color-link: #93c5fd;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
 }
 
 body {
@@ -69,6 +76,15 @@ body {
   button:disabled,
   select:disabled {
     cursor: default;
+  }
+
+  /* iOS zooms on a field under 16 px when it takes the focus. */
+  @media (max-width: 639px) {
+    input,
+    select,
+    textarea {
+      font-size: 16px;
+    }
   }
 }
 

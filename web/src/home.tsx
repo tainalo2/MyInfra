@@ -1,47 +1,27 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { LayoutGrid } from "lucide-react";
-import { api, peek, type Application } from "./api";
+import { api, type Application } from "./api";
+import { ConfirmDialog, StatusBadge, appHealth, useToast } from "./kit";
+import { usePoll } from "./poll";
 import { text } from "./i18n";
 import { AppLogo } from "./app-logo";
 import { RemovalNotice } from "./destructions";
-import { EmptyList, HealthDot, ItemList, ListActions, LoadingCards, PageTitle, TextButton, entryClass, removalOf, useDestructions, useListMode } from "./ui";
+import { EmptyList, ErrorText, ItemList, ListActions, LoadingCards, PageTitle, TextButton, entryClass, removalOf, useDestructions, useListMode } from "./ui";
 
 export function Home() {
   const navigate = useNavigate();
-  const [apps, setApps] = useState<Application[] | null>(() => peek<Application[]>("/api/applications"));
-  const [error, setError] = useState("");
+  const { data: apps, setData: setApps, error } = usePoll<Application[]>("/api/applications", 8000);
   const [mode, toggleMode] = useListMode();
   const jobs = useDestructions();
+  const toast = useToast();
+  const [pausing, setPausing] = useState<Application | null>(null);
 
-  useEffect(() => {
-    let stop = false;
-    const load = () => {
-      api<Application[]>("/api/applications")
-        .then((next) => {
-          if (!stop) setApps(next);
-        })
-        .catch((err) => {
-          if (!stop) setError(err.message);
-        });
-    };
-    load();
-    const timer = window.setInterval(load, 8000);
-    return () => {
-      stop = true;
-      window.clearInterval(timer);
-    };
-  }, []);
-
-  async function togglePause(app: Application) {
-    if (app.guarded) return;
-    try {
-      const next = await api<Application>(`/api/applications/${app.id}/pause`, { method: "POST", body: JSON.stringify({ paused: !app.paused }) });
-      setApps((current) => current?.map((item) => (item.id === app.id ? { ...item, ...next } : item)) ?? current);
-      setError("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : text("common.error"));
-    }
+  async function setPaused(app: Application, paused: boolean) {
+    const next = await api<Application>(`/api/applications/${app.id}/pause`, { method: "POST", body: JSON.stringify({ paused }) });
+    setApps((current) => current?.map((item) => (item.id === app.id ? { ...item, ...next } : item)) ?? current);
+    setPausing(null);
+    toast(paused ? text("apps.pausedDone", { name: app.name }) : text("apps.resumedDone", { name: app.name }));
   }
 
   return (
@@ -55,7 +35,7 @@ export function Home() {
           ) : null
         }
       />
-      {error ? <p className="text-bad">{error}</p> : null}
+      {error && !apps ? <ErrorText>{error}</ErrorText> : null}
       {apps === null && !error ? <LoadingCards /> : null}
       {apps && apps.length === 0 ? (
         <EmptyList message={text("home.empty")} label={text("home.new")} onCreate={() => navigate("/nouveau")} />
@@ -67,17 +47,21 @@ export function Home() {
               <div className={`${entryClass(mode)} h-full`}>
                 <Link to={`/applications/${app.id}`} className="flex items-center gap-3">
                   <AppLogo slug={app.logo ?? ""} name={app.name} size={36} />
-                  <span className="flex items-center gap-2">
-                    {app.name}
-                    <HealthDot status={app.paused ? "paused" : app.runStatus} />
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate">{app.name}</span>
+                    <StatusBadge status={appHealth(app)} />
                   </span>
                 </Link>
                 <RemovalNotice job={removalOf(jobs, "application", app.id)} />
-                <span className="text-muted">{app.hostname}</span>
+                {app.hostname ? (
+                  <a href={`https://${app.hostname}`} target="_blank" rel="noreferrer" className="break-all text-muted underline">
+                    {app.hostname}
+                  </a>
+                ) : null}
                 {app.guarded ? null : (
                   <div>
-                    <TextButton type="button" onClick={() => togglePause(app)}>
-                      {app.paused ? text("home.resume") : "Pause"}
+                    <TextButton type="button" onClick={() => (app.paused ? void setPaused(app, false).catch((err) => toast(err.message, "bad")) : setPausing(app))}>
+                      {app.paused ? text("home.resume") : text("apps.pauseAction")}
                     </TextButton>
                   </div>
                 )}
@@ -85,6 +69,11 @@ export function Home() {
             </li>
           ))}
         </ItemList>
+      ) : null}
+      {pausing ? (
+        <ConfirmDialog title={text("apps.pauseTitle", { name: pausing.name })} confirmLabel={text("apps.pauseAction")} onConfirm={() => setPaused(pausing, true)} onClose={() => setPausing(null)}>
+          {text("apps.pauseHint")}
+        </ConfirmDialog>
       ) : null}
     </>
   );

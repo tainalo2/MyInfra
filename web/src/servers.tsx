@@ -1,22 +1,29 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useState, type ReactNode } from "react";
+import { ConfirmDialog, Sheet, Spinner, StatusBadge, Steps, useToast } from "./kit";
+import { usePoll } from "./poll";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Copy, KeyRound, Plus, RotateCcw, Server as ServerIcon, Trash2 } from "lucide-react";
-import { api, peek, type Catalog, type Cost, type DeployStep, type Destruction, type Offer, type Project, type Secret, type Server, type ServerRuntime, type ServerUsage } from "./api";
+import { Copy, KeyRound, Plus, RotateCcw, Server as ServerIcon, SquareTerminal, Trash2 } from "lucide-react";
+import { api, type Catalog, type Cost, type DeployStep, type Destruction, type Project, type Secret, type Server, type ServerRuntime, type ServerUsage } from "./api";
 import { CancelDeployment } from "./deployments";
 import { UsageMeters } from "./meters";
 import { hourlyRate, money, podCpu, size, usageText } from "./measure";
 import { ProviderLogo } from "./logos";
-import { OfferFields, cheapestOffer } from "./offers";
+import { OfferFields, OfferStorage, cheapestOffer, chosenStorage, formatPrice, memory } from "./offers";
 import { placeLabel } from "./places";
 import { ProviderSelect } from "./provider-select";
 import { TofuFiles } from "./tofu";
 import { EventList } from "./world";
-import { currentLocale, text, knownMessage } from "./i18n";
+import { text, knownMessage } from "./i18n";
 import {
+  ActionsMenu,
   Button,
   ErrorText,
   Field,
   Fold,
+  Group,
+  MenuItem,
+  SectionTitle,
+  focus,
   Icon,
   IconButton,
   Input,
@@ -58,6 +65,7 @@ export function ServerForm({ clusterId }: { clusterId: string }) {
   const [keyIds, setKeyIds] = useState<string[]>([""]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [keySheet, setKeySheet] = useState(false);
 
   useEffect(() => {
     api<Server[]>("/api/servers")
@@ -199,186 +207,269 @@ export function ServerForm({ clusterId }: { clusterId: string }) {
   return (
     <>
       <form onSubmit={addServer} className="flex max-w-[720px] flex-col gap-6">
-        {alone ? <p className="text-muted">{text("server.aloneHint")}</p> : null}
-        <ProviderSelect
-          label={text("ui.provider")}
-          aside={<Link to="/providers">{text("server.connect")}</Link>}
-          value={providerId}
-          onChange={(value) => {
-            setProviderId(value);
-            setLocation("");
-            setProjectId("");
-            setProjects([]);
-            setProjectsReady(false);
-            setOfferId("");
-            setCatalog(null);
-            setStorageId("");
-            setStorageGb("");
-          }}
-          options={[
-            { value: "manual", label: "Manual enrollment", logo: "manual" },
-            ...providers.map((provider) => ({
-              value: provider.id,
-              label: provider.name,
-              logo: provider.provider ?? "",
-            })),
-          ]}
-        />
-        {providerId !== "manual" && projectsReady && projects.length > 0 ? (
-          <Field label={text("provider.project")}>
-            <Select
-              value={projectId}
-              onChange={(e) => {
-                setProjectId(e.target.value);
-                setOfferId("");
-              }}
-            >
-              {projects.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        ) : null}
-        {catalog && catalog.locations.length > 1 ? (
-          <Field label={text("field.place")}>
-            <Select value={location || catalog.location} onChange={(e) => setLocation(e.target.value)}>
-              {catalog.locations.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        ) : null}
-        {!listsLoading && catalog && catalog.offers.length === 0 ? <p className="text-muted">{text("ui.aucuneMachineNEstProposeeA")}</p> : null}
-        {providerId !== "" ? (
-          <>
-            {/* Only what depends on the place and the offer waits: the rest of the form stays. */}
-            {listsLoading ? (
-              <LoadingLines lines={3} label={text("transfer.offers")} />
-            ) : offer && catalog ? (
-              <>
-                <OfferFields offers={catalog.offers} value={offer.id} currency={catalog.currency} onChange={setOfferId} />
-                <p className="text-muted">
-                  {offer.hourly ? price(offer.hourly, true, catalog.currency) : null}
-                  {offer.hourly && offer.monthly ? " · " : null}
-                  {offer.monthly ? price(offer.monthly, false, catalog.currency) : null}
-                </p>
-                <div className="flex gap-2">
-                  {offer.hourly ? (
-                    <button
-                      type="button"
-                      aria-pressed={period === "hour"}
-                      onClick={() => setPeriod("hour")}
-                      className={`rounded-md border px-3 py-2 ${period === "hour" ? "border-ink bg-status" : "border-line"}`}
-                    >
-                      {text("ui.heure")}
-                    </button>
-                  ) : null}
-                  {offer.monthly ? (
-                    <button
-                      type="button"
-                      aria-pressed={period === "month"}
-                      onClick={() => setPeriod("month")}
-                      className={`rounded-md border px-3 py-2 ${period === "month" ? "border-ink bg-status" : "border-line"}`}
-                    >
-                      {text("ui.mois")}
-                    </button>
-                  ) : null}
-                </div>
-                <StorageFields
-                  offer={offer}
-                  period={period}
-                  currency={catalog.currency}
-                  storageId={storageId}
-                  storageGb={storageGb}
-                  onId={setStorageId}
-                  onGb={setStorageGb}
-                />
-                {catalog.note ? <p className="text-faint">{catalog.note}</p> : null}
-              </>
-            ) : null}
-            <Field label={text("server.name")}>
-              <Input value={name} onChange={(e) => setName(e.target.value)} required />
-            </Field>
-            {alone ? null : (
-              <div>
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={controlPlane} disabled={roleLocked} onChange={(e) => setControlPlane(e.target.checked)} />
-                  Control plane
-                </label>
-                <p className="mt-2 text-faint">{roleLocked ? text("server.firstPlane") : text("server.manyPlanes")}</p>
-                {controlPlane && (planes + 1) % 2 === 0 ? <p className="mt-2 text-warn">{text("server.evenPlanes")}</p> : null}
-              </div>
-            )}
-            {keys.length > 0 ? (
-              <div className="flex flex-col gap-2">
-                <span className="mb-2 text-muted">{text("nav.ssh")}</span>
-                {keyIds.map((keyId, index) => {
-                  const taken = new Set(keyIds.filter((id, i) => i !== index && id));
-                  return (
-                    <div key={index} className="flex items-center gap-3">
+        <Steps
+          steps={[
+            {
+              title: text("steps.where"),
+              ready: providerId !== "",
+              content: (
+                <>
+                  {alone ? <p className="text-muted">{text("server.aloneHint")}</p> : null}
+                  <ProviderSelect
+                    label={text("ui.provider")}
+                    aside={<Link to="/providers">{text("server.connect")}</Link>}
+                    value={providerId}
+                    onChange={(value) => {
+                      setProviderId(value);
+                      setLocation("");
+                      setProjectId("");
+                      setProjects([]);
+                      setProjectsReady(false);
+                      setOfferId("");
+                      setCatalog(null);
+                      setStorageId("");
+                      setStorageGb("");
+                    }}
+                    options={[
+                      { value: "manual", label: text("server.manualOption"), logo: "manual" },
+                      ...providers.map((provider) => ({
+                        value: provider.id,
+                        label: provider.name,
+                        logo: provider.provider ?? "",
+                      })),
+                    ]}
+                  />
+                  {providerId !== "manual" && projectsReady && projects.length > 0 ? (
+                    <Field label={text("provider.project")}>
                       <Select
-                        value={keyId}
-                        required
-                        onChange={(e) =>
-                          setKeyIds((current) => current.map((id, i) => (i === index ? e.target.value : id)))
-                        }
+                        value={projectId}
+                        onChange={(e) => {
+                          setProjectId(e.target.value);
+                          setOfferId("");
+                        }}
                       >
-                        <option value="">{text("server.chooseKey")}</option>
-                        {keys
-                          .filter((key) => !taken.has(key.id))
-                          .map((key) => (
-                            <option key={key.id} value={key.id}>
-                              {key.name}
-                            </option>
-                          ))}
+                        {projects.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name}
+                          </option>
+                        ))}
                       </Select>
-                      {index > 0 ? (
-                        <IconButton
-                          type="button"
-                          icon={Trash2}
-                          label={text("common.remove")}
-                          onClick={() => setKeyIds((current) => current.filter((_, i) => i !== index))}
-                        />
+                    </Field>
+                  ) : null}
+                  {catalog && catalog.locations.length > 1 ? (
+                    <Field label={text("field.place")}>
+                      <Select value={location || catalog.location} onChange={(e) => setLocation(e.target.value)}>
+                        {catalog.locations.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                  ) : null}
+                  {!listsLoading && catalog && catalog.offers.length === 0 ? <p className="text-muted">{text("ui.aucuneMachineNEstProposeeA")}</p> : null}
+                </>
+              ),
+            },
+            ...(providerId === "manual"
+              ? []
+              : [
+                  {
+                    title: text("steps.machine"),
+                    ready,
+                    content: (
+                      <>
+                        {/* Only what depends on the place and the offer waits: the rest of the form stays. */}
+                        {listsLoading ? (
+                          <LoadingLines lines={3} label={text("transfer.offers")} />
+                        ) : offer && catalog ? (
+                          <>
+                            <OfferFields offers={catalog.offers} value={offer.id} currency={catalog.currency} onChange={setOfferId} />
+                            <p className="text-muted">
+                              {offer.hourly ? formatPrice(offer.hourly, true, catalog.currency) : null}
+                              {offer.hourly && offer.monthly ? " · " : null}
+                              {offer.monthly ? formatPrice(offer.monthly, false, catalog.currency) : null}
+                            </p>
+                            <div className="flex gap-2" role="group" aria-label={text("server.billing")}>
+                              {offer.hourly ? (
+                                <button
+                                  type="button"
+                                  aria-pressed={period === "hour"}
+                                  onClick={() => setPeriod("hour")}
+                                  className={`min-h-11 rounded-md border px-3 py-2 sm:min-h-0 ${period === "hour" ? "border-ink bg-status" : "border-line"} ${focus}`}
+                                >
+                                  {text("ui.heure")}
+                                </button>
+                              ) : null}
+                              {offer.monthly ? (
+                                <button
+                                  type="button"
+                                  aria-pressed={period === "month"}
+                                  onClick={() => setPeriod("month")}
+                                  className={`min-h-11 rounded-md border px-3 py-2 sm:min-h-0 ${period === "month" ? "border-ink bg-status" : "border-line"} ${focus}`}
+                                >
+                                  {text("ui.mois")}
+                                </button>
+                              ) : null}
+                            </div>
+                            <OfferStorage
+                              offer={offer}
+                              period={period}
+                              currency={catalog.currency}
+                              storageId={storageId}
+                              storageGb={storageGb}
+                              onChange={(id, gb) => {
+                                setStorageId(id);
+                                setStorageGb(gb);
+                              }}
+                            />
+                            {catalog.note ? <p className="text-faint">{catalog.note}</p> : null}
+                          </>
+                        ) : null}
+                      </>
+                    ),
+                  },
+                ]),
+            {
+              title: text("steps.access"),
+              ready: keys.length > 0,
+              content: providerId === "" ? null : (
+                <>
+                  <Field label={text("server.name")}>
+                    <Input value={name} onChange={(e) => setName(e.target.value)} required />
+                  </Field>
+                  {alone ? null : (
+                    <div>
+                      <label className="flex items-center gap-2">
+                        <input type="checkbox" checked={controlPlane} disabled={roleLocked} onChange={(e) => setControlPlane(e.target.checked)} />
+                        {text("server.controlPlaneLabel")}
+                      </label>
+                      <p className="mt-2 text-faint">{roleLocked ? text("server.firstPlane") : text("server.manyPlanes")}</p>
+                      {controlPlane && (planes + 1) % 2 === 0 ? <p className="mt-2 text-warn">{text("server.evenPlanes")}</p> : null}
+                    </div>
+                  )}
+                  {keys.length > 0 ? (
+                    <Group label={text("nav.ssh")}>
+                    <div className="flex flex-col gap-2">
+                      {keyIds.map((keyId, index) => {
+                        const taken = new Set(keyIds.filter((id, i) => i !== index && id));
+                        return (
+                          <div key={index} className="flex items-center gap-3">
+                            <Select
+                              value={keyId}
+                              aria-label={text("names.key", { index: index + 1 })}
+                              required
+                              onChange={(e) =>
+                                setKeyIds((current) => current.map((id, i) => (i === index ? e.target.value : id)))
+                              }
+                            >
+                              <option value="">{text("server.chooseKey")}</option>
+                              {keys
+                                .filter((key) => !taken.has(key.id))
+                                .map((key) => (
+                                  <option key={key.id} value={key.id}>
+                                    {key.name}
+                                  </option>
+                                ))}
+                            </Select>
+                            {index > 0 ? (
+                              <IconButton
+                                type="button"
+                                icon={Trash2}
+                                label={text("common.remove")}
+                                onClick={() => setKeyIds((current) => current.filter((_, i) => i !== index))}
+                              />
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                      {canAddKey ? (
+                        <div>
+                          <TextButton type="button" onClick={() => setKeyIds((current) => [...current, ""])}>
+                            <Icon icon={Plus} />
+                            {text("common.addKey")}
+                          </TextButton>
+                        </div>
                       ) : null}
                     </div>
-                  );
-                })}
-                {canAddKey ? (
-                  <div>
-                    <TextButton type="button" aria-label={text("common.addKey")} onClick={() => setKeyIds((current) => [...current, ""])}>
-                      <Icon icon={Plus} />
-                    </TextButton>
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <p className="flex items-center gap-3 text-muted">
-                <Icon icon={KeyRound} />
-                Aucune clé SSH. <Link to="/cles">{text("server.createKey")}</Link>
-              </p>
-            )}
-            {keys.length > 0 ? (
-              <div className="flex flex-col items-start gap-4">
-                <ToolInstall ansible tofu={["hetzner", "scaleway"].includes(providers.find((item) => item.id === providerId)?.provider ?? "")} />
-                <Button type="submit" disabled={submitting || !ready}>
-                  {submitting ? <span className="size-4 animate-spin rounded-full border border-current border-t-transparent" /> : <Icon icon={Plus} />}
-                  {text("ui.creerLeServeur")}
-                </Button>
-              </div>
-            ) : null}
-          </>
-        ) : null}
+                    </Group>
+                  ) : (
+                    <p className="flex flex-wrap items-center gap-3 text-muted">
+                      <Icon icon={KeyRound} />
+                      {text("server.noKey")}
+                      <TextButton type="button" onClick={() => setKeySheet(true)}>
+                        {text("server.createKey")}
+                      </TextButton>
+                    </p>
+                  )}
+                  {keys.length > 0 ? (
+                    <ToolInstall ansible tofu={["hetzner", "scaleway"].includes(providers.find((item) => item.id === providerId)?.provider ?? "")} />
+                  ) : null}
+                </>
+              ),
+            },
+          ]}
+          error={error ? <ErrorText>{error}</ErrorText> : null}
+          submit={
+            <Button type="submit" disabled={submitting || !ready || keys.length === 0}>
+              {submitting ? <Spinner /> : <Icon icon={Plus} />}
+              {text("ui.creerLeServeur")}
+            </Button>
+          }
+        />
       </form>
-      {error ? (
-        <div className="mt-8">
-          <ErrorText>{error}</ErrorText>
-        </div>
+      {keySheet ? (
+        <NewKeySheet
+          onClose={() => setKeySheet(false)}
+          onCreated={(key) => {
+            setKeys((current) => [...current, key]);
+            setKeyIds([key.id]);
+            setKeySheet(false);
+          }}
+        />
       ) : null}
     </>
+  );
+}
+
+// NewKeySheet makes an SSH key without leaving the form: MyInfra keeps the
+// private half, the form goes on with the new key chosen.
+function NewKeySheet({ onClose, onCreated }: { onClose: () => void; onCreated: (key: Secret) => void }) {
+  const [name, setName] = useState("myinfra");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      onCreated(await api<Secret>("/api/secrets/ssh-keys", { method: "POST", body: JSON.stringify({ name }) }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : text("common.error"));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Sheet title={text("server.createKey")} onClose={onClose} busy={busy}>
+      <form onSubmit={submit} className="flex flex-col gap-6">
+        <Field label={text("field.name")}>
+          <Input value={name} onChange={(e) => setName(e.target.value)} required data-autofocus />
+        </Field>
+        {error ? <ErrorText>{error}</ErrorText> : null}
+        <div className="flex flex-wrap items-center gap-4">
+          <Button type="submit" disabled={busy || name.trim() === ""}>
+            {busy ? <Spinner /> : <Icon icon={Plus} />}
+            {text("common.create")}
+          </Button>
+          <TextButton type="button" onClick={onClose} disabled={busy}>
+            {text("common.cancel")}
+          </TextButton>
+        </div>
+      </form>
+    </Sheet>
   );
 }
 
@@ -401,14 +492,14 @@ export function ServerCard({
     return (
       <div className="card-link flex h-full flex-col rounded-md border border-line bg-canvas">
       <Link to={`/serveurs/${server.id}`} className="block flex-1 p-3">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="flex min-w-0 items-center gap-2">
             <Icon icon={ServerIcon} className="shrink-0 text-muted" />
             <span className="truncate">{server.name}</span>
           </span>
           <span className={`shrink-0 ${label.tone}`}>{label.text}</span>
         </div>
-        {controlPlane ? <p className="mt-1 text-faint">Control plane</p> : null}
+        {controlPlane ? <p className="mt-1 text-faint">{text("server.controlPlaneShort")}</p> : null}
         {server.address ? <p className="mt-2 truncate text-muted">{server.address}</p> : null}
         {placeLabel(server.plan?.location) ? <p className="mt-1 truncate text-muted">{placeLabel(server.plan?.location)}</p> : null}
         {server.plan ? (
@@ -429,13 +520,13 @@ export function ServerCard({
         <span className="flex items-center gap-3">
           <Icon icon={ServerIcon} className="text-muted" />
           {server.name}
-          {controlPlane ? <span className="text-muted">Control plane</span> : null}
+          {controlPlane ? <span className="text-muted">{text("server.controlPlaneShort")}</span> : null}
         </span>
         <span className={label.tone}>{label.text}</span>
       </div>
       <p className="mb-3 flex items-center gap-2 text-muted">
         {server.provider ? <ProviderLogo id={server.provider} /> : <Icon icon={ServerIcon} />}
-        {server.providerName || "Manual enrollment"}
+        {server.providerName || text("server.manual")}
       </p>
       {server.address ? <p className="mb-3 text-muted">{server.address}</p> : null}
       {usageLoading ? (
@@ -450,8 +541,8 @@ export function ServerCard({
           {server.plan.storageGb ? ` · ${server.plan.storageLabel} ${server.plan.storageGb} Go` : ""}
           {" · "}
           {server.plan.period === "month"
-            ? price(server.plan.monthly, false, server.plan.currency)
-            : price(server.plan.hourly, true, server.plan.currency)}
+            ? formatPrice(server.plan.monthly, false, server.plan.currency)
+            : formatPrice(server.plan.hourly, true, server.plan.currency)}
           {placeLabel(server.plan.location) ? ` · ${placeLabel(server.plan.location)}` : ""}
         </p>
       ) : (
@@ -466,88 +557,42 @@ export function ServerCard({
 export function ServerPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
-  const [server, setServer] = useState<Server | null>(() => peek<Server>(`/api/servers/${id}`));
+  const toast = useToast();
   const [error, setError] = useState("");
   const [confirm, setConfirm] = useState(false);
-  const [typed, setTyped] = useState("");
-  const [removing, setRemoving] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [runtime, setRuntime] = useState<ServerRuntime | null>(() => peek<ServerRuntime>(`/api/servers/${id}/runtime`));
   const [now, setNow] = useState(() => Date.now());
+  const serverPoll = usePoll<Server>(id ? `/api/servers/${id}` : null, 10000);
+  const server = serverPoll.data;
+  const setServer = serverPoll.setData;
+  const linked = server?.status === "linked";
+  const deploying = server?.status === "pending" || server?.status === "deploying";
+  const active = Boolean(server?.deploy?.some((step) => step.status === "running" || step.status === "pending")) && !linked;
+  const runtimePoll = usePoll<ServerRuntime>(id && linked ? `/api/servers/${id}/runtime` : null, 10000);
+  const runtime = linked ? (runtimePoll.data ?? (runtimePoll.error ? emptyServerRuntime : null)) : null;
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 30000);
     return () => window.clearInterval(timer);
   }, []);
 
+  // A deployment moves every few seconds: follow it closely, then calm down.
   useEffect(() => {
-    let cancel = false;
-    async function load() {
-      try {
-        const next = await api<Server>(`/api/servers/${id}`);
-        if (!cancel) {
-          setServer(next);
-          setError("");
-        }
-      } catch (err) {
-        if (!cancel) setError(err instanceof Error ? err.message : text("common.error"));
-      }
-    }
-    void load();
+    if (!deploying) return;
     const timer = window.setInterval(() => {
-      void load();
+      if (!document.hidden) void serverPoll.reload();
     }, 2000);
-    return () => {
-      cancel = true;
-      window.clearInterval(timer);
-    };
-  }, [id]);
-
-  const active = server?.deploy?.some((step) => step.status === "running" || step.status === "pending") && server.status !== "linked";
-  const linked = server?.status === "linked";
-
-  useEffect(() => {
-    if (!id || !linked) {
-      setRuntime(null);
-      return;
-    }
-    let cancel = false;
-    const load = () => {
-      api<ServerRuntime>(`/api/servers/${id}/runtime`)
-        .then((next) => {
-          if (!cancel) setRuntime(next);
-        })
-        .catch(() => {
-          if (!cancel) {
-            setRuntime({ measured: false, cpu: { used: 0, total: 0 }, memory: { used: 0, total: 0 }, disk: { used: 0, total: 0 }, pods: [] });
-          }
-        });
-    };
-    load();
-    const timer = window.setInterval(load, 10000);
-    return () => {
-      cancel = true;
-      window.clearInterval(timer);
-    };
-  }, [id, linked]);
-
-  useEffect(() => {
-    if (!confirm) return;
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setConfirm(false);
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [confirm]);
+    return () => window.clearInterval(timer);
+  }, [deploying, serverPoll.reload]);
 
   async function retry() {
     if (!server) return;
     setRetrying(true);
     setError("");
     try {
-      const next = await api<Server>(`/api/servers/${server.id}/deploy`, { method: "POST" });
-      setServer(next);
+      setServer(await api<Server>(`/api/servers/${server.id}/deploy`, { method: "POST" }));
+      toast(text("server.retried", { name: server.name }));
     } catch (err) {
       setError(err instanceof Error ? err.message : text("common.error"));
     } finally {
@@ -555,23 +600,30 @@ export function ServerPage() {
     }
   }
 
-  async function remove(event: FormEvent) {
-    event.preventDefault();
-    if (!server || typed !== server.name) return;
-    setRemoving(true);
-    setError("");
-    try {
-      const job = await api<Destruction>(`/api/servers/${server.id}`, { method: "DELETE", body: JSON.stringify({ name: typed }) });
-      navigate(`/destructions/${job.id}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : text("common.error"));
-      setRemoving(false);
-    }
+  async function remove() {
+    if (!server) return;
+    const job = await api<Destruction>(`/api/servers/${server.id}`, { method: "DELETE", body: JSON.stringify({ name: server.name }) });
+    navigate(`/destructions/${job.id}`);
   }
 
-  if (!server && !error) return <LoadingLines lines={4} />;
-  if (!server) return <ErrorText>{error}</ErrorText>;
-  const label = statusLabel(server.status);
+  if (!server && !serverPoll.error) return <LoadingLines lines={4} />;
+  if (!server) return <ErrorText>{serverPoll.error}</ErrorText>;
+  const failed = server.status === "failed";
+  const facts: [string, ReactNode][] = [
+    [text("server.status"), <StatusBadge status={server.status} />],
+    [text("server.provider"), (
+      <span className="inline-flex items-center gap-2">
+        {server.provider ? <ProviderLogo id={server.provider} /> : <Icon icon={ServerIcon} />}
+        {server.providerName || text("server.manual")}
+      </span>
+    )],
+    ...(server.clusterName ? [[text("server.cluster"), `${server.clusterName}${server.controlPlane ? ` · ${text("server.controlPlaneShort")}` : ""}`] as [string, ReactNode]] : []),
+    ...(server.plan ? [[text("server.offer"), `${server.plan.name} · ${server.plan.vcpu} vCPU · ${memory(server.plan.memoryMb)}${server.plan.diskGb > 0 ? ` · ${server.plan.diskGb} ${text("unit.gb")}` : ""}`] as [string, ReactNode]] : []),
+    ...(server.plan && placeLabel(server.plan.location) ? [[text("server.place"), placeLabel(server.plan.location)] as [string, ReactNode]] : []),
+    ...(server.address ? [[text("server.address"), <span className="break-all font-mono text-[13px]">{server.address}</span>] as [string, ReactNode]] : []),
+    [text("server.cost"), server.cost ? billText(server.cost, false, hourlyRate(server)) : text("bill.none")],
+    [text("server.uptime"), exploitation(server.createdAt, now)],
+  ];
 
   return (
     <>
@@ -581,24 +633,16 @@ export function ServerPage() {
           <ErrorText>{error}</ErrorText>
         </div>
       ) : null}
-      {server.controlPlane ? <p className="mb-3 text-muted">Control plane</p> : null}
-      <p className="mb-3 flex items-center gap-2 text-muted">
-        {server.provider ? <ProviderLogo id={server.provider} /> : <Icon icon={ServerIcon} />}
-        {server.providerName || "Manual enrollment"}
-        <span className={label.tone}>{label.text}</span>
-      </p>
-      {server.clusterName ? <p className="mb-3 text-muted">{server.clusterName}</p> : null}
-      {server.address ? <p className="mb-3 text-muted">{server.address}</p> : null}
-      <p className="mb-3 text-muted">{exploitation(server.createdAt, now)}</p>
-      {server.cost ? <p className="mb-3 text-muted">{billText(server.cost, false, hourlyRate(server))}</p> : <p className="mb-3 text-muted">{text("bill.none")}</p>}
-      {server.plan ? (
-        <p className="mb-6 text-muted">
-          {server.plan.name} · {server.plan.vcpu} vCPU · {memory(server.plan.memoryMb)}
-          {server.plan.diskGb > 0 ? ` · ${server.plan.diskGb} Go` : ""}
-          {placeLabel(server.plan.location) ? ` · ${placeLabel(server.plan.location)}` : ""}
-        </p>
-      ) : (
-        <div className="mb-6 flex items-start gap-4">
+      <dl className="grid max-w-[720px] grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-[max-content_1fr]">
+        {facts.map(([label, value]) => (
+          <div key={label} className="contents">
+            <dt className="text-muted">{label}</dt>
+            <dd className="-mt-2 mb-1 min-w-0 sm:m-0">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {!server.plan && server.joinCommand ? (
+        <div className="mt-6 flex max-w-[720px] items-start gap-4">
           <code className="min-w-0 flex-1 break-all font-mono text-[13px] text-muted">{server.joinCommand}</code>
           <IconButton
             icon={Copy}
@@ -610,36 +654,53 @@ export function ServerPage() {
           />
           {copied ? <span className="text-muted">{text("common.copied")}</span> : null}
         </div>
-      )}
-      <TofuFiles path={`/api/servers/${server.id}/tofu`} />
-      <div className="mb-8 flex flex-col items-start gap-4">
-        <ToolInstall ansible tofu={server.tofu} />
-        <Button type="button" onClick={() => void retry()} disabled={retrying}>
-          {retrying ? <span className="size-4 animate-spin rounded-full border border-current border-t-transparent" /> : <Icon icon={RotateCcw} />}
-          {text("ui.relancerLeDeploiement")}
-        </Button>
-      </div>
-      <CancelDeployment kind="server" id={server.id} active={server.status === "pending" || server.status === "deploying"} />
-      {linked ? (
-        <div className="mb-8">
-          <Link to={`/serveurs/${server.id}/terminal`} className="text-muted underline">
-            Terminal
+      ) : null}
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        {linked ? (
+          <Link to={`/serveurs/${server.id}/terminal`} className={`inline-flex min-h-11 items-center gap-2 rounded-md border border-line bg-surface px-4 py-2 sm:min-h-0 ${focus}`}>
+            <Icon icon={SquareTerminal} />
+            {text("server.terminal")}
           </Link>
+        ) : null}
+        {failed ? (
+          <Button type="button" onClick={() => void retry()} disabled={retrying}>
+            {retrying ? <Spinner /> : <Icon icon={RotateCcw} />}
+            {text("ui.relancerLeDeploiement")}
+          </Button>
+        ) : null}
+        <CancelDeployment kind="server" id={server.id} active={deploying} />
+        <ActionsMenu label={text("apps.more")}>
+          {!failed ? <MenuItem onClick={() => void retry()}>{text("ui.relancerLeDeploiement")}</MenuItem> : null}
+          <MenuItem tone="danger" onClick={() => setConfirm(true)}>
+            {text("common.delete")}
+          </MenuItem>
+        </ActionsMenu>
+      </div>
+      {failed || deploying ? <div className="mt-4"><ToolInstall ansible tofu={server.tofu} /></div> : null}
+      {server.deploy && server.deploy.length > 0 ? (
+        <div className="mt-8 max-w-[720px]">
+          {linked ? (
+            <Fold title={text("server.deployHistory")}>
+              <DeployTimeline steps={server.deploy} live={false} />
+            </Fold>
+          ) : (
+            <DeployTimeline steps={server.deploy} live={active} />
+          )}
         </div>
       ) : null}
       {linked ? (
-        <div className="max-w-[720px]">
+        <div className="mt-8 max-w-[720px]">
           <UsageMeters sample={runtime} />
           <div className="mt-10">
-            <Fold title="Pods">
+            <Fold title={text("apps.instances")} defaultOpen={Boolean(runtime?.pods.some((pod) => podFailed(pod)))}>
               {runtime && runtime.pods.length > 0 ? (
                 <ul className="flex flex-col">
                   {runtime.pods.map((pod) => {
                     const health = podHealth(pod);
                     return (
                       <li key={pod.name} className="border-t border-line py-4">
-                        <div className="flex items-baseline justify-between gap-6">
-                          <span className="font-mono text-[13px]">{pod.name}</span>
+                        <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+                          <span className="break-all font-mono text-[13px]">{pod.name}</span>
                           <span className={health.tone}>{health.text}</span>
                         </div>
                         <p className="mt-1 text-muted">
@@ -653,48 +714,44 @@ export function ServerPage() {
                     );
                   })}
                 </ul>
+              ) : !runtime ? (
+                <LoadingLines lines={2} label={text("apps.instances")} />
               ) : (
-                !runtime ? <LoadingLines lines={2} label="Pods" /> : <p className="text-muted">{runtime.measured ? text("common.noPod") : text("common.noMeasure")}</p>
+                <p className="text-muted">{runtime.measured ? text("common.noPod") : text("common.noMeasure")}</p>
               )}
             </Fold>
           </div>
         </div>
-      ) : server.deploy && server.deploy.length > 0 ? (
-        <DeployTimeline steps={server.deploy} live={Boolean(active)} />
       ) : null}
       <div className="mt-10 max-w-[720px]">
-        <h2 className="mb-4">{text("nav.history")}</h2>
-        <EventList server={server.id} />
+        <Fold title={text("common.advanced")}>
+          <TofuFiles path={`/api/servers/${server.id}/tofu`} />
+        </Fold>
       </div>
-      <div className="mt-10">
-        <TextButton type="button" onClick={() => { setTyped(""); setConfirm(true); }}>
-          <Icon icon={Trash2} />
-          {text("common.delete")}
-        </TextButton>
+      <div className="mt-10 max-w-[720px]">
+        <SectionTitle>{text("nav.history")}</SectionTitle>
+        <div className="mt-4">
+          <EventList server={server.id} />
+        </div>
       </div>
       {confirm ? (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-ink/40 px-6" role="dialog" aria-modal="true" aria-labelledby="delete-server-title">
-          <form onSubmit={remove} className="w-full max-w-md rounded-md border border-line bg-surface p-6">
-            <h2 id="delete-server-title" className="mb-3 text-lg">Supprimer {server.name}</h2>
-            <p className="mb-6 text-muted">{text("ui.tapezLeNomDuServeurPour")}</p>
-            <Field label={text("server.serverName")}>
-              <Input value={typed} autoFocus onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
-            </Field>
-            <div className="mt-6 flex items-center gap-4">
-              <Button type="submit" disabled={typed !== server.name || removing}>
-                {removing ? <span className="size-4 animate-spin rounded-full border border-current border-t-transparent" /> : null}
-                {text("common.delete")}
-              </Button>
-              <TextButton type="button" onClick={() => setConfirm(false)}>
-                {text("common.cancel")}
-              </TextButton>
-            </div>
-          </form>
-        </div>
+        <ConfirmDialog
+          title={text("server.removeNamed", { name: server.name })}
+          confirmLabel={text("common.delete")}
+          danger
+          phrase={server.name}
+          phraseLabel={text("server.serverName")}
+          onConfirm={remove}
+          onClose={() => setConfirm(false)}
+        >
+          {text("ui.tapezLeNomDuServeurPour")}
+        </ConfirmDialog>
       ) : null}
     </>
   );
 }
+
+const emptyServerRuntime: ServerRuntime = { measured: false, cpu: { used: 0, total: 0 }, memory: { used: 0, total: 0 }, disk: { used: 0, total: 0 }, pods: [] };
 
 function DeployTimeline({ steps, live }: { steps: DeployStep[]; live: boolean }) {
   return (
@@ -724,87 +781,7 @@ function stepDot(status: string) {
   return "mt-1.5 size-2.5 rounded-full border border-line";
 }
 
-function StorageFields({
-  offer,
-  period,
-  currency,
-  storageId,
-  storageGb,
-  onId,
-  onGb,
-}: {
-  offer: Offer;
-  period: string;
-  currency: string;
-  storageId: string;
-  storageGb: string;
-  onId: (id: string) => void;
-  onGb: (gb: string) => void;
-}) {
-  const options = offer.storage ?? [];
-  const required = options.find((item) => item.required);
-  const optional = options.filter((item) => !item.required);
-  if (required) {
-    return (
-      <Field label={`${required.label} (Go)`}>
-        <Input
-          type="number"
-          min={required.minGb}
-          max={required.maxGb || undefined}
-          value={storageGb || String(required.minGb)}
-          onChange={(e) => {
-            onId(required.id);
-            onGb(e.target.value);
-          }}
-          required
-        />
-      </Field>
-    );
-  }
-  if (optional.length === 0) {
-    return null;
-  }
-  const selected = optional.find((item) => item.id === storageId);
-  return (
-    <>
-      <Field label={text("field.extraStorage")}>
-        <Select
-          value={storageId}
-          onChange={(e) => {
-            onId(e.target.value);
-            const next = optional.find((item) => item.id === e.target.value);
-            onGb(next ? String(next.minGb) : "");
-          }}
-        >
-          <option value="">{text("common.none")}</option>
-          {optional.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.label}
-              {period === "month" && item.monthlyPerGb ? ` · ${price(item.monthlyPerGb, false, currency)}/Go` : ""}
-              {period !== "month" && item.hourlyPerGb ? ` · ${price(item.hourlyPerGb, true, currency)}/Go` : ""}
-            </option>
-          ))}
-        </Select>
-      </Field>
-      {selected ? (
-        <Field label={text("field.sizeGb")}>
-          <Input type="number" min={selected.minGb} max={selected.maxGb || undefined} value={storageGb} onChange={(e) => onGb(e.target.value)} required />
-        </Field>
-      ) : null}
-    </>
-  );
-}
 
-function chosenStorage(offer: Offer | undefined, storageId: string, storageGb: string) {
-  const options = offer?.storage ?? [];
-  const required = options.find((item) => item.required);
-  const selected = required ?? options.find((item) => item.id === storageId);
-  if (!selected) {
-    return { id: "", gb: 0 };
-  }
-  const size = Number(storageGb);
-  return { id: selected.id, gb: Number.isFinite(size) && size > 0 ? size : selected.minGb };
-}
 
 function exploitation(iso: string | undefined, now: number) {
   if (!iso) return text("ui.dureeDExploitationInconnue");
@@ -815,10 +792,10 @@ function exploitation(iso: string | undefined, now: number) {
   const hours = Math.floor((minutes % 1440) / 60);
   const rest = minutes % 60;
   const parts = [];
-  if (days) parts.push(`${days} j`);
+  if (days) parts.push(`${days} ${text("unit.day")}`);
   if (hours || days) parts.push(`${hours} h`);
   if (!days) parts.push(`${rest} min`);
-  return `En service depuis ${parts.join(" ")}`;
+  return text("server.upFor", { time: parts.join(" ") });
 }
 
 export function billText(cost: Cost, cluster = false, hourly?: number) {
@@ -830,23 +807,4 @@ export function billText(cost: Cost, cluster = false, hourly?: number) {
   return `${total} · ${text("bill.rate", { amount: `${money(hourly)} ${unit}` })}`;
 }
 
-function price(raw: string | undefined, hour: boolean, currency = "EUR") {
-  if (!raw) {
-    return "";
-  }
-  const value = Number(raw);
-  if (!Number.isFinite(value)) {
-    return raw;
-  }
-  const digits = value < 0.001 ? 6 : hour && value < 1 ? 4 : 2;
-  const text = value.toLocaleString(currentLocale(), { minimumFractionDigits: digits, maximumFractionDigits: digits });
-  const unit = currency === "USD" ? "$" : "€";
-  return hour ? `${text} ${unit}/h` : `${text} ${unit}/mois`;
-}
 
-function memory(mb: number) {
-  if (mb >= 1024) {
-    return `${(mb / 1024).toLocaleString(currentLocale(), { maximumFractionDigits: 1 })} Go`;
-  }
-  return `${mb} Mo`;
-}

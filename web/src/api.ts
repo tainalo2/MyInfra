@@ -1,4 +1,4 @@
-import { currentLang, textError } from "./i18n";
+import { currentLang, text, textError } from "./i18n";
 
 export class ApiError extends Error {}
 
@@ -7,6 +7,21 @@ const authPaths = ["/api/setup", "/api/session", "/api/password"];
 // Last answer of each read, kept for the tab: a page opened again shows what
 // it had at once, then refreshes, instead of an empty skeleton every time.
 const answers = new Map<string, unknown>();
+
+const returnKey = "myinfra.return";
+
+// returnPath is where to go back after signing in again: the page the person
+// was on when the session ran out.
+export function returnPath() {
+  try {
+    const path = sessionStorage.getItem(returnKey);
+    sessionStorage.removeItem(returnKey);
+    if (path && path.startsWith("/") && !path.startsWith("//") && !path.startsWith("/entree")) return path;
+  } catch {
+    // Storage blocked: back to the start.
+  }
+  return "/";
+}
 
 export function peek<T>(path: string): T | null {
   return (answers.get(path) as T | undefined) ?? null;
@@ -20,7 +35,12 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   if (init?.body) {
     headers.set("content-type", "application/json");
   }
-  const res = await fetch(path, { ...init, headers });
+  let res: Response;
+  try {
+    res = await fetch(path, { ...init, headers });
+  } catch {
+    throw new ApiError(text("err.network"));
+  }
   if (res.status === 204) {
     return undefined as T;
   }
@@ -36,6 +56,11 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     if (res.status === 401) answers.clear();
     if (res.status === 401 && !authPaths.includes(path) && location.pathname !== "/entree") {
+      try {
+        sessionStorage.setItem(returnKey, location.pathname + location.search);
+      } catch {
+        // Storage blocked: the person starts again from the home page.
+      }
       location.assign("/entree");
     }
     throw new ApiError(textError(body.code, body.params, body.error || ""));

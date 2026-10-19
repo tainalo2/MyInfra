@@ -5,6 +5,7 @@ import { Suspense, createContext, useContext, useEffect, useRef, useState, type 
 import {
   Boxes,
   ChevronDown,
+  ChevronLeft,
   ChevronUp,
   Cloud,
   GitBranch,
@@ -31,26 +32,38 @@ import {
 } from "lucide-react";
 import { api, type Deployment, type Destruction } from "./api";
 import { Palette, SearchButton } from "./palette";
+import { BottomTabs } from "./mobilenav";
+import { ToastHost } from "./kit";
 import { useTheme } from "./theme";
 
-const focus =
-  "focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-focus";
+export const focus =
+  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
 
 export function Icon({ icon: Glyph, className }: { icon: LucideIcon; className?: string }) {
   return <Glyph size={16} strokeWidth={1.5} className={className} aria-hidden />;
 }
 
-export function Button({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
+const buttonTones = {
+  primary: "bg-ink text-canvas",
+  secondary: "border border-line bg-surface text-ink",
+  danger: "bg-bad text-canvas",
+};
+
+// Buttons reach 44 px on a touch screen, the size a finger needs.
+export function Button({ children, variant = "primary", className = "", ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: keyof typeof buttonTones }) {
   return (
-    <button {...props} className={`inline-flex items-center gap-2 rounded-md bg-ink px-4 py-2 text-canvas disabled:opacity-40 ${focus}`}>
+    <button {...props} className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-md px-4 py-2 disabled:opacity-40 sm:min-h-0 ${buttonTones[variant]} ${focus} ${className}`}>
       {children}
     </button>
   );
 }
 
-export function TextButton({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
+export function TextButton({ children, tone, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { tone?: "danger" }) {
   return (
-    <button {...props} className={`-mx-1.5 inline-flex items-center gap-2 rounded-md px-1.5 py-0.5 text-ink disabled:opacity-40 ${focus}`}>
+    <button
+      {...props}
+      className={`-mx-2 inline-flex min-h-11 items-center gap-2 rounded-md px-2 py-0.5 disabled:opacity-40 sm:-mx-1.5 sm:min-h-0 sm:px-1.5 ${tone === "danger" ? "text-bad" : "text-ink"} ${focus}`}
+    >
       {children}
     </button>
   );
@@ -62,7 +75,7 @@ export function IconButton({
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { icon: LucideIcon; label: string }) {
   return (
-    <button {...props} aria-label={label} className={`-m-1 rounded-md p-1 text-ink ${focus}`}>
+    <button {...props} aria-label={label} title={label} className={`-m-2.5 rounded-md p-2.5 text-ink sm:-m-1 sm:p-1 ${focus}`}>
       <Icon icon={icon} />
     </button>
   );
@@ -100,9 +113,9 @@ export function ActionsMenu({ label, children }: { label: string; children: Reac
   );
 }
 
-export function MenuItem({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
+export function MenuItem({ children, tone, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { tone?: "danger" }) {
   return (
-    <button type="button" role="menuitem" {...props} className={`block w-full rounded-md px-3 py-2 text-left ${focus}`}>
+    <button type="button" role="menuitem" {...props} className={`block min-h-11 w-full rounded-md px-3 py-2 text-left sm:min-h-0 ${tone === "danger" ? "text-bad" : ""} ${focus}`}>
       {children}
     </button>
   );
@@ -123,12 +136,25 @@ export function removalOf(jobs: Destruction[], kind: string, id: string) {
   return jobs.find((job) => job.kind === kind && job.targetId === id && job.status === "running");
 }
 
-export function Field({ label, children }: { label: string; children: ReactNode }) {
+export function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   return (
     <label className="block">
       <span className="mb-2 block text-muted">{label}</span>
       {children}
+      {hint ? <span className="mt-2 block text-faint">{hint}</span> : null}
     </label>
+  );
+}
+
+// Group names several controls together, where one label cannot: a list of
+// domains, a set of checkboxes, a row with a button.
+export function Group({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
+  return (
+    <fieldset className="min-w-0">
+      <legend className="mb-2 text-muted">{label}</legend>
+      {hint ? <p className="mb-3 text-faint">{hint}</p> : null}
+      {children}
+    </fieldset>
   );
 }
 
@@ -147,7 +173,11 @@ export function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
 }
 
 export function ErrorText({ children }: { children: ReactNode }) {
-  return <p className="text-bad">{children}</p>;
+  return (
+    <p className="text-bad" role="alert">
+      {children}
+    </p>
+  );
 }
 
 export function Skeleton({ className = "h-4 w-32" }: { className?: string }) {
@@ -183,8 +213,12 @@ export function SectionTitle({ children }: { children: ReactNode }) {
   return <h2 className="text-base">{children}</h2>;
 }
 
-export function Fold({ title, children }: { title: string; children: ReactNode }) {
-  const [open, setOpen] = useState(false);
+export function Fold({ title, children, defaultOpen = false }: { title: string; children: ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
+  // A section that holds a problem opens by itself once the problem shows.
+  useEffect(() => {
+    if (defaultOpen) setOpen(true);
+  }, [defaultOpen]);
   return (
     <section>
       <h2 className="text-base">
@@ -306,8 +340,8 @@ export function Header({ search = false }: { search?: boolean }) {
   const { lang, setLang } = useI18n();
   const label = theme === "dark" ? text("header.themeLight") : text("header.themeDark");
   return (
-    <header className="shrink-0 border-b border-line">
-      <div className="flex items-center justify-between gap-4 px-6 py-4">
+    <header className="shrink-0 border-b border-line pt-[env(safe-area-inset-top)]">
+      <div className="flex items-center justify-between gap-4 px-4 py-3 md:px-6 md:py-4">
         <Link to="/" className={`inline-flex items-center gap-2 font-medium ${focus}`}>
           <Icon icon={Boxes} />
           MyInfra
@@ -318,7 +352,7 @@ export function Header({ search = false }: { search?: boolean }) {
             aria-label={text("header.lang")}
             value={lang}
             onChange={(event) => setLang(event.target.value as (typeof langs)[number])}
-            className={`bg-transparent text-ink ${focus}`}
+            className={`${search ? "hidden md:block" : ""} bg-transparent text-ink ${focus}`}
           >
             {langs.map((code) => (
               <option key={code} value={code}>
@@ -326,7 +360,7 @@ export function Header({ search = false }: { search?: boolean }) {
               </option>
             ))}
           </select>
-          <button type="button" onClick={toggle} aria-label={label} className={`-m-1 rounded-md p-1 text-ink ${focus}`}>
+          <button type="button" onClick={toggle} aria-label={label} className={`${search ? "hidden md:block" : ""} -m-1 rounded-md p-1 text-ink ${focus}`}>
             <Icon icon={theme === "dark" ? Sun : Moon} />
           </button>
         </div>
@@ -358,7 +392,9 @@ function useRunningDestructions() {
         .catch(() => undefined);
     };
     load();
-    const timer = window.setInterval(load, 3000);
+    const timer = window.setInterval(() => {
+      if (!document.hidden) load();
+    }, 3000);
     return () => {
       stop = true;
       window.clearInterval(timer);
@@ -382,7 +418,9 @@ function useOpenDeployments() {
         .catch(() => undefined);
     };
     load();
-    const timer = window.setInterval(load, 3000);
+    const timer = window.setInterval(() => {
+      if (!document.hidden) load();
+    }, 3000);
     return () => {
       stop = true;
       window.clearInterval(timer);
@@ -415,13 +453,14 @@ export function Shell() {
   const deploys = useOpenDeployments();
   const [override, setOverride] = useState<Crumb[] | null>(null);
   return (
+    <ToastHost>
     <TrailContext.Provider value={{ override, setOverride }}>
     <DestructionJobs.Provider value={jobs}>
     <OpenDeployments.Provider value={deploys}>
     <div className="flex h-dvh flex-col overflow-hidden">
       <Header search />
       <div className="flex min-h-0 flex-1">
-        <aside className="flex h-full min-h-0 w-16 shrink-0 flex-col border-r border-line md:w-56">
+        <aside className="hidden h-full min-h-0 w-56 shrink-0 flex-col border-r border-line md:flex">
           <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 py-4 md:px-4">
             {nav.map((item) => (
               <NavItem key={item.to} {...item} />
@@ -440,13 +479,13 @@ export function Shell() {
           <p className="hidden shrink-0 px-4 pb-4 text-[11px] leading-tight text-faint md:block">{text("footer.license")}</p>
         </aside>
         {location.pathname === "/" ? (
-          <main className="relative min-w-0 flex-1 overflow-y-auto md:overflow-hidden">
+          <main className="relative min-w-0 flex-1 overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom))] md:overflow-hidden md:pb-0">
             <Suspense fallback={<LoadingLines lines={4} />}>
               <Outlet />
             </Suspense>
           </main>
         ) : (
-          <main className="min-w-0 flex-1 overflow-y-auto px-6 py-12">
+          <main className="min-w-0 flex-1 overflow-y-auto px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-4 md:px-6 md:py-12">
             <div className="mx-auto w-full max-w-[960px]">
               <Breadcrumb />
               <Suspense fallback={<LoadingLines lines={4} />}>
@@ -456,11 +495,13 @@ export function Shell() {
           </main>
         )}
       </div>
+    <BottomTabs deployments={deploys.length} removals={jobs.length} />
     <Palette />
     </div>
     </OpenDeployments.Provider>
     </DestructionJobs.Provider>
     </TrailContext.Provider>
+    </ToastHost>
   );
 }
 
@@ -472,8 +513,14 @@ function Breadcrumb() {
   const crumbs = override ?? crumbsFor(pathname, names);
   if (crumbs.length === 0) return null;
   return (
-    <nav aria-label={text("crumb.trail")} className="breadcrumb mb-8">
-      <ol className="flex flex-wrap items-center gap-x-2 gap-y-1">
+    <nav aria-label={text("crumb.trail")} className="breadcrumb mb-4 md:mb-8">
+      {crumbs.length > 1 && crumbs[crumbs.length - 2].to ? (
+        <Link to={crumbs[crumbs.length - 2].to!} className={`-mx-2 inline-flex min-h-11 items-center gap-1 px-2 text-link md:hidden ${focus}`}>
+          <ChevronLeft size={16} strokeWidth={1.5} aria-hidden />
+          {crumbs[crumbs.length - 2].label}
+        </Link>
+      ) : null}
+      <ol className="hidden flex-wrap items-center gap-x-2 gap-y-1 md:flex">
         {crumbs.map((crumb, index) => {
           const last = index === crumbs.length - 1;
           return (
@@ -627,9 +674,13 @@ export function PageTitle({
   mark?: ReactNode;
   action?: ReactNode;
 }) {
+  // Each page names its tab, so that several tabs can be told apart.
+  useEffect(() => {
+    document.title = title ? `${title} · MyInfra` : "MyInfra";
+  }, [title]);
   return (
-    <div className="mb-12 flex items-center justify-between gap-6">
-      <h1 className="flex items-center gap-3 text-2xl font-medium">
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 md:mb-12">
+      <h1 className="flex min-w-0 items-center gap-3 text-xl font-medium md:text-2xl">
         {mark ? mark : icon ? <Icon icon={icon} /> : null}
         {title}
       </h1>
@@ -679,7 +730,10 @@ export function ListActions({
 }) {
   return (
     <div className="flex items-center gap-4">
-      <ListModeButton mode={mode} onToggle={onToggle} />
+      {/* On a phone both modes show one column: the switch would change nothing. */}
+      <span className="hidden md:inline-flex">
+        <ListModeButton mode={mode} onToggle={onToggle} />
+      </span>
       <Button type="button" onClick={onCreate}>
         <Icon icon={Plus} />
         {label}
@@ -712,7 +766,7 @@ export function entryClass(mode: ListMode, layout: "spread" | "stack" = "spread"
   if (layout === "stack") {
     return "flex flex-col gap-3 border-t border-line py-4";
   }
-  return "flex items-center justify-between gap-6 border-t border-line py-4";
+  return "flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-line py-4";
 }
 
 export function HealthDot({ status }: { status?: string }) {
@@ -742,7 +796,18 @@ export function statusLabel(status: string) {
       return { text: text("status.failed"), tone: "text-bad" };
     case "paused":
       return { text: text("status.paused"), tone: "text-muted" };
-    default:
+    case "done":
+      return { text: text("status.done"), tone: "text-ok" };
+    case "cancelled":
+      return { text: text("status.cancelled"), tone: "text-muted" };
+    case "removing":
+      return { text: text("status.removing"), tone: "text-warn" };
+    case "unpublished":
       return { text: text("status.unpublished"), tone: "text-muted" };
+    case "":
+      // Not delivered yet: the first delivery is on its way.
+      return { text: text("status.preparing"), tone: "text-warn" };
+    default:
+      return { text: text("status.unknown"), tone: "text-muted" };
   }
 }

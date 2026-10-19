@@ -1,11 +1,13 @@
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { Cloud, GitBranch, Globe, MoreHorizontal, Plus, Trash2, type LucideIcon } from "lucide-react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { Cloud, GitBranch, Globe, Plus, Trash2, type LucideIcon } from "lucide-react";
 import { api, type Secret } from "./api";
 import { text } from "./i18n";
+import { CredentialFields, emptyCredentials, type Credentials } from "./credentials";
+import { ConfirmDialog, Spinner, useToast } from "./kit";
 import { ProviderLogo } from "./logos";
-import { ProviderGuide } from "./provider-guide";
+import { ProviderGuide, hasGuide } from "./provider-guide";
 import { ProviderSelect } from "./provider-select";
-import { Button, EmptyList, ErrorText, Field, Icon, Input, ItemList, ListActions, LoadingCards, LoadingLines, PageTitle, Skeleton, TextButton, entryClass, useListMode } from "./ui";
+import { ActionsMenu, Button, EmptyList, ErrorText, Field, Icon, Input, ItemList, ListActions, LoadingCards, LoadingLines, PageTitle, MenuItem, Skeleton, TextButton, entryClass, focus, useListMode } from "./ui";
 
 export const providerOptions = [
   { value: "hetzner", label: "Hetzner" },
@@ -56,64 +58,13 @@ function ConnectionState({ link }: { link?: LinkState }) {
 }
 
 function ProviderMenu({ onChangeKey, onDelete }: { onChangeKey: () => void; onDelete: () => void }) {
-  const [open, setOpen] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onPointer(event: MouseEvent) {
-      if (!root.current?.contains(event.target as Node)) setOpen(false);
-    }
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", onPointer);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onPointer);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
   return (
-    <div className="relative" ref={root}>
-      <button
-        type="button"
-        aria-label={text("provider.actions")}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        className="text-ink focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-focus"
-        onClick={() => setOpen((value) => !value)}
-      >
-        <Icon icon={MoreHorizontal} />
-      </button>
-      {open ? (
-        <div role="menu" className="absolute right-0 z-20 mt-2 w-56 rounded-md border border-line bg-surface py-1">
-          <button
-            type="button"
-            role="menuitem"
-            className="block w-full px-3 py-2 text-left hover:bg-status"
-            onClick={() => {
-              setOpen(false);
-              onChangeKey();
-            }}
-          >
-            {text("ui.changerLaCle")}
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="block w-full px-3 py-2 text-left text-bad hover:bg-status"
-            onClick={() => {
-              setOpen(false);
-              onDelete();
-            }}
-          >
-            {text("ui.supprimerLeProvider")}
-          </button>
-        </div>
-      ) : null}
-    </div>
+    <ActionsMenu label={text("provider.actions")}>
+      <MenuItem onClick={onChangeKey}>{text("ui.changerLaCle")}</MenuItem>
+      <MenuItem tone="danger" onClick={onDelete}>
+        {text("ui.supprimerLeProvider")}
+      </MenuItem>
+    </ActionsMenu>
   );
 }
 
@@ -144,21 +95,17 @@ function TokenPage({
   const [secrets, setSecrets] = useState<Secret[]>([]);
   const [name, setName] = useState("");
   const [provider, setProvider] = useState(chooseFirst ? "" : options[0].value);
-  const [token, setToken] = useState("");
-  const [keyId, setKeyId] = useState("");
-  const [projectId, setProjectId] = useState("");
+  const [creds, setCreds] = useState<Credentials>(emptyCredentials);
   const [editing, setEditing] = useState<Secret | null>(null);
-  const [applicationKey, setApplicationKey] = useState("");
-  const [applicationSecret, setApplicationSecret] = useState("");
-  const [consumerKey, setConsumerKey] = useState("");
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [creating, setCreating] = useState(false);
   const [checking, setChecking] = useState(false);
   const [links, setLinks] = useState<Record<string, LinkState>>({});
   const [guideOpen, setGuideOpen] = useState(false);
+  const [removing, setRemoving] = useState<Secret | null>(null);
+  const toast = useToast();
   const [mode, toggleMode] = useListMode();
-  const ovh = provider === "ovh";
   const chosen = provider !== "";
 
   async function reload() {
@@ -174,7 +121,7 @@ function TokenPage({
     } catch (err) {
       setLinks((current) => ({
         ...current,
-        [id]: { state: "down", error: err instanceof Error ? err.message : "La connexion au provider a échoué." },
+        [id]: { state: "down", error: err instanceof Error ? err.message : text("provider.linkFailed") },
       }));
     }
   }, []);
@@ -197,13 +144,8 @@ function TokenPage({
   function close() {
     setCreating(false);
     setName("");
-    setToken("");
-    setKeyId("");
-    setProjectId("");
+    setCreds(emptyCredentials);
     setEditing(null);
-    setApplicationKey("");
-    setApplicationSecret("");
-    setConsumerKey("");
     setProvider(chooseFirst ? "" : options[0].value);
     setGuideOpen(false);
     setError("");
@@ -214,20 +156,15 @@ function TokenPage({
     setError("");
     setChecking(true);
     try {
-      const body = { name, kind, provider, token, keyId, projectId, applicationKey, applicationSecret, consumerKey };
+      const body = { name, kind, provider, ...creds };
       if (editing) {
         await api(`/api/secrets/${editing.id}`, { method: "PUT", body: JSON.stringify(body) });
       } else {
         await api("/api/secrets/tokens", { method: "POST", body: JSON.stringify(body) });
       }
       setName("");
-      setToken("");
-      setKeyId("");
+      setCreds(emptyCredentials);
       setEditing(null);
-      setProjectId("");
-      setApplicationKey("");
-      setApplicationSecret("");
-      setConsumerKey("");
       setCreating(false);
       setProvider(chooseFirst ? "" : options[0].value);
       await reload();
@@ -238,14 +175,11 @@ function TokenPage({
     }
   }
 
-  async function remove(id: string) {
-    setError("");
-    try {
-      await api(`/api/secrets/${id}`, { method: "DELETE" });
-      await reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : text("common.error"));
-    }
+  async function remove(secret: Secret) {
+    await api(`/api/secrets/${secret.id}`, { method: "DELETE" });
+    setSecrets((current) => current.filter((item) => item.id !== secret.id));
+    setRemoving(null);
+    toast(text("account.removed", { name: secret.name }));
   }
 
   return (
@@ -291,19 +225,14 @@ function TokenPage({
           options={options}
           onChange={(value) => {
             setProvider(value);
-            setToken("");
-            setKeyId("");
-            setProjectId("");
-            setApplicationKey("");
-            setApplicationSecret("");
-            setConsumerKey("");
+            setCreds(emptyCredentials);
           }}
         />
         )}
-        {chosen ? (
+        {chosen && hasGuide(kind, provider) ? (
           <button
             type="button"
-            className="self-start underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            className={`self-start underline ${focus}`}
             onClick={() => setGuideOpen(true)}
           >
             {text("ui.ouObtenirCesCles")}
@@ -316,89 +245,10 @@ function TokenPage({
                 <Input value={name} onChange={(e) => setName(e.target.value)} required />
               </Field>
             )}
-            {ovh ? (
-              <>
-                <Field label={text("provider.appKey")}>
-                  <Input value={applicationKey} onChange={(e) => setApplicationKey(e.target.value)} required />
-                </Field>
-                <Field label={text("provider.appSecret")}>
-                  <Input type="password" value={applicationSecret} onChange={(e) => setApplicationSecret(e.target.value)} required />
-                </Field>
-                <Field label="Consumer key">
-                  <Input type="password" value={consumerKey} onChange={(e) => setConsumerKey(e.target.value)} required />
-                </Field>
-                <p className="text-faint">
-                  {kind === "dns_token"
-                    ? text("ui.endpointOvhEuLesZonesDns")
-                    : text("ui.endpointOvhEuPublicCloudA")}
-                </p>
-              </>
-            ) : provider === "scaleway" ? (
-              <>
-                <Field label="Access key">
-                  <Input value={keyId} onChange={(e) => setKeyId(e.target.value)} required autoComplete="off" spellCheck={false} />
-                </Field>
-                <Field label={text("provider.secretKey")}>
-                  <Input type="password" value={token} onChange={(e) => setToken(e.target.value)} required />
-                </Field>
-                <Field label={text("provider.project")}>
-                  <Input value={projectId} onChange={(e) => setProjectId(e.target.value)} required />
-                </Field>
-                <p className="text-faint">{text("ui.facturationALHeureLeMois")}</p>
-              </>
-            ) : provider === "proxmox" ? (
-              <>
-                <Field label={text("ui.adresse")}>
-                  <Input value={applicationKey} onChange={(e) => setApplicationKey(e.target.value)} required autoComplete="off" spellCheck={false} placeholder="https://pve.exemple:8006" />
-                </Field>
-                <Field label={text("ui.jetonApi")}>
-                  <Input type="password" value={token} onChange={(e) => setToken(e.target.value)} required />
-                </Field>
-              </>
-            ) : provider === "openstack" ? (
-              <>
-                <Field label={text("ui.adresseKeystone")}>
-                  <Input value={token} onChange={(e) => setToken(e.target.value)} required autoComplete="off" spellCheck={false} />
-                </Field>
-                <Field label={text("provider.id")}>
-                  <Input value={applicationKey} onChange={(e) => setApplicationKey(e.target.value)} required autoComplete="off" spellCheck={false} />
-                </Field>
-                <Field label={text("crumb.secret")}>
-                  <Input type="password" value={applicationSecret} onChange={(e) => setApplicationSecret(e.target.value)} required />
-                </Field>
-                <Field label={text("provider.project")}>
-                  <Input value={projectId} onChange={(e) => setProjectId(e.target.value)} autoComplete="off" spellCheck={false} />
-                </Field>
-              </>
-            ) : provider === "infomaniak" || provider === "exoscale" || provider === "kamatera" ? (
-              <>
-                <Field label={provider === "exoscale" ? "Clé API" : provider === "kamatera" ? "Client ID" : text("provider.id")}>
-                  <Input value={applicationKey} onChange={(e) => setApplicationKey(e.target.value)} required autoComplete="off" spellCheck={false} />
-                </Field>
-                <Field label={provider === "infomaniak" ? text("crumb.secret") : "Secret API"}>
-                  <Input type="password" value={applicationSecret} onChange={(e) => setApplicationSecret(e.target.value)} required />
-                </Field>
-                {provider === "infomaniak" ? <p className="text-faint">{text("ui.facturationALHeureEntameeLe")}</p> : null}
-              </>
-            ) : (
-              <Field label={provider === "hetzner" || provider === "cloudflare" || provider === "digitalocean" || provider === "vultr" || provider === "akamai" || provider === "upcloud" || provider === "gcore" || provider === "ionos" ? text("ui.jetonApi") : "Jeton"}>
-                <Input type="password" value={token} onChange={(e) => setToken(e.target.value)} required />
-              </Field>
-            )}
-            {provider === "hetzner" ? <p className="text-faint">{text("ui.facturationALHeurePlafonneeAu2")}</p> : null}
-            {provider === "digitalocean" ? (
-              <p className="text-faint">{text("ui.facturationALaSecondePlafonneeAu")}</p>
-            ) : null}
-            {provider === "upcloud" ? <p className="text-faint">{text("ui.facturationALHeureLeMois")}</p> : null}
-            {provider === "vultr" ? <p className="text-faint">{text("ui.facturationALHeurePlafonneeAu")}</p> : null}
-            {provider === "akamai" ? <p className="text-faint">{text("ui.akamaiConnectedCloudLinodeFacturationA")}</p> : null}
-            {provider === "exoscale" ? <p className="text-faint">{text("ui.facturationALHeureLeDisque")}</p> : null}
-            {provider === "gcore" ? <p className="text-faint">{text("ui.facturationALHeureMyinfraUtilise")}</p> : null}
-            {provider === "kamatera" ? <p className="text-faint">{text("ui.facturationAuMoisTraficInclusPrix")}</p> : null}
-            {provider === "ionos" ? <p className="text-faint">{text("ui.facturationALaMinuteUneMachine")}</p> : null}
+            <CredentialFields kind={kind} provider={provider} value={creds} onChange={setCreds} />
             <div>
               <Button type="submit" disabled={checking}>
-                <Icon icon={Plus} />
+                {checking ? <Spinner /> : <Icon icon={Plus} />}
                 {checking ? text("ui.verificationDeLaConnexion") : text("common.save")}
               </Button>
             </div>
@@ -441,18 +291,13 @@ function TokenPage({
                     setEditing(secret);
                     setProvider(secret.provider ?? "");
                     setName(secret.name);
-                    setToken("");
-                    setKeyId("");
-                    setProjectId("");
-                    setApplicationKey("");
-                    setApplicationSecret("");
-                    setConsumerKey("");
+                    setCreds(emptyCredentials);
                     setError("");
                   }}
-                  onDelete={() => remove(secret.id)}
+                  onDelete={() => setRemoving(secret)}
                 />
               ) : (
-                <TextButton type="button" onClick={() => remove(secret.id)}>
+                <TextButton type="button" tone="danger" onClick={() => setRemoving(secret)}>
                   <Icon icon={Trash2} />
                   {text("common.delete")}
                 </TextButton>
@@ -463,6 +308,17 @@ function TokenPage({
       </ItemList>
       )}
       {guideOpen && chosen ? <ProviderGuide kind={kind} provider={provider} onClose={() => setGuideOpen(false)} /> : null}
+      {removing ? (
+        <ConfirmDialog
+          title={text("server.removeNamed", { name: removing.name })}
+          confirmLabel={text("common.delete")}
+          danger
+          onConfirm={() => remove(removing)}
+          onClose={() => setRemoving(null)}
+        >
+          {text("account.deleteHint")}
+        </ConfirmDialog>
+      ) : null}
     </>
   );
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
+import { Spinner } from "./kit";
 import { Button, ErrorText, TextButton } from "./ui";
 import { text } from "./i18n";
 
@@ -66,7 +67,8 @@ export function TofuFiles({ path }: { path: string }) {
       </div>
       <textarea className="min-h-48 w-full border border-line bg-transparent p-3 font-mono text-[13px]" value={draft} onChange={(e) => setDraft(e.target.value)} spellCheck={false} />
       <div className="flex items-center gap-4">
-        <Button type="button" onClick={() => void save()} disabled={busy}>{busy ? text("crumb.application") : text("common.save")}</Button>
+        <Button type="button" onClick={() => void save()} disabled={busy}>{busy ? <Spinner /> : null}
+          {text("common.save")}</Button>
         <TextButton type="button" onClick={() => setDraft(files[name] ?? "")}>{text("common.cancel")}</TextButton>
       </div>
       {error ? <ErrorText>{error}</ErrorText> : null}

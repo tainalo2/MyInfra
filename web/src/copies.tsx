@@ -1,8 +1,10 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import { Waypoints } from "lucide-react";
 import { api } from "./api";
 import { text } from "./i18n";
-import { Button, ErrorText, Field, Input, LoadingLines, PageTitle } from "./ui";
+import { ConfirmDialog, Spinner, useToast } from "./kit";
+import { usePoll } from "./poll";
+import { Button, ErrorText, Field, Input, LoadingLines, PageTitle, TextButton } from "./ui";
 
 type Peer = {
   url: string;
@@ -17,51 +19,37 @@ type Status = {
 };
 
 export function Copies() {
-  const [status, setStatus] = useState<Status | null>(null);
+  const { data: status, setData: setStatus, error: loadError } = usePoll<Status>("/api/sync", 5000);
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    let cancel = false;
-    const run = () => {
-      api<Status>("/api/sync")
-        .then((next) => {
-          if (!cancel) setStatus(next);
-        })
-        .catch((err: unknown) => {
-          if (!cancel) setError(err instanceof Error ? err.message : text("common.error"));
-        });
-    };
-    run();
-    const timer = window.setInterval(run, 5000);
-    return () => {
-      cancel = true;
-      window.clearInterval(timer);
-    };
-  }, []);
+  const [adding, setAdding] = useState(false);
+  const [removing, setRemoving] = useState("");
+  const toast = useToast();
 
   async function add(event: FormEvent) {
     event.preventDefault();
+    if (adding) return;
     setError("");
+    setAdding(true);
     try {
       setStatus(await api<Status>("/api/sync/peers", { method: "POST", body: JSON.stringify({ url }) }));
+      toast(text("copy.added", { url }));
       setUrl("");
     } catch (err) {
       setError(err instanceof Error ? err.message : text("common.error"));
+    } finally {
+      setAdding(false);
     }
   }
 
   async function remove(peer: string) {
-    setError("");
-    try {
-      setStatus(await api<Status>("/api/sync/peers", { method: "DELETE", body: JSON.stringify({ url: peer }) }));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : text("common.error"));
-    }
+    setStatus(await api<Status>("/api/sync/peers", { method: "DELETE", body: JSON.stringify({ url: peer }) }));
+    setRemoving("");
+    toast(text("copy.removed", { url: peer }));
   }
 
   if (!status) {
-    return error ? <ErrorText>{error}</ErrorText> : <LoadingLines />;
+    return loadError ? <ErrorText>{loadError}</ErrorText> : <LoadingLines />;
   }
 
   return (
@@ -81,7 +69,8 @@ export function Copies() {
         </Field>
         {error ? <ErrorText>{error}</ErrorText> : null}
         <div>
-          <Button type="submit" disabled={url.trim() === ""}>
+          <Button type="submit" disabled={url.trim() === "" || adding}>
+            {adding ? <Spinner /> : null}
             {text("ui.ajouter")}
           </Button>
         </div>
@@ -91,18 +80,23 @@ export function Copies() {
       ) : (
         <ul className="flex flex-col gap-6">
           {status.peers.map((peer) => (
-            <li key={peer.url} className="flex items-start justify-between gap-6 border-b border-line pb-6">
-              <div>
-                <p>{peer.url}</p>
-                <p className="text-muted">{peer.lastError ? peer.lastError : peer.lastOk ? "À jour." : text("ui.enAttente")}</p>
+            <li key={peer.url} className="flex flex-wrap items-start justify-between gap-4 border-b border-line pb-6">
+              <div className="min-w-0">
+                <p className="break-all">{peer.url}</p>
+                <p className="text-muted">{peer.lastError ? peer.lastError : peer.lastOk ? text("copy.upToDate") : text("ui.enAttente")}</p>
               </div>
-              <Button type="button" onClick={() => remove(peer.url)}>
+              <TextButton type="button" tone="danger" onClick={() => setRemoving(peer.url)}>
                 {text("common.remove")}
-              </Button>
+              </TextButton>
             </li>
           ))}
         </ul>
       )}
+      {removing ? (
+        <ConfirmDialog title={text("copy.removeTitle")} confirmLabel={text("common.remove")} danger onConfirm={() => remove(removing)} onClose={() => setRemoving("")}>
+          {text("copy.removeHint", { url: removing })}
+        </ConfirmDialog>
+      ) : null}
     </>
   );
 }

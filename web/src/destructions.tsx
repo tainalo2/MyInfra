@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { usePoll } from "./poll";
 import { Link, useParams } from "react-router-dom";
 import { Trash2 } from "lucide-react";
 import { api, type Destruction } from "./api";
@@ -7,36 +8,17 @@ import { ErrorText, LoadingLines, PageTitle, TextButton, useDestructions } from 
 
 export function DestructionPage() {
   const { id = "" } = useParams();
-  const [job, setJob] = useState<Destruction | null>(null);
-  const [error, setError] = useState("");
-  const [watch, setWatch] = useState(0);
-
-  useEffect(() => {
-    let stop = false;
-    const load = () => {
-      api<Destruction>(`/api/destructions/${id}`)
-        .then((next) => {
-          if (stop) return;
-          setJob(next);
-          if (next.status !== "running") window.clearInterval(timer);
-        })
-        .catch((err) => {
-          if (!stop) setError(err instanceof Error ? err.message : text("common.error"));
-        });
-    };
-    const timer = window.setInterval(load, 2000);
-    load();
-    return () => {
-      stop = true;
-      window.clearInterval(timer);
-    };
-  }, [id, watch]);
+  const { data: job, setData: setJob, error: loadError, reload } = usePoll<Destruction>(`/api/destructions/${id}`, 2000, {
+    stopWhen: (next) => next.status !== "running",
+  });
+  const [actionError, setError] = useState("");
+  const error = actionError || loadError;
 
   async function resume() {
     setError("");
     try {
       setJob(await api<Destruction>(`/api/destructions/${id}/resume`, { method: "POST" }));
-      setWatch((current) => current + 1);
+      await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : text("common.error"));
     }
@@ -44,7 +26,7 @@ export function DestructionPage() {
 
   if (!job && !error) return <LoadingLines lines={4} />;
   if (!job) return <ErrorText>{error}</ErrorText>;
-  const label = job.status === "done" ? "Terminé" : job.status === "failed" ? "Échec" : text("ui.enCours");
+  const label = job.status === "done" ? text("status.done") : job.status === "failed" ? text("status.failed") : text("ui.enCours");
 
   return (
     <>
@@ -85,8 +67,8 @@ function kindLabel(kind: string) {
 }
 
 function stepText(status: string) {
-  if (status === "done") return "Fait";
-  if (status === "failed") return "Échec";
+  if (status === "done") return text("status.done");
+  if (status === "failed") return text("status.failed");
   if (status === "running") return text("ui.enCours");
   return text("status.pending");
 }

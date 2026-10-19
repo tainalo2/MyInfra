@@ -2,13 +2,15 @@ import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type Secret } from "./api";
 import { dnsOptions, providerOptions } from "./accounts";
-import { ProviderGuide } from "./provider-guide";
+import { CredentialFields, emptyCredentials, type Credentials } from "./credentials";
+import { Spinner } from "./kit";
+import { ProviderGuide, hasGuide } from "./provider-guide";
 import { ProviderSelect } from "./provider-select";
 import { ToolInstall } from "./tools";
-import { AuthFrame, Button, ErrorText, Field, Input, LoadingLines, TextArea, TextButton } from "./ui";
+import { AuthFrame, Button, ErrorText, Field, Input, LoadingLines, TextArea, TextButton, focus } from "./ui";
 import { text } from "./i18n";
 
-const steps = ["Outils", "Clé SSH", text("ui.provider"), "DNS"] as const;
+const steps = ["start.tools", "start.key", "ui.provider", "start.dns"] as const;
 
 type HostTools = { ansible: boolean; tofu: boolean; tofuEnabled: boolean };
 
@@ -79,10 +81,14 @@ export function Start() {
 
   return (
     <AuthFrame>
-      <p className="mb-2 text-muted">
-        {step + 1} / {steps.length}
-      </p>
-      <h1 className="mb-12 text-2xl font-medium">{steps[step]}</h1>
+      <ol className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-[13px]" aria-label={text("start.progress", { step: step + 1, count: steps.length })}>
+        {steps.map((label, index) => (
+          <li key={label} className={index === step ? "text-ink" : index < step ? "text-ok" : "text-faint"} aria-current={index === step ? "step" : undefined}>
+            {index + 1}. {text(label)}
+          </li>
+        ))}
+      </ol>
+      <h1 className="mb-12 text-2xl font-medium">{text(steps[step])}</h1>
       {!ready ? (
         <LoadingLines lines={3} />
       ) : step === 0 ? (
@@ -112,6 +118,13 @@ export function Start() {
       {error ? (
         <div className="mt-8">
           <ErrorText>{error}</ErrorText>
+        </div>
+      ) : null}
+      {step > 0 ? (
+        <div className="mt-8">
+          <TextButton type="button" onClick={() => setStep((current) => current - 1)}>
+            {text("ui.retour")}
+          </TextButton>
         </div>
       ) : null}
     </AuthFrame>
@@ -217,16 +230,10 @@ function AccountStep({
 }) {
   const [name, setName] = useState("");
   const [provider, setProvider] = useState(chooseFirst ? "" : options[0].value);
-  const [token, setToken] = useState("");
-  const [keyId, setKeyId] = useState("");
-  const [projectId, setProjectId] = useState("");
-  const [applicationKey, setApplicationKey] = useState("");
-  const [applicationSecret, setApplicationSecret] = useState("");
-  const [consumerKey, setConsumerKey] = useState("");
+  const [creds, setCreds] = useState<Credentials>(emptyCredentials);
   const [guideOpen, setGuideOpen] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const ovh = provider === "ovh";
   const chosen = provider !== "";
 
   async function submit(event: FormEvent) {
@@ -236,7 +243,7 @@ function AccountStep({
     try {
       const secret = await api<Secret>("/api/secrets/tokens", {
         method: "POST",
-        body: JSON.stringify({ name, kind, provider, token, keyId, projectId, applicationKey, applicationSecret, consumerKey }),
+        body: JSON.stringify({ name, kind, provider, ...creds }),
       });
       onSaved(secret);
     } catch (err) {
@@ -248,7 +255,7 @@ function AccountStep({
   if (existing) {
     return (
       <div className="flex flex-col items-start gap-6">
-        <p className="text-muted">{existing.name} est déjà enregistré.</p>
+        <p className="text-muted">{text("start.already", { name: existing.name })}</p>
         <Button type="button" onClick={onSkip}>
           {text("auth.continue")}
         </Button>
@@ -260,23 +267,18 @@ function AccountStep({
     <>
       <form onSubmit={submit} className="flex flex-col gap-6">
         <ProviderSelect
-          label={kind === "dns_token" ? "Compte DNS" : text("ui.provider")}
+          label={kind === "dns_token" ? text("start.dnsAccount") : text("ui.provider")}
           value={provider}
           options={options}
           onChange={(value) => {
             setProvider(value);
-            setToken("");
-            setKeyId("");
-            setProjectId("");
-            setApplicationKey("");
-            setApplicationSecret("");
-            setConsumerKey("");
+            setCreds(emptyCredentials);
           }}
         />
-        {chosen ? (
+        {chosen && hasGuide(kind, provider) ? (
           <button
             type="button"
-            className="self-start underline focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            className={`self-start underline ${focus}`}
             onClick={() => setGuideOpen(true)}
           >
             {text("ui.ouObtenirCesCles")}
@@ -287,71 +289,14 @@ function AccountStep({
             <Field label={text("field.name")}>
               <Input value={name} onChange={(e) => setName(e.target.value)} required />
             </Field>
-            {ovh ? (
-              <>
-                <Field label={text("provider.appKey")}>
-                  <Input value={applicationKey} onChange={(e) => setApplicationKey(e.target.value)} required />
-                </Field>
-                <Field label={text("provider.appSecret")}>
-                  <Input type="password" value={applicationSecret} onChange={(e) => setApplicationSecret(e.target.value)} required />
-                </Field>
-                <Field label="Consumer key">
-                  <Input type="password" value={consumerKey} onChange={(e) => setConsumerKey(e.target.value)} required />
-                </Field>
-              </>
-            ) : provider === "scaleway" ? (
-              <>
-                <Field label="Access key">
-                  <Input value={keyId} onChange={(e) => setKeyId(e.target.value)} required autoComplete="off" spellCheck={false} />
-                </Field>
-                <Field label={text("provider.secretKey")}>
-                  <Input type="password" value={token} onChange={(e) => setToken(e.target.value)} required />
-                </Field>
-                <Field label={text("provider.project")}>
-                  <Input value={projectId} onChange={(e) => setProjectId(e.target.value)} required />
-                </Field>
-              </>
-            ) : provider === "proxmox" ? (
-              <>
-                <Field label={text("ui.adresse")}>
-                  <Input value={applicationKey} onChange={(e) => setApplicationKey(e.target.value)} required autoComplete="off" spellCheck={false} />
-                </Field>
-                <Field label={text("ui.jetonApi")}>
-                  <Input type="password" value={token} onChange={(e) => setToken(e.target.value)} required />
-                </Field>
-              </>
-            ) : provider === "openstack" ? (
-              <>
-                <Field label={text("ui.adresseKeystone")}>
-                  <Input value={token} onChange={(e) => setToken(e.target.value)} required autoComplete="off" spellCheck={false} />
-                </Field>
-                <Field label={text("provider.id")}>
-                  <Input value={applicationKey} onChange={(e) => setApplicationKey(e.target.value)} required autoComplete="off" spellCheck={false} />
-                </Field>
-                <Field label={text("crumb.secret")}>
-                  <Input type="password" value={applicationSecret} onChange={(e) => setApplicationSecret(e.target.value)} required />
-                </Field>
-              </>
-            ) : provider === "infomaniak" || provider === "exoscale" || provider === "kamatera" ? (
-              <>
-                <Field label={provider === "exoscale" ? "Clé API" : provider === "kamatera" ? "Client ID" : text("provider.id")}>
-                  <Input value={applicationKey} onChange={(e) => setApplicationKey(e.target.value)} required autoComplete="off" spellCheck={false} />
-                </Field>
-                <Field label={provider === "infomaniak" ? text("crumb.secret") : "Secret API"}>
-                  <Input type="password" value={applicationSecret} onChange={(e) => setApplicationSecret(e.target.value)} required />
-                </Field>
-              </>
-            ) : (
-              <Field label={text("ui.jetonApi")}>
-                <Input type="password" value={token} onChange={(e) => setToken(e.target.value)} required />
-              </Field>
-            )}
+            <CredentialFields kind={kind} provider={provider} value={creds} onChange={setCreds} />
           </>
         ) : null}
         {error ? <ErrorText>{error}</ErrorText> : null}
         <div className="flex items-center gap-6">
           {chosen ? (
             <Button type="submit" disabled={busy}>
+              {busy ? <Spinner /> : null}
               {busy ? text("ui.verificationDeLaConnexion") : text("common.save")}
             </Button>
           ) : null}

@@ -1,7 +1,8 @@
 import { FormEvent, Suspense, lazy, useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { Boxes } from "lucide-react";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
-import { api } from "./api";
+import { api, returnPath } from "./api";
+import { Spinner } from "./kit";
 import { text } from "./i18n";
 import { useI18n } from "./lang";
 import { AuthFrame, Button, ErrorText, Field, Icon, Input, LoadingLines, Shell } from "./ui";
@@ -103,19 +104,21 @@ function PasswordForm({
   useI18n();
   const navigate = useNavigate();
   const [password, setPassword] = useState("");
+  const [again, setAgain] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const choosing = path === "/api/setup";
 
   useEffect(() => {
     let cancel = false;
     api<{ needed: boolean }>("/api/setup")
       .then(async (setup) => {
         if (cancel) return;
-        const choosing = path === "/api/setup";
         if (setup.needed && !choosing) navigate("/depart", { replace: true });
         if (!setup.needed && choosing) navigate("/", { replace: true });
         if (!setup.needed && !choosing) {
           await api("/api/session");
-          if (!cancel) navigate("/", { replace: true });
+          if (!cancel) navigate(returnPath(), { replace: true });
         }
       })
       .catch(() => undefined);
@@ -126,12 +129,19 @@ function PasswordForm({
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
+    if (busy) return;
     setError("");
+    if (choosing && password !== again) {
+      setError(text("auth.mismatch"));
+      return;
+    }
+    setBusy(true);
     try {
       await api(path, { method: "POST", body: JSON.stringify({ password }) });
-      navigate("/");
+      navigate(choosing ? "/" : returnPath(), { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : text("common.error"));
+      setBusy(false);
     }
   }
 
@@ -144,11 +154,25 @@ function PasswordForm({
       <p className="mb-12 text-muted">{title}</p>
       <form onSubmit={onSubmit} className="flex flex-col gap-6">
         <Field label={text("auth.password")}>
-          <Input type="password" value={password} autoFocus onChange={(e) => setPassword(e.target.value)} />
+          <Input
+            type="password"
+            value={password}
+            autoFocus
+            autoComplete={choosing ? "new-password" : "current-password"}
+            onChange={(e) => setPassword(e.target.value)}
+          />
         </Field>
+        {choosing ? (
+          <Field label={text("auth.again")}>
+            <Input type="password" value={again} autoComplete="new-password" onChange={(e) => setAgain(e.target.value)} />
+          </Field>
+        ) : null}
         {error ? <ErrorText>{error}</ErrorText> : null}
         <div>
-          <Button type="submit">{submit}</Button>
+          <Button type="submit" disabled={busy || password === ""}>
+            {busy ? <Spinner /> : null}
+            {submit}
+          </Button>
         </div>
       </form>
     </AuthFrame>

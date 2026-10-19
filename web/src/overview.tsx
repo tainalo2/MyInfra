@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { AlertTriangle, ChevronDown, ChevronUp, ExternalLink, Search, X } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp, ExternalLink, Map as MapIcon, Search, X } from "lucide-react";
 import { api, peek, type Application, type Overview as OverviewData, type OverviewPod, type OverviewServer } from "./api";
 import { AppLogo } from "./app-logo";
 import { text } from "./i18n";
@@ -8,8 +8,9 @@ import { useI18n } from "./lang";
 import { hourlyRate, money } from "./measure";
 import { UsageMeters } from "./meters";
 import { placeOf } from "./places";
-import { Button, ErrorText, Field, HealthDot, Icon, IconButton, LoadingLines, Select, TextButton, podFailed, podHealth, statusLabel, useDeployments, useDestructions } from "./ui";
+import { Button, ErrorText, Field, HealthDot, Icon, IconButton, LoadingLines, Select, TextButton, focus, podFailed, podHealth, statusLabel, useDeployments, useDestructions } from "./ui";
 import { EventList } from "./world";
+import { appHealth } from "./kit";
 import { WorldMap, healthOf, worst, type Inset, type MapSite, type Tone } from "./worldmap";
 
 type Mode = "serveurs" | "apps" | "pods";
@@ -121,6 +122,7 @@ export function Overview() {
   const [query, setQuery] = useState("");
   const [actionError, setActionError] = useState("");
   const [cardRef, cardHeight] = useHeight<HTMLDivElement>();
+  const [mapOpen, setMapOpen] = useState(false);
 
   function change(next: { vue?: Mode; sel?: string | null }, push = false) {
     const out = new URLSearchParams(params);
@@ -291,18 +293,29 @@ export function Overview() {
   );
 
   return (
-    <div className="flex flex-col md:relative md:h-full">
+    <div className={`flex flex-col md:relative md:h-full ${selection ? "pb-[50vh] md:pb-0" : ""}`}>
       <h1 className="sr-only">{text("overview.title")}</h1>
-      <div className="relative h-[40vh] shrink-0 overflow-hidden border-b border-line md:absolute md:inset-0 md:h-auto md:border-0">
+      {/* On a phone the list comes first and the map opens on demand, so that
+          scrolling the page never turns into moving the map. */}
+      <div className={`relative order-2 h-[45vh] shrink-0 overflow-hidden border-y border-line md:order-none md:absolute md:inset-0 md:block md:h-auto md:border-0 ${mapOpen ? "" : "hidden"}`}>
         <WorldMap sites={sites} frame={frame} inset={inset} fitKey={fitKey} label={mapLabel} onSelect={(key) => select(key ? `lieu:${key}` : null)} />
       </div>
-      <div className="flex flex-col gap-4 p-4 md:contents">
+      <div className="order-1 flex flex-col gap-4 p-4 md:contents">
         <div className="md:absolute md:right-4 md:top-4 md:max-w-[calc(100%-388px)]">
           <Figures model={model} loading={data === null} />
         </div>
+        <div className="md:hidden">
+          <TextButton type="button" aria-expanded={mapOpen} onClick={() => setMapOpen((open) => !open)}>
+            <Icon icon={MapIcon} />
+            {mapOpen ? text("overview.hideMap") : text("overview.showMap")}
+          </TextButton>
+        </div>
         <div className="md:absolute md:bottom-4 md:left-4 md:top-4 md:flex md:w-[340px]">{panel}</div>
         {selection ? (
-          <div ref={cardRef} className="order-first md:absolute md:bottom-4 md:left-[372px] md:right-16 md:order-none md:max-w-[620px]">
+          <div
+            ref={cardRef}
+            className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] left-2 right-2 z-20 md:absolute md:bottom-4 md:left-[372px] md:right-16 md:z-auto md:max-w-[620px]"
+          >
             <Card
               selection={selection}
               model={model}
@@ -318,6 +331,7 @@ export function Overview() {
           <div className="md:absolute md:left-[372px] md:top-1/2 md:max-w-[420px] md:-translate-y-1/2">
             <Panel>
               <p>{text("overview.empty")}</p>
+              <Missing />
               <div className="flex flex-wrap gap-3">
                 <Button type="button" onClick={() => navigate("/clusters")}>{text("overview.newServer")}</Button>
                 <TextButton type="button" onClick={() => navigate("/nouveau")}>{text("home.new")}</TextButton>
@@ -326,6 +340,38 @@ export function Overview() {
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+// Missing lists what is still to set up before a first server, each with the
+// page that does it: what the start guide left for later.
+function Missing() {
+  const [secrets, setSecrets] = useState<{ kind: string }[] | null>(null);
+  useEffect(() => {
+    api<{ kind: string }[]>("/api/secrets")
+      .then(setSecrets)
+      .catch(() => setSecrets(null));
+  }, []);
+  if (!secrets) return null;
+  const todo = [
+    { kind: "provider_token", to: "/providers", label: text("overview.needProvider") },
+    { kind: "ssh_key", to: "/cles", label: text("overview.needKey") },
+    { kind: "dns_token", to: "/dns", label: text("overview.needDns") },
+  ].filter((item) => !secrets.some((secret) => secret.kind === item.kind));
+  if (todo.length === 0) return null;
+  return (
+    <div>
+      <p className="mb-2 text-muted">{text("overview.todo")}</p>
+      <ul className="flex flex-col gap-1">
+        {todo.map((item) => (
+          <li key={item.kind}>
+            <Link to={item.to} className="underline">
+              {item.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -482,7 +528,7 @@ function Rows({
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">
                     <span className="truncate">{app.name}</span>
-                    <HealthDot status={app.paused ? "paused" : app.runStatus} />
+                    <HealthDot status={appHealth(app, undefined, model.podsOfApp.get(app.id))} />
                     {model.singlePoint(app) ? <Icon icon={AlertTriangle} className="text-warn" /> : null}
                   </span>
                   <span className="block truncate text-muted">
@@ -566,8 +612,8 @@ function Figures({ model, loading }: { model: Model; loading: boolean }) {
       <Figure label={text("overview.servers")} value={text("overview.linked", { count: linked, total: model.servers.length })} />
       <Figure label={text("overview.pods")} value={text("overview.ready", { count: ready, total: model.pods.length })} />
       {cost.length > 0 ? (
-        <div title={detail}>
-          <div className="flex flex-col">
+        <details title={detail} className="group">
+          <summary className={`flex cursor-pointer list-none flex-col rounded-md ${focus}`}>
             <span className="text-muted">{text("overview.cost")}</span>
             {cost.map(([currency, hourly]) => (
               <span key={currency} className="whitespace-nowrap">
@@ -575,8 +621,9 @@ function Figures({ model, loading }: { model: Model; loading: boolean }) {
                 <span className="text-muted"> · {text("overview.perMonth", { amount: `${money(hourly * 730)} ${currency}` })}</span>
               </span>
             ))}
-          </div>
-        </div>
+          </summary>
+          <p className="mt-2 whitespace-pre-line text-[13px] text-muted">{detail}</p>
+        </details>
       ) : null}
     </section>
   );
@@ -713,7 +760,7 @@ function AppCard({
   onPause: (app: Application) => void;
   onOpen: (to: string) => void;
 }) {
-  const status = statusLabel(app.paused ? "paused" : app.runStatus || "");
+  const status = statusLabel(appHealth(app, undefined, model.podsOfApp.get(app.id)));
   const pods = model.podsOfApp.get(app.id) ?? [];
   const byServer = new Map<string, OverviewPod[]>();
   for (const pod of pods) byServer.set(pod.serverId ?? "", [...(byServer.get(pod.serverId ?? "") ?? []), pod]);
@@ -917,7 +964,7 @@ function ServerCard({ server, model, select, onOpen }: { server: OverviewServer;
           <span className="text-muted">{text("overview.hosted")} :</span>
           {apps.map((app) => (
             <button key={app.id} type="button" onClick={() => select(`app:${app.id}`)} className="inline-flex items-center gap-2 rounded-md border border-line px-2 py-0.5">
-              <HealthDot status={app.paused ? "paused" : app.runStatus} />
+              <HealthDot status={appHealth(app, undefined, model.podsOfApp.get(app.id))} />
               {app.name}
             </button>
           ))}

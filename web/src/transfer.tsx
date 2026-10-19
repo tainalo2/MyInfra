@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRightLeft } from "lucide-react";
-import { api, type Catalog, type Cluster, type DnsZone, type Offer, type Project, type Secret } from "./api";
+import { api, type Catalog, type Cluster, type DnsZone, type Project, type Secret } from "./api";
 import { CancelDeployment } from "./deployments";
-import { text, currentLocale } from "./i18n";
-import { OfferFields, cheapestOffer } from "./offers";
+import { text } from "./i18n";
+import { OfferFields, OfferStorage, cheapestOffer, chosenStorage, formatPrice } from "./offers";
 import { ProviderSelect } from "./provider-select";
-import { Button, EmptyList, ErrorText, Field, Icon, Input, LoadingLines, PageTitle, Select } from "./ui";
+import { Spinner } from "./kit";
+import { usePoll } from "./poll";
+import { Button, EmptyList, ErrorText, Field, Icon, LoadingLines, PageTitle, Select } from "./ui";
 
 type Preview = {
   accountId: string;
@@ -35,6 +37,7 @@ export function Transfer() {
   const [projectsReady, setProjectsReady] = useState(false);
   const [projectId, setProjectId] = useState("");
   const [offersLoading, setOffersLoading] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [location, setLocation] = useState("");
   const [offerId, setOfferId] = useState("");
   const [period, setPeriod] = useState("hour");
@@ -153,7 +156,9 @@ export function Transfer() {
   }, [accountId, location, projectId, projectsReady, projects.length]);
 
   async function start() {
+    if (starting) return;
     setError("");
+    setStarting(true);
     try {
       if (method === "pod") {
         await api<Transfer>(`/api/clusters/${clusterId}/transfer`, { method: "POST", body: JSON.stringify({ zone }) });
@@ -175,6 +180,7 @@ export function Transfer() {
       navigate("/transfert/suivi");
     } catch (err) {
       setError(err instanceof Error ? err.message : text("common.error"));
+      setStarting(false);
     }
   }
 
@@ -232,10 +238,10 @@ export function Transfer() {
                     </Select>
                   </Field>
                 ) : null}
-                {zone ? <p className="text-muted">Adresse : myinfra.{zone}</p> : null}
+                {zone ? <p className="text-muted">{text("server.address")} : myinfra.{zone}</p> : null}
                 <div>
-                  <Button type="button" onClick={start} disabled={!createdCluster || !zone}>
-                    <Icon icon={ArrowRightLeft} />
+                  <Button type="button" onClick={start} disabled={!createdCluster || !zone || starting}>
+                    {starting ? <Spinner /> : <Icon icon={ArrowRightLeft} />}
                     {text("ui.transferer")}
                   </Button>
                 </div>
@@ -305,9 +311,9 @@ export function Transfer() {
                 }}
               />
               <p className="text-muted">
-                {offer.hourly ? money(offer.hourly, true, catalog.currency) : null}
+                {offer.hourly ? formatPrice(offer.hourly, true, catalog.currency) : null}
                 {offer.hourly && offer.monthly ? " · " : null}
-                {offer.monthly ? money(offer.monthly, false, catalog.currency) : null}
+                {offer.monthly ? formatPrice(offer.monthly, false, catalog.currency) : null}
               </p>
               <div className="flex gap-2">
                 {offer.hourly ? (
@@ -331,14 +337,16 @@ export function Transfer() {
                   </button>
                 ) : null}
               </div>
-              <StorageFields
+              <OfferStorage
                 offer={offer}
                 period={period}
                 currency={catalog.currency}
                 storageId={storageId}
                 storageGb={storageGb}
-                onId={setStorageId}
-                onGb={setStorageGb}
+                onChange={(id, gb) => {
+                  setStorageId(id);
+                  setStorageGb(gb);
+                }}
               />
               {catalog.note ? <p className="text-faint">{catalog.note}</p> : null}
               {preview?.reason ? <p className="text-muted">{preview.reason}</p> : null}
@@ -346,8 +354,8 @@ export function Transfer() {
           ) : null}
           {preview?.canHost && offer ? (
             <div>
-              <Button type="button" onClick={start}>
-                <Icon icon={ArrowRightLeft} />
+              <Button type="button" onClick={start} disabled={starting}>
+                {starting ? <Spinner /> : <Icon icon={ArrowRightLeft} />}
                 {text("ui.transferer")}
               </Button>
             </div>
@@ -361,33 +369,17 @@ export function Transfer() {
 }
 
 export function TransferFollow() {
-  const [transfer, setTransfer] = useState<Transfer>({ status: "idle" });
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let stop = false;
-    const load = () => {
-      api<Transfer>("/api/transfer")
-        .then((next) => {
-          if (!stop) setTransfer(next);
-        })
-        .catch((err) => {
-          if (!stop) setError(err instanceof Error ? err.message : text("common.error"));
-        });
-    };
-    load();
-    const timer = window.setInterval(load, 2000);
-    return () => {
-      stop = true;
-      window.clearInterval(timer);
-    };
-  }, []);
+  const { data, error } = usePoll<Transfer>("/api/transfer", 2000, {
+    stopWhen: (next) => ["done", "failed", "cancelled", "idle"].includes(next.status),
+  });
+  const transfer = data ?? { status: "idle" };
 
   const steps = transfer.method === "pod"
     ? [text("ui.preparationDuPod"), text("ui.demarrageDuPod"), text("ui.copieDesDonnees"), text("ui.arretDeCetteCopie")]
-    : [text("ui.ouvertureDeLaMachine"), "Démarrage", text("ui.copieDesDonnees"), text("ui.arretDeCetteCopie")];
+    : [text("ui.ouvertureDeLaMachine"), text("transfer.booting"), text("ui.copieDesDonnees"), text("ui.arretDeCetteCopie")];
   const order = ["creating", "waiting", "copying", "destroying", "done"];
-  const index = transfer.status === "failed" ? Math.max(0, steps.indexOf(transfer.step || "")) : order.indexOf(transfer.status);
+  // The server names the step it failed at; each name belongs to one row.
+  const index = transfer.status === "failed" ? failedStep(transfer.step || "") : order.indexOf(transfer.status);
 
   return (
     <>
@@ -404,7 +396,7 @@ export function TransferFollow() {
       ) : (
         <ol className="flex max-w-[720px] flex-col gap-4">
           {steps.map((label, step) => {
-            const state = transfer.status === "failed" && step === index ? "Échec" : step < index || transfer.status === "done" ? "Terminé" : step === index ? text("ui.enCours") : text("status.pending");
+            const state = transfer.status === "failed" && step === index ? text("status.failed") : step < index || transfer.status === "done" ? text("status.done") : step === index ? text("ui.enCours") : text("status.pending");
             return (
               <li key={label} className="flex items-baseline justify-between gap-4 border-b border-line py-3">
                 <span>{label}</span>
@@ -422,100 +414,23 @@ export function TransferFollow() {
       ) : null}
       {transfer.status === "done" && transfer.url ? (
         <p className="mt-6 text-muted">
-          MyInfra est en ligne sur{" "}
+          {text("transfer.onlineAt")}{" "}
           <a className="font-semibold underline" href={transfer.url}>
             {transfer.url}
           </a>
-          . Cette copie s'arrête.
+          {text("transfer.thisStops")}
         </p>
       ) : null}
     </>
   );
 }
 
-function StorageFields({
-  offer,
-  period,
-  currency,
-  storageId,
-  storageGb,
-  onId,
-  onGb,
-}: {
-  offer: Offer;
-  period: string;
-  currency: string;
-  storageId: string;
-  storageGb: string;
-  onId: (id: string) => void;
-  onGb: (gb: string) => void;
-}) {
-  const options = offer.storage ?? [];
-  const required = options.find((item) => item.required);
-  const optional = options.filter((item) => !item.required);
-  if (required) {
-    return (
-      <Field label={`${required.label} (Go)`}>
-        <Input
-          type="number"
-          min={required.minGb}
-          max={required.maxGb || undefined}
-          value={storageGb || String(required.minGb)}
-          onChange={(e) => {
-            onId(required.id);
-            onGb(e.target.value);
-          }}
-          required
-        />
-      </Field>
-    );
-  }
-  if (optional.length === 0) return null;
-  const selected = optional.find((item) => item.id === storageId);
-  return (
-    <>
-      <Field label={text("field.extraStorage")}>
-        <Select
-          value={storageId}
-          onChange={(e) => {
-            onId(e.target.value);
-            const next = optional.find((item) => item.id === e.target.value);
-            onGb(next ? String(next.minGb) : "");
-          }}
-        >
-          <option value="">{text("common.none")}</option>
-          {optional.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.label}
-              {period === "month" && item.monthlyPerGb ? ` · ${money(item.monthlyPerGb, false, currency)}/Go` : ""}
-              {period !== "month" && item.hourlyPerGb ? ` · ${money(item.hourlyPerGb, true, currency)}/Go` : ""}
-            </option>
-          ))}
-        </Select>
-      </Field>
-      {selected ? (
-        <Field label={text("field.sizeGb")}>
-          <Input type="number" min={selected.minGb} max={selected.maxGb || undefined} value={storageGb} onChange={(e) => onGb(e.target.value)} required />
-        </Field>
-      ) : null}
-    </>
-  );
+function failedStep(step: string) {
+  if (step.startsWith("Arrêt")) return 3;
+  if (step.startsWith("Copie")) return 2;
+  if (step.startsWith("Démarrage") || step.startsWith("La machine démarre")) return 1;
+  return 0;
 }
 
-function chosenStorage(offer: Offer | undefined, storageId: string, storageGb: string) {
-  const options = offer?.storage ?? [];
-  const required = options.find((item) => item.required);
-  const selected = required ?? options.find((item) => item.id === storageId);
-  if (!selected) return { id: "", gb: 0 };
-  const size = Number(storageGb);
-  return { id: selected.id, gb: Number.isFinite(size) && size > 0 ? size : selected.minGb };
-}
 
-function money(raw: string, hour: boolean, currency = "EUR") {
-  const value = Number(raw);
-  if (!Number.isFinite(value)) return raw;
-  const digits = value < 0.001 ? 6 : hour && value < 1 ? 4 : 2;
-  const text = value.toLocaleString(currentLocale(), { minimumFractionDigits: digits, maximumFractionDigits: digits });
-  const unit = currency === "USD" ? "$" : "€";
-  return hour ? `${text} ${unit}/h` : `${text} ${unit}/mois`;
-}
+

@@ -43,7 +43,7 @@ export function PodActions({ appId, name, failed }: { appId: string; name: strin
     <div className="mt-3 flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-4">
         <TextButton type="button" onClick={() => setOpen((value) => !value)}>
-          {open ? say("ui.masquerLeJournal") : "Journal"}
+          {open ? say("ui.masquerLeJournal") : say("pods.log")}
         </TextButton>
         <TextButton type="button" onClick={() => void reset()} disabled={resetting}>
           {say("ui.relancer")}
