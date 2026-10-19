@@ -4,6 +4,8 @@
 #   ./build windows         Windows amd64
 #   ./build darwin arm64    macOS Apple Silicon
 #   ./build all             linux, macOS et Windows, amd64 et arm64
+# VERSION et IMAGE, si définis, sont gravés dans l'exécutable (la publication
+# les donne) ; sinon il se présente comme une version de développement.
 set -eu
 cd "$(dirname "$0")"
 
@@ -32,7 +34,7 @@ build_one() {
     exit 1
   fi
   # shellcheck disable=SC2086
-  CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath $tagflag -ldflags "-s -w -X main.version=dev" -o "$out" ./cmd/myinfra
+  CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath $tagflag -ldflags "-s -w -X main.version=${VERSION:-dev} -X main.image=${IMAGE:-}" -o "$out" ./cmd/myinfra
   echo "$out"
 }
 

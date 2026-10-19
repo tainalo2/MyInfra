@@ -48,7 +48,8 @@ function Build-One($goos, $goarch, $out) {
   } elseif ("$goos-$goarch" -ne "windows-arm64") {
     Write-Error "PostgreSQL embarqué introuvable pour $goos/$goarch."
   }
-  go build -trimpath @tags -ldflags "-s -w -X main.version=dev" -o $out ./cmd/myinfra
+  $version = if ($env:VERSION) { $env:VERSION } else { "dev" }
+  go build -trimpath @tags -ldflags "-s -w -X main.version=$version -X main.image=$env:IMAGE" -o $out ./cmd/myinfra
   Write-Output $out
 }
 

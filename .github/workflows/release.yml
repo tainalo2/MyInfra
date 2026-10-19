@@ -1,27 +1,173 @@
 name: Publication
 
+# Publie une version : les exécutables de ./build (PostgreSQL embarqué), l'image
+# Docker multi-architecture sur ghcr.io, puis une release GitHub qui les porte.
+#
+#   - pousser un tag : git tag v1.4.0 && git push origin v1.4.0
+#   - ou lancer « Publication » depuis l'onglet Actions avec la version voulue :
+#     le tag est créé sur le commit choisi.
+#
+# Une version avec un suffixe (1.4.0-rc.1) est publiée en préversion et ne
+# déplace pas l'étiquette latest de l'image.
+
 on:
   push:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
       - "v[0-9]+.[0-9]+.[0-9]+-*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version à publier, par exemple 1.4.0 ou 1.4.0-rc.1"
+        required: true
+        type: string
 
 permissions:
   contents: write
   packages: write
 
+concurrency:
+  group: publication-${{ inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
-  image:
+  version:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.ref.outputs.tag }}
+      version: ${{ steps.ref.outputs.version }}
+      image: ${{ steps.ref.outputs.image }}
+      prerelease: ${{ steps.ref.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v4
       - id: ref
+        env:
+          INPUT: ${{ inputs.version }}
         run: |
-          repo=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
-          ver=${GITHUB_REF_NAME#v}
-          echo "name=ghcr.io/${repo}" >> "$GITHUB_OUTPUT"
-          echo "image=ghcr.io/${repo}:${ver}" >> "$GITHUB_OUTPUT"
-          echo "version=${ver}" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            ver="${INPUT#v}"
+          else
+            ver="${GITHUB_REF_NAME#v}"
+          fi
+          if ! printf '%s' "$ver" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::Version invalide : « $ver ». Attendu : 1.2.3 ou 1.2.3-rc.1."
+            exit 1
+          fi
+          tag="v$ver"
+          # Un tag déjà posé sur un autre commit n'est pas déplacé.
+          existing=$(git ls-remote --tags origin "refs/tags/$tag^{}" "refs/tags/$tag" | awk 'END { print $1 }')
+          if [ -n "$existing" ] && [ "$existing" != "$GITHUB_SHA" ]; then
+            echo "::error::Le tag $tag existe déjà sur le commit $existing. Choisissez une autre version."
+            exit 1
+          fi
+          repo=$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')
+          prerelease=false
+          case "$ver" in *-*) prerelease=true ;; esac
+          {
+            echo "tag=$tag"
+            echo "version=$ver"
+            echo "image=ghcr.io/$repo:$ver"
+            echo "prerelease=$prerelease"
+          } >> "$GITHUB_OUTPUT"
+          echo "Publication de $tag (préversion : $prerelease)" >> "$GITHUB_STEP_SUMMARY"
+
+  # Rien n'est publié si le code ne passe pas les vérifications.
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: myinfra
+          POSTGRES_PASSWORD: myinfra
+          POSTGRES_DB: myinfra
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U myinfra"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://myinfra:myinfra@127.0.0.1:5432/myinfra?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Interface
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+      - name: Go
+        run: |
+          rm -rf internal/ui/dist
+          cp -a web/dist internal/ui/dist
+          go vet ./...
+          go test ./...
+
+  binaries:
+    needs: [version, check]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+          - { goos: windows, goarch: amd64, ext: .exe }
+          # Pas de PostgreSQL embarqué pour Windows arm64 : il en faut un à part.
+          - { goos: windows, goarch: arm64, ext: .exe, external: true }
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      IMAGE: ${{ needs.version.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      # Le même script que sur un poste : ce qui est publié est ce qui se construit en local.
+      - name: Exécutable
+        run: ./build ${{ matrix.goos }} ${{ matrix.goarch }}
+      - name: Contrôle
+        run: |
+          src="dist/myinfra_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}"
+          out="dist/myinfra_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}"
+          mv "$src" "$out"
+          # -trimpath ôte les -ldflags des informations de build : la version se
+          # vérifie par l'image gravée avec elle, et en lançant l'exécutable Linux.
+          grep -aqF "$IMAGE" "$out" || { echo "::error::Version absente de $out"; exit 1; }
+          if [ "${{ matrix.external }}" != "true" ]; then
+            go version -m "$out" | grep -q -- "-tags=postgresembed" || { echo "::error::PostgreSQL n'est pas embarqué dans $out"; exit 1; }
+          fi
+          if [ "${{ matrix.goos }}-${{ matrix.goarch }}" = "linux-amd64" ]; then
+            test "$("./$out" --version)" = "$VERSION"
+          fi
+          ls -lh "$out"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: myinfra-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/myinfra_${{ needs.version.outputs.version }}_*
+          if-no-files-found: error
+
+  image:
+    needs: [version, check]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
@@ -32,11 +178,11 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ steps.ref.outputs.name }}
+          images: ghcr.io/${{ github.repository }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+            type=semver,pattern={{version}},value=${{ needs.version.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.version.outputs.tag }},enable=${{ needs.version.outputs.prerelease == 'false' }}
+            type=raw,value=latest,enable=${{ needs.version.outputs.prerelease == 'false' }}
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -44,94 +190,78 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           build-args: |
-            VERSION=${{ steps.ref.outputs.version }}
-            IMAGE=${{ steps.ref.outputs.image }}
-
-  binaries:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - goos: linux
-            goarch: amd64
-          - goos: linux
-            goarch: arm64
-          - goos: darwin
-            goarch: amd64
-          - goos: darwin
-            goarch: arm64
-          - goos: windows
-            goarch: amd64
-            ext: .exe
-          - goos: windows
-            goarch: arm64
-            ext: .exe
-    steps:
-      - uses: actions/checkout@v4
-      - id: ref
+            VERSION=${{ needs.version.outputs.version }}
+            IMAGE=${{ needs.version.outputs.image }}
+      - name: Contrôle
         run: |
-          repo=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
-          ver=${GITHUB_REF_NAME#v}
-          echo "image=ghcr.io/${repo}:${ver}" >> "$GITHUB_OUTPUT"
-          echo "version=${ver}" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-      - run: npm ci
-        working-directory: web
-      - run: npm run build
-        working-directory: web
-      - run: rm -rf internal/ui/dist && cp -a web/dist internal/ui/dist
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-      - run: |
-          CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
-            go build -ldflags "-s -w -X main.version=${{ steps.ref.outputs.version }} -X main.image=${{ steps.ref.outputs.image }}" \
-            -o "myinfra_${{ steps.ref.outputs.version }}_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}" ./cmd/myinfra
-      - uses: actions/upload-artifact@v4
-        with:
-          name: myinfra-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: myinfra_*
+          docker pull "${{ needs.version.outputs.image }}"
+          test "$(docker run --rm "${{ needs.version.outputs.image }}" --version)" = "${{ needs.version.outputs.version }}"
 
   release:
-    needs: [image, binaries]
+    needs: [version, binaries, image]
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ needs.version.outputs.tag }}
+      VERSION: ${{ needs.version.outputs.version }}
+      IMAGE: ${{ needs.version.outputs.image }}
     steps:
       - uses: actions/checkout@v4
-      - id: ref
-        run: |
-          repo=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
-          ver=${GITHUB_REF_NAME#v}
-          echo "image=ghcr.io/${repo}:${ver}" >> "$GITHUB_OUTPUT"
-          echo "version=${ver}" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
-      - run: cp deploy/compose.yaml dist/compose.yaml
-      - run: cd dist && sha256sum myinfra_* compose.yaml > SHA256SUMS
-      - name: Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Fichiers
+        run: |
+          # Le compose publié démarre l'image de cette version, sauf si MYINFRA_IMAGE en désigne une autre.
+          sed "s|image: \${MYINFRA_IMAGE}|image: \${MYINFRA_IMAGE:-$IMAGE}|" deploy/compose.yaml > dist/compose.yaml
+          grep -q "$IMAGE" dist/compose.yaml
+          cd dist && sha256sum myinfra_* compose.yaml > SHA256SUMS && cat SHA256SUMS
+      - name: Notes
         run: |
           cat > notes.md <<EOF
-          ## Image
+          ## Exécutables
 
-          \`${{ steps.ref.outputs.image }}\`
+          Un seul fichier, interface et PostgreSQL compris : téléchargez celui de votre système et lancez-le.
 
-          Architectures : \`linux/amd64\` et \`linux/arm64\`.
+          | Système | Fichier |
+          | --- | --- |
+          | Linux x86-64 | \`myinfra_${VERSION}_linux_amd64\` |
+          | Linux ARM64 | \`myinfra_${VERSION}_linux_arm64\` |
+          | macOS Intel | \`myinfra_${VERSION}_darwin_amd64\` |
+          | macOS Apple Silicon | \`myinfra_${VERSION}_darwin_arm64\` |
+          | Windows x86-64 | \`myinfra_${VERSION}_windows_amd64.exe\` |
+          | Windows ARM64 | \`myinfra_${VERSION}_windows_arm64.exe\` (sans PostgreSQL embarqué : indiquez \`DATABASE_URL\`) |
 
-          ## Binaires
+          Sur Linux et macOS : \`chmod +x\` sur le fichier. Sur macOS, l'exécutable n'est pas signé : \`xattr -d com.apple.quarantine\` sur le fichier avant le premier lancement.
+          \`SHA256SUMS\` permet de vérifier les téléchargements : \`sha256sum -c SHA256SUMS --ignore-missing\`.
 
-          \`linux\`, \`darwin\` et \`windows\`, \`amd64\` et \`arm64\`.
+          ## Image Docker
 
-          Le fichier \`compose.yaml\` démarre PostgreSQL et MyInfra avec l'image de cette version.
+          \`${IMAGE}\` pour \`linux/amd64\` et \`linux/arm64\`.
+
+          Le fichier \`compose.yaml\` démarre PostgreSQL et MyInfra avec cette image : il attend \`POSTGRES_PASSWORD\` et \`MYINFRA_MASTER_KEY\`.
           EOF
-          gh release create "${GITHUB_REF_NAME}" dist/* \
-            --title "${GITHUB_REF_NAME}" \
-            --notes-file notes.md
+      - name: Release
+        run: |
+          flags=""
+          if [ "${{ needs.version.outputs.prerelease }}" = "true" ]; then
+            flags="--prerelease"
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # Une relance remplace les fichiers de la release déjà créée, sans toucher à ses notes.
+            gh release upload "$TAG" dist/* --clobber
+          else
+            # Lancée à la main, la release pose le tag sur le commit choisi.
+            # shellcheck disable=SC2086
+            gh release create "$TAG" dist/* \
+              --target "$GITHUB_SHA" \
+              --title "$TAG" \
+              --notes-file notes.md \
+              --generate-notes \
+              $flags
+          fi
+          echo "Release : https://github.com/${GITHUB_REPOSITORY}/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"

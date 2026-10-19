@@ -131,6 +131,8 @@ On the pages that install a machine, a button installs Ansible into `~/.myinfra`
 
 **Build.** `npm run dev` starts a PostgreSQL cluster in `.pgdata` when `DATABASE_URL` points at this machine, then the API and the interface, as a replica when `MYINFRA_PEERS` names a main copy, so the two do not drive the machines at the same time. Without a peer it is the main copy: a replica alone would record requests that nothing carries out, and it refuses them. One terminal is enough. Stopping it leaves `.pgdata` in place. `./dev reset` asks for confirmation, saves `~/.myinfra/dev.sql`, then deletes `.pgdata`. `./dev restore` loads that file back. `./build` produces one executable, interface included, and packs PostgreSQL for that system. `./build all` covers Linux, macOS, and Windows, amd64 and arm64. `go test ./...` runs the tests; those that need PostgreSQL use the local cluster on port 54329. `npm run e2e` in `web` runs the browser tests against a MyInfra started on `E2E_URL`. The CI runs both on each push.
 
+**Release.** Pushing a tag such as `v1.4.0`, or running the *Publication* workflow from the Actions tab with a version, checks the code, builds the `./build` executables (PostgreSQL included) for Linux, macOS and Windows, amd64 and arm64, and the `linux/amd64` and `linux/arm64` image on `ghcr.io`, then publishes a GitHub release with the executables, a `compose.yaml` pinned to that image, and `SHA256SUMS`. A version with a suffix, such as `1.4.0-rc.1`, is published as a pre-release and leaves the `latest` image alone. `myinfra --version` prints the version an executable was built as.
+
 ## Transparency
 
 This project was 100% vibe coded.

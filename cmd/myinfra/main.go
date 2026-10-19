@@ -26,6 +26,10 @@ var (
 )
 
 func main() {
+	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "version") {
+		fmt.Println(version)
+		return
+	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	tools.PreparePath()
 	rt, err := boot.Start()
