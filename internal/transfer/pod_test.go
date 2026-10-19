@@ -1,0 +1,42 @@
+package transfer
+
+import "strings"
+import "testing"
+
+func TestPodManifest(t *testing.T) {
+	got, err := PodManifest(PodSpec{
+		Image: "ghcr.io/acme/myinfra:1.2.3", MasterKey: "bWFzdGVy", DatabasePassword: "secretpass",
+		BootstrapToken: "boot-token", PublicURL: "https://myinfra.exemple.fr", Host: "myinfra.exemple.fr",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"name: myinfra", "ghcr.io/acme/myinfra:1.2.3", "bWFzdGVy", "secretpass", "boot-token",
+		"postgres:16", "https://myinfra.exemple.fr", "Host(`myinfra.exemple.fr`)", "certResolver: exemple-fr",
+		"node-role.kubernetes.io/control-plane", "DoesNotExist", "imagePullPolicy: Always",
+		"replicas: 2", "podAntiAffinity", "topologySpreadConstraints", "kind: PodDisruptionBudget", "minAvailable: 1",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("manque %s", want)
+		}
+	}
+	if strings.Contains(got, "MISSING") || strings.Contains(got, "%s") {
+		t.Fatal("argument de manifeste manquant")
+	}
+	if strings.Contains(got, "myinfra.io/managed") {
+		t.Fatal("le namespace serait repris par la synchronisation des applications")
+	}
+	if _, err := PodManifest(PodSpec{Image: "mauvaise image", MasterKey: "a", DatabasePassword: "b", BootstrapToken: "c", PublicURL: "https://myinfra.exemple.fr", Host: "myinfra.exemple.fr"}); err == nil {
+		t.Fatal("image acceptée")
+	}
+}
+
+func TestPodHost(t *testing.T) {
+	if PodHost("exemple.fr") != "myinfra.exemple.fr" {
+		t.Fatal(PodHost("exemple.fr"))
+	}
+	if PodHost("") != "" || PodHost("apps.localhost") != "" || PodHost("localhost") != "" {
+		t.Fatal("domaine local accepté")
+	}
+}

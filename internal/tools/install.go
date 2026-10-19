@@ -1,0 +1,149 @@
+package tools
+
+import (
+	"archive/zip"
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"time"
+
+	"myinfra/internal/boot"
+)
+
+const tofuVersion = "1.13.1"
+
+func Install(ctx context.Context, name string) error {
+	switch name {
+	case "ansible":
+		return installAnsible(ctx)
+	case "tofu":
+		return installTofu(ctx)
+	default:
+		return errString("Outil inconnu.")
+	}
+}
+
+func installAnsible(ctx context.Context) error {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		python, err = exec.LookPath("python")
+	}
+	if err != nil {
+		return errString("Python 3 est introuvable. Ansible n'a pas été installé.")
+	}
+	home, err := boot.Home()
+	if err != nil {
+		return err
+	}
+	venv := filepath.Join(home, "ansible")
+	if err := run(ctx, python, "-m", "venv", venv); err != nil {
+		return errString("Ansible n'a pas pu être installé.")
+	}
+	pip := filepath.Join(venv, "bin", exe("pip"))
+	if runtime.GOOS == "windows" {
+		pip = filepath.Join(venv, "Scripts", "pip.exe")
+	}
+	if err := run(ctx, pip, "install", "ansible-core"); err != nil {
+		return errString("Ansible n'a pas pu être installé.")
+	}
+	if Ansible() == "" {
+		return errString("Ansible n'a pas pu être installé.")
+	}
+	PreparePath()
+	return nil
+}
+
+func installTofu(ctx context.Context) error {
+	home, err := boot.Home()
+	if err != nil {
+		return err
+	}
+	arch := runtime.GOARCH
+	name := fmt.Sprintf("tofu_%s_%s_%s.zip", tofuVersion, runtime.GOOS, arch)
+	url := fmt.Sprintf("https://github.com/opentofu/opentofu/releases/download/v%s/%s", tofuVersion, name)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", "myinfra")
+	client := &http.Client{Timeout: 2 * time.Minute}
+	res, err := client.Do(req)
+	if err != nil || res.StatusCode != http.StatusOK {
+		if res != nil {
+			res.Body.Close()
+		}
+		return errString("OpenTofu n'a pas pu être installé.")
+	}
+	defer res.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(res.Body, 80<<20))
+	if err != nil {
+		return errString("OpenTofu n'a pas pu être installé.")
+	}
+	reader, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+	if err != nil {
+		return errString("OpenTofu n'a pas pu être installé.")
+	}
+	var file *zip.File
+	want := exe("tofu")
+	for _, item := range reader.File {
+		base := filepath.Base(item.Name)
+		if base == want {
+			file = item
+			break
+		}
+	}
+	if file == nil {
+		return errString("OpenTofu n'a pas pu être installé.")
+	}
+	src, err := file.Open()
+	if err != nil {
+		return errString("OpenTofu n'a pas pu être installé.")
+	}
+	defer src.Close()
+	dir := filepath.Join(home, "bin")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	dest := filepath.Join(dir, want)
+	out, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
+	if err != nil {
+		return err
+	}
+	_, copyErr := io.Copy(out, src)
+	closeErr := out.Close()
+	if copyErr != nil {
+		return errString("OpenTofu n'a pas pu être installé.")
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	PreparePath()
+	return nil
+}
+
+func run(ctx context.Context, name string, args ...string) error {
+	cmd := exec.CommandContext(ctx, name, args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		text := strings.TrimSpace(string(out))
+		if len(text) > 400 {
+			text = text[len(text)-400:]
+		}
+		if text == "" {
+			return err
+		}
+		return fmt.Errorf("%s", text)
+	}
+	return nil
+}
+
+type errString string
+
+func (e errString) Error() string { return string(e) }

@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MyInfra</title>
+  <meta name="description" content="MyInfra puts an application online without asking you to know Docker or Kubernetes.">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link href="https://cdn.jsdelivr.net/fontsource/css/geist:vf@5.2.6/index.css" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: light;
+      --canvas: #fafaf9;
+      --surface: #ffffff;
+      --line: #e7e5e4;
+      --ink: #1c1917;
+      --muted: #57534e;
+      --faint: #78716c;
+      --status: #f5f5f4;
+      --ok: #3f6212;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --canvas: #1c1917;
+        --surface: #292524;
+        --line: #44403c;
+        --ink: #fafaf9;
+        --muted: #a8a29e;
+        --faint: #78716c;
+        --status: #35302c;
+        --ok: #c5d4a4;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+    }
+    a { color: inherit; }
+    header, footer {
+      border-color: var(--line);
+      border-style: solid;
+    }
+    header { border-bottom-width: 1px; }
+    footer { border-top-width: 1px; }
+    .bar, .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+    .bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 56px;
+      gap: 16px;
+    }
+    .brand { font-weight: 560; text-decoration: none; }
+    nav { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+    nav a { color: var(--muted); text-decoration: none; font-size: 14px; }
+    nav a:hover { color: var(--ink); }
+    main { padding: 64px 0 80px; }
+    h1 { font-size: 32px; font-weight: 560; line-height: 1.2; margin: 0 0 16px; letter-spacing: -0.02em; }
+    h2 { font-size: 18px; font-weight: 560; margin: 56px 0 16px; }
+    p { margin: 0 0 12px; max-width: 68ch; }
+    .lead { color: var(--muted); font-size: 18px; max-width: 62ch; }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+    .button, .ghost {
+      display: inline-flex;
+      align-items: center;
+      min-height: 36px;
+      padding: 0 14px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .button { background: var(--ink); color: var(--canvas); }
+    .ghost { color: var(--ink); border: 1px solid var(--line); }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 8px; }
+    @media (min-width: 720px) {
+      .grid { grid-template-columns: 1fr 1fr; }
+    }
+    article {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 16px;
+    }
+    article h3 { margin: 0 0 6px; font-size: 15px; font-weight: 560; }
+    article p { margin: 0; color: var(--muted); font-size: 14px; }
+    .diagram {
+      display: grid;
+      gap: 12px;
+      margin-top: 8px;
+    }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .node, .store {
+      border: 1px solid var(--line);
+      background: var(--surface);
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+    .store { background: var(--status); }
+    .arrow { color: var(--faint); font-size: 13px; }
+    .split { display: grid; gap: 12px; }
+    @media (min-width: 720px) {
+      .split { grid-template-columns: 1fr 1fr; }
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 10px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { color: var(--faint); font-weight: 500; width: 34%; }
+    .phrase {
+      margin-top: 20px;
+      padding: 16px;
+      background: var(--status);
+      border-radius: 6px;
+      font-family: ui-monospace, "Geist Mono Variable", monospace;
+      font-size: 15px;
+    }
+    footer .bar { min-height: 40px; color: var(--faint); font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="bar">
+      <a class="brand" href="#top">MyInfra</a>
+      <nav>
+        <a href="#features">Features</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#tools">Tools</a>
+        <a href="#validated">Validated</a>
+        <a href="#how">How it works</a>
+        <a href="#transparency">Transparency</a>
+      </nav>
+    </div>
+  </header>
+  <main id="top">
+    <div class="wrap">
+      <h1>Put an application online, without learning Kubernetes.</h1>
+      <p class="lead">MyInfra is an open source interface. You pick an application, a name, and a machine or a group of machines. The domain, the certificate, and the proxy follow. The screen does not talk to you about namespaces.</p>
+      <p>The program you start is the program you can read. The published image contains the same binary. Your installation's secrets are not in it.</p>
+      <div class="actions">
+        <a class="button" href="../README.md">Read the README</a>
+      </div>
+
+      <h2 id="features">Features</h2>
+      <div class="grid">
+        <article>
+          <h3>Catalogue</h3>
+          <p>Ready-made applications, or your own image. The same form either way.</p>
+        </article>
+        <article>
+          <h3>Machine or cluster</h3>
+          <p>A Docker container on a machine. Pods on a k3s cluster. Traefik in front of both.</p>
+        </article>
+        <article>
+          <h3>Pause</h3>
+          <p>The pods stop. The disk and the data stay.</p>
+        </article>
+        <article>
+          <h3>Domain and certificate</h3>
+          <p>The DNS record is written when an account is linked. The name is routed only once the certificate is in place.</p>
+        </article>
+        <article>
+          <h3>Providers</h3>
+          <p>Hetzner, Scaleway, OVH, DigitalOcean, Infomaniak, UpCloud, Akamai, Vultr, Exoscale, Gcore, Kamatera, and IONOS. The token is yours. MyInfra does not resell machines.</p>
+        </article>
+        <article>
+          <h3>Secrets</h3>
+          <p>You declare keys, then check the applications allowed to receive them. Values never come back to the screen.</p>
+        </article>
+        <article>
+          <h3>Copies</h3>
+          <p>Several MyInfra instances of the same owner stay in sync. A replica does not drive the machines.</p>
+        </article>
+        <article>
+          <h3>One file</h3>
+          <p>The interface is inside the executable. Linux, macOS, and Windows.</p>
+        </article>
+      </div>
+
+      <h2 id="architecture">Architecture</h2>
+      <p>You talk to the interface. The interface talks to the control plane. The control plane keeps state in PostgreSQL and opens the machines over SSH.</p>
+      <div class="diagram">
+        <div class="row">
+          <div class="node">Person</div>
+          <span class="arrow">→</span>
+          <div class="node">Interface</div>
+          <span class="arrow">→</span>
+          <div class="node">Control plane</div>
+          <span class="arrow">→</span>
+          <div class="store">PostgreSQL</div>
+        </div>
+        <div class="split">
+          <article>
+            <h3>Single machine</h3>
+            <p>The agent installs Docker and Traefik, then starts the container. A Docker volume keeps the files when the application needs them.</p>
+          </article>
+          <article>
+            <h3>Cluster</h3>
+            <p>k3s places the pods. Traefik receives the traffic. A database disk stays on one node, for a single pod.</p>
+          </article>
+        </div>
+      </div>
+
+      <h2 id="tools">Tools</h2>
+      <table>
+        <tbody>
+          <tr><th>Control plane</th><td>Go 1.24</td></tr>
+          <tr><th>State</th><td>PostgreSQL</td></tr>
+          <tr><th>Interface</th><td>React, TypeScript, Vite, Tailwind CSS</td></tr>
+          <tr><th>Vault</th><td>AES-GCM, one data key per secret</td></tr>
+          <tr><th>Single machine</th><td>Docker, Traefik</td></tr>
+          <tr><th>Cluster</th><td>k3s, Traefik, WireGuard</td></tr>
+          <tr><th>Certificates</th><td>Let's Encrypt</td></tr>
+          <tr><th>Image</th><td>Static binary, linux/amd64 and linux/arm64</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="validated">Validated APIs</h2>
+      <p>These integrations have been tried and confirmed. The others in the program have not been validated yet.</p>
+      <table>
+        <tbody>
+          <tr><th>Provider</th><td>Scaleway</td></tr>
+          <tr><th>DNS</th><td>OVH</td></tr>
+          <tr><th>Git</th><td>None yet</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="how">How it works</h2>
+      <p>On the first launch, you choose a password. The master key comes from the environment, not from the database. It seals tokens, private keys, and application secrets.</p>
+      <p>Creating an application stores the request, then delivers it. On a cluster, the manifest goes out as base64 to <code>kubectl apply</code>. On a machine, the agent receives a script and starts the container. An unreadable value is not applied, and the application already in place is not removed.</p>
+      <p>Two MyInfra copies exchange database rows. The newer one wins. Sessions stay local. Transfer moves MyInfra to a new machine or to a pod in the cluster, and a page follows the steps.</p>
+
+      <h2 id="transparency">Transparency</h2>
+      <p>This project was 100% vibe coded. The code is public so anyone can check what they run.</p>
+      <p class="phrase">test it, brake it, fix it, use it</p>
+
+      <h2>License</h2>
+      <p>Apache-2.0.</p>
+    </div>
+  </main>
+  <footer>
+    <div class="bar">
+      <span>MyInfra</span>
+      <span>Apache-2.0 license</span>
+    </div>
+  </footer>
+</body>
+</html>

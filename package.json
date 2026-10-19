@@ -1,0 +1,7 @@
+{
+  "name": "myinfra",
+  "private": true,
+  "scripts": {
+    "dev": "node ./web/dev-stack.mjs"
+  }
+}

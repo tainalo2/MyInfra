@@ -1,0 +1,95 @@
+#!/bin/sh
+# Produit un seul exécutable, interface comprise.
+#   ./build                 système courant
+#   ./build windows         Windows amd64
+#   ./build darwin arm64    macOS Apple Silicon
+#   ./build all             linux, macOS et Windows, amd64 et arm64
+set -eu
+cd "$(dirname "$0")"
+
+if ! command -v go >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+  echo "Go et npm sont requis." >&2
+  exit 1
+fi
+
+if [ ! -d web/node_modules ]; then
+  (cd web && npm ci)
+fi
+(cd web && npm run build)
+rm -rf internal/ui/dist
+cp -a web/dist internal/ui/dist
+mkdir -p dist
+
+build_one() {
+  os="$1"
+  arch="$2"
+  out="$3"
+  tagflag=""
+  if fetch_postgres "$os" "$arch"; then
+    tagflag="-tags postgresembed"
+  elif [ "$os-$arch" != "windows-arm64" ]; then
+    echo "PostgreSQL embarqué introuvable pour $os/$arch." >&2
+    exit 1
+  fi
+  # shellcheck disable=SC2086
+  CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath $tagflag -ldflags "-s -w -X main.version=dev" -o "$out" ./cmd/myinfra
+  echo "$out"
+}
+
+fetch_postgres() {
+  art=$(postgres_artifact "$1" "$2") || return 1
+  ver=16.15.0
+  url="https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-${art}/${ver}/embedded-postgres-binaries-${art}-${ver}.jar"
+  tmp=$(mktemp -d)
+  curl -fL -A "myinfra-build" -o "$tmp/pg.jar" "$url" || exit 1
+  txz=$(tar -tf "$tmp/pg.jar" | grep '\.txz$' | head -n 1)
+  tar -xOf "$tmp/pg.jar" "$txz" > "$tmp/postgres.txz"
+  mkdir "$tmp/root"
+  tar -xJf "$tmp/postgres.txz" -C "$tmp/root"
+  tar -czf internal/boot/postgres.tar.gz -C "$tmp/root" .
+  rm -rf "$tmp"
+}
+
+postgres_artifact() {
+  case "$1-$2" in
+    darwin-arm64) echo darwin-arm64v8 ;;
+    darwin-amd64) echo darwin-amd64 ;;
+    linux-amd64) echo linux-amd64 ;;
+    linux-arm64) echo linux-arm64v8 ;;
+    windows-amd64) echo windows-amd64 ;;
+    *) return 1 ;;
+  esac
+}
+
+target="${1:-host}"
+arch="${2:-amd64}"
+case "$target" in
+  host)
+    os=$(go env GOOS)
+    arch=$(go env GOARCH)
+    ext=""
+    if [ "$os" = "windows" ]; then
+      ext=".exe"
+    fi
+    build_one "$os" "$arch" "dist/myinfra${ext}"
+    ;;
+  all)
+    build_one linux amd64 dist/myinfra_linux_amd64
+    build_one linux arm64 dist/myinfra_linux_arm64
+    build_one darwin amd64 dist/myinfra_darwin_amd64
+    build_one darwin arm64 dist/myinfra_darwin_arm64
+    build_one windows amd64 dist/myinfra_windows_amd64.exe
+    build_one windows arm64 dist/myinfra_windows_arm64.exe
+    ;;
+  linux | darwin | windows)
+    ext=""
+    if [ "$target" = "windows" ]; then
+      ext=".exe"
+    fi
+    build_one "$target" "$arch" "dist/myinfra_${target}_${arch}${ext}"
+    ;;
+  *)
+    echo "Usage: ./build [all|linux|darwin|windows] [amd64|arm64]" >&2
+    exit 1
+    ;;
+esac

@@ -1,0 +1,146 @@
+@import "tailwindcss";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+@theme {
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, monospace;
+  --color-canvas: #fafaf9;
+  --color-surface: #ffffff;
+  --color-line: #e7e5e4;
+  --color-ink: #1c1917;
+  --color-muted: #57534e;
+  --color-faint: #78716c;
+  --color-focus: #a8a29e;
+  --color-ok: #3f6212;
+  --color-warn: #92400e;
+  --color-bad: #991b1b;
+  --color-status: #f5f5f4;
+  --color-link: #1d4ed8;
+}
+
+:root {
+  color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
+  --color-canvas: #1c1917;
+  --color-surface: #292524;
+  --color-line: #44403c;
+  --color-ink: #fafaf9;
+  --color-muted: #a8a29e;
+  --color-faint: #78716c;
+  --color-focus: #a8a29e;
+  --color-ok: #c5d4a4;
+  --color-warn: #e7c9a1;
+  --color-bad: #e7b4b4;
+  --color-status: #35302c;
+  --color-link: #93c5fd;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+@layer base {
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+
+  a,
+  button,
+  select,
+  summary,
+  label:has(input[type="checkbox"]),
+  label:has(input[type="radio"]) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  select:disabled {
+    cursor: default;
+  }
+}
+
+@media (hover: hover) {
+  a,
+  button,
+  select,
+  summary,
+  label:has(input[type="checkbox"]),
+  label:has(input[type="radio"]) {
+    transition: background-color 120ms ease, border-color 120ms ease, opacity 120ms ease;
+  }
+
+  a:hover {
+    text-decoration-line: underline;
+    text-underline-offset: 3px;
+  }
+
+  button:not(:disabled):hover,
+  summary:hover,
+  [role="menuitem"]:hover,
+  [role="option"]:hover {
+    background-color: var(--color-status);
+  }
+
+  .catalogue-card:hover {
+    background-color: var(--color-status);
+  }
+
+  .catalogue-card:hover > button {
+    background-color: transparent;
+  }
+
+  button[class~="bg-ink"]:not(:disabled):hover {
+    background-color: var(--color-ink);
+    opacity: 0.84;
+  }
+
+  nav a:hover,
+  .card-link a:hover,
+  a.card-link:hover {
+    text-decoration: none;
+    background-color: var(--color-status);
+  }
+
+  select:hover,
+  button[class*="border-line"]:not(:disabled):hover {
+    border-color: var(--color-ink);
+    background-color: var(--color-surface);
+  }
+
+  nav.breadcrumb a:hover {
+    text-decoration-line: underline;
+    text-underline-offset: 3px;
+    background-color: transparent;
+  }
+
+  .card-link:hover {
+    border-color: var(--color-ink);
+    background-color: var(--color-status);
+  }
+
+  label:has(input[type="checkbox"]):hover,
+  label:has(input[type="radio"]):hover {
+    background-color: var(--color-status);
+  }
+}
+
+label:has(input[type="checkbox"]),
+label:has(input[type="radio"]) {
+  width: fit-content;
+  border-radius: 6px;
+  padding: 2px 6px;
+  margin-left: -6px;
+}

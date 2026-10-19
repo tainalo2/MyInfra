@@ -1,0 +1,507 @@
+package agent
+
+import (
+	"fmt"
+	"regexp"
+	"sort"
+	"strings"
+
+	"myinfra/internal/cert"
+	"myinfra/internal/firewall"
+	"myinfra/internal/pause"
+)
+
+// proxyImage must negotiate the Docker API: Docker Engine 29 refuses the old
+// client version of Traefik before 3.6.1, which then sees no container.
+const proxyImage = "traefik:v3.6.2"
+
+// ContainerPort is the HTTP port the proxy uses to reach an application
+// on the private network. The person never chooses it.
+const ContainerPort = 80
+
+var (
+	imagePattern    = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,200}$`)
+	idPattern       = regexp.MustCompile(`^[a-zA-Z0-9-]{8,80}$`)
+	servicePattern  = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
+	hostPattern     = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$`)
+	envKey          = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	diskPathPattern = regexp.MustCompile(`^/[A-Za-z0-9._/-]+$`)
+	argPattern      = regexp.MustCompile(`^[A-Za-z0-9_.,:/=@+-]+$`)
+)
+
+type Workload struct {
+	ID        string
+	Service   string
+	Image     string
+	Hosts     []string
+	Zones     map[string]string
+	Env       map[string]string
+	Disk      bool
+	DiskPath  string
+	DiskGi    int
+	Listen    int
+	Args      []string
+	Published bool
+	Replicas  int
+	Paused    bool
+}
+
+// Install prepares a machine alone: firewall, Docker and the proxy.
+// It can run again: each part checks what is already there.
+func Install() (string, error) {
+	var b strings.Builder
+	b.WriteString("export PATH=\"/usr/local/bin:/usr/bin:/bin:$PATH\"\n")
+	guard, err := hostFirewall()
+	if err != nil {
+		return "", err
+	}
+	b.WriteString(guard)
+	b.WriteString("if ! command -v docker >/dev/null 2>&1; then\n  curl -fsSL https://get.docker.com | sh\nfi\n")
+	b.WriteString(ensureProxy(nil))
+	return b.String(), nil
+}
+
+func Bootstrap(baseURL, token string) (string, error) {
+	base, token, err := cleanEndpoint(baseURL, token)
+	if err != nil {
+		return "", err
+	}
+	syncURL := base + "/agent/" + token + "/sync"
+	report := base + "/api/join"
+	var b strings.Builder
+	install, err := Install()
+	if err != nil {
+		return "", err
+	}
+	b.WriteString(install)
+	fmt.Fprintf(&b, "curl -fsS -X POST '%s' -H 'content-type: application/json' -d '{\"token\":\"%s\"}'\n", report, token)
+	fmt.Fprintf(&b, "if command -v systemctl >/dev/null 2>&1; then\n")
+	fmt.Fprintf(&b, "cat > /etc/systemd/system/myinfra-sync.service <<'EOF'\n")
+	b.WriteString("[Unit]\nDescription=MyInfra\nAfter=docker.service\nRequires=docker.service\n\n[Service]\n")
+	fmt.Fprintf(&b, "ExecStart=/bin/sh -c \"while true; do curl -fsS '%s' | sh; sleep 15; done\"\n", syncURL)
+	b.WriteString("Restart=always\n\n[Install]\nWantedBy=multi-user.target\nEOF\n")
+	b.WriteString("systemctl daemon-reload\nsystemctl enable --now myinfra-sync\n")
+	b.WriteString("else\n")
+	fmt.Fprintf(&b, "  (while true; do curl -fsS '%s' | sh; sleep 15; done) >/var/log/myinfra-sync.log 2>&1 &\n", syncURL)
+	b.WriteString("fi\n")
+	return b.String(), nil
+}
+
+func Sync(baseURL, token string, apps []Workload) (string, error) {
+	base, token, err := cleanEndpoint(baseURL, token)
+	if err != nil {
+		return "", err
+	}
+	report := base + "/api/agent/" + token
+	var b strings.Builder
+	b.WriteString("#!/bin/sh\nset -eu\n")
+	// The agent pulls this script and the control plane may push it over SSH:
+	// one run at a time.
+	b.WriteString("if command -v flock >/dev/null 2>&1; then exec 9>/run/myinfra-sync.lock; flock -w 120 9 || exit 0; fi\n")
+	b.WriteString("export PATH=\"/usr/local/bin:/usr/bin:/bin:$PATH\"\n")
+	guard, err := hostFirewall()
+	if err != nil {
+		return "", err
+	}
+	b.WriteString(guard)
+	// report prints the state for a delivery over SSH, and sends it to the
+	// control plane when the machine can reach it.
+	fmt.Fprintf(&b, "report() {\n  echo \"myinfra-status $1 $2\"\n  curl -fsS -m 10 -X POST '%s' -H 'content-type: application/json' -d \"{\\\"id\\\":\\\"$1\\\",\\\"status\\\":\\\"$2\\\"}\" >/dev/null 2>&1 || true\n}\n", report)
+	b.WriteString(ensureProxy(proxyZones(apps)))
+	wanted := " "
+	for _, app := range apps {
+		if !idPattern.MatchString(app.ID) {
+			return "", fmt.Errorf("application illisible")
+		}
+		if app.Service != "" {
+			for _, name := range serviceNames(app) {
+				wanted += name + " "
+			}
+			if name := pausedName(app); name != "" {
+				wanted += name + " "
+			}
+			if err := writeService(&b, report, app); err != nil {
+				return "", err
+			}
+			continue
+		}
+		name := "myinfra-" + app.ID
+		wanted += name + " "
+		if app.Paused && safeWorkload(app) {
+			fmt.Fprintf(&b, "docker stop '%s' >/dev/null 2>&1 || true\n", name)
+			fmt.Fprintf(&b, "report '%s' paused\n", app.ID)
+			continue
+		}
+		if !safeWorkload(app) {
+			fmt.Fprintf(&b, "report '%s' failed\n", app.ID)
+			continue
+		}
+		spec := specOf(app)
+		fmt.Fprintf(&b, "have=''\n")
+		fmt.Fprintf(&b, "if docker inspect '%s' >/dev/null 2>&1; then\n", name)
+		fmt.Fprintf(&b, "  have=$(docker inspect -f '{{index .Config.Labels \"myinfra.spec\"}}' '%s')\n", name)
+		b.WriteString("fi\n")
+		fmt.Fprintf(&b, "if [ \"$have\" != '%s' ]; then\n", spec)
+		fmt.Fprintf(&b, "  docker pull '%s'\n", app.Image)
+		fmt.Fprintf(&b, "  docker rm -f '%s-next' >/dev/null 2>&1 || true\n", name)
+		fmt.Fprintf(&b, "  docker run -d --name '%s-next' --restart unless-stopped --network myinfra", name)
+		fmt.Fprintf(&b, " --label 'myinfra.spec=%s'", spec)
+		if len(app.Hosts) == 0 {
+			b.WriteString(" --label 'traefik.enable=false'")
+		} else {
+			b.WriteString(publishLabels(app.ID, app.Hosts, app.Zones, listenOf(app)))
+		}
+		for _, key := range envKeys(app.Env) {
+			fmt.Fprintf(&b, " -e '%s=%s'", key, app.Env[key])
+		}
+		fmt.Fprintf(&b, " '%s'", app.Image)
+		for _, arg := range app.Args {
+			fmt.Fprintf(&b, " '%s'", arg)
+		}
+		b.WriteString("\n")
+		fmt.Fprintf(&b, "  docker rm -f '%s' >/dev/null 2>&1 || true\n", name)
+		fmt.Fprintf(&b, "  docker rename '%s-next' '%s'\n", name, name)
+		b.WriteString("fi\n")
+		fmt.Fprintf(&b, "docker start '%s' >/dev/null 2>&1 || true\n", name)
+		fmt.Fprintf(&b, "running=$(docker inspect -f '{{.State.Running}}' '%s')\n", name)
+		fmt.Fprintf(&b, "if [ \"$running\" = true ]; then status=running; else status=failed; fi\n")
+		fmt.Fprintf(&b, "report '%s' \"$status\"\n", app.ID)
+	}
+	fmt.Fprintf(&b, "wanted='%s'\n", wanted)
+	b.WriteString("docker ps -a --format '{{.Names}}' | while read -r name; do\n")
+	b.WriteString("  case \"$name\" in\n    myinfra-proxy) continue ;;\n  esac\n")
+	b.WriteString("  case \"$name\" in\n    myinfra-*)\n")
+	b.WriteString("      case \"$wanted\" in\n        *\" $name \"*) ;;\n        *) docker rm -f \"$name\" ;;\n      esac\n")
+	b.WriteString("      ;;\n  esac\ndone || true\n")
+	return b.String(), nil
+}
+
+func writeService(b *strings.Builder, report string, app Workload) error {
+	if !servicePattern.MatchString(app.Service) {
+		return fmt.Errorf("service illisible")
+	}
+	if !safeWorkload(app) {
+		fmt.Fprintf(b, "report '%s' failed\n", app.ID)
+		return nil
+	}
+	if app.Paused {
+		for _, name := range serviceNames(app) {
+			fmt.Fprintf(b, "docker stop '%s' >/dev/null 2>&1 || true\n", name)
+		}
+		if name := pausedName(app); name != "" {
+			// The proxy sends the visitors to a page instead of an error.
+			fmt.Fprintf(b, "if ! docker inspect '%s' >/dev/null 2>&1; then\n", name)
+			fmt.Fprintf(b, "  docker run -d --name '%s' --restart unless-stopped --network myinfra%s -e 'PAGE=%s' '%s' sh -c '%s'\n", name, publishLabels(app.ID, app.Hosts, app.Zones, pause.Port), pause.Page, pause.Image, pause.Script)
+			b.WriteString("fi\n")
+		}
+		fmt.Fprintf(b, "report '%s' paused\n", app.ID)
+		return nil
+	}
+	replicas := app.Replicas
+	if replicas < 1 {
+		replicas = 1
+	}
+	net := "net" + compact(app.ID)
+	fmt.Fprintf(b, "docker network inspect '%s' >/dev/null 2>&1 || docker network create '%s'\n", net, net)
+	fmt.Fprintf(b, "failed=0\n")
+	for i := 1; i <= replicas; i++ {
+		name := serviceNames(app)[i-1]
+		spec := specOf(app) + "|" + app.Service + "|" + fmt.Sprint(replicas) + "|" + fmt.Sprint(app.Disk)
+		fmt.Fprintf(b, "have=''\n")
+		fmt.Fprintf(b, "if docker inspect '%s' >/dev/null 2>&1; then\n", name)
+		fmt.Fprintf(b, "  have=$(docker inspect -f '{{index .Config.Labels \"myinfra.spec\"}}' '%s')\n", name)
+		b.WriteString("fi\n")
+		runName := name
+		if !app.Disk {
+			runName = name + "-next"
+		}
+		fmt.Fprintf(b, "if [ \"$have\" != '%s' ]; then\n", spec)
+		fmt.Fprintf(b, "  docker pull '%s'\n", app.Image)
+		fmt.Fprintf(b, "  docker rm -f '%s' >/dev/null 2>&1 || true\n", runName)
+		if app.Disk {
+			volume := "myinfra-data-" + compact(app.ID) + "-" + app.Service
+			if replicas > 1 {
+				volume = fmt.Sprintf("%s-%d", volume, i)
+			}
+			fmt.Fprintf(b, "  docker volume create --label 'myinfra.disk-gi=%d' '%s' >/dev/null 2>&1 || true\n", diskGiOf(app), volume)
+			fmt.Fprintf(b, "  docker run -d --name '%s' --restart unless-stopped --network '%s' --network-alias '%s'", runName, net, app.Service)
+			fmt.Fprintf(b, " --label 'myinfra.spec=%s'", spec)
+			fmt.Fprintf(b, " -v '%s:%s'", volume, diskPathOf(app))
+		} else {
+			fmt.Fprintf(b, "  docker run -d --name '%s' --restart unless-stopped --network '%s' --network-alias '%s'", runName, net, app.Service)
+			fmt.Fprintf(b, " --label 'myinfra.spec=%s'", spec)
+		}
+		if !app.Published || len(app.Hosts) == 0 {
+			b.WriteString(" --label 'traefik.enable=false'")
+		} else {
+			b.WriteString(publishLabels(app.ID+app.Service, app.Hosts, app.Zones, listenOf(app)))
+		}
+		for _, key := range envKeys(app.Env) {
+			fmt.Fprintf(b, " -e '%s=%s'", key, app.Env[key])
+		}
+		if app.Disk && strings.Contains(app.Image, "postgres") && app.Env["PGDATA"] == "" {
+			fmt.Fprintf(b, " -e 'PGDATA=%s'", diskPathOf(app))
+		}
+		fmt.Fprintf(b, " '%s'", app.Image)
+		for _, arg := range app.Args {
+			fmt.Fprintf(b, " '%s'", arg)
+		}
+		b.WriteString("\n")
+		if !app.Disk {
+			fmt.Fprintf(b, "  docker rm -f '%s' >/dev/null 2>&1 || true\n", name)
+			fmt.Fprintf(b, "  docker rename '%s' '%s'\n", runName, name)
+		}
+		b.WriteString("fi\n")
+		// A container stopped by a pause starts again when the pause ends.
+		fmt.Fprintf(b, "docker start '%s' >/dev/null 2>&1 || true\n", name)
+		if app.Published && len(app.Hosts) > 0 {
+			fmt.Fprintf(b, "docker network connect myinfra '%s' >/dev/null 2>&1 || true\n", name)
+		}
+		fmt.Fprintf(b, "running=$(docker inspect -f '{{.State.Running}}' '%s' 2>/dev/null || echo false)\n", name)
+		b.WriteString("if [ \"$running\" != true ]; then failed=1; fi\n")
+	}
+	fmt.Fprintf(b, "if [ \"$failed\" = 0 ]; then status=running; else status=failed; fi\n")
+	fmt.Fprintf(b, "report '%s' \"$status\"\n", app.ID)
+	return nil
+}
+
+// pausedName is the container of the pause page of a published application.
+func pausedName(app Workload) string {
+	if !app.Paused || !app.Published || len(app.Hosts) == 0 {
+		return ""
+	}
+	return "myinfra-" + compact(app.ID) + "-paused"
+}
+
+func serviceNames(app Workload) []string {
+	replicas := app.Replicas
+	if replicas < 1 {
+		replicas = 1
+	}
+	names := make([]string, replicas)
+	base := "myinfra-" + compact(app.ID) + "-" + app.Service
+	for i := 1; i <= replicas; i++ {
+		names[i-1] = base
+		if replicas > 1 {
+			names[i-1] = fmt.Sprintf("%s-%d", base, i)
+		}
+	}
+	return names
+}
+
+// ContainerPrefix starts the name of every container of an application.
+func ContainerPrefix(appID string) string {
+	return "myinfra-" + compact(appID) + "-"
+}
+
+func compact(id string) string {
+	return strings.ReplaceAll(id, "-", "")
+}
+
+func proxyZones(apps []Workload) []string {
+	seen := map[string]bool{}
+	var zones []string
+	for _, app := range apps {
+		for _, host := range app.Hosts {
+			zone := cert.Zone(host, app.Zones[host])
+			if zone == "" || seen[zone] || !hostPattern.MatchString(zone) {
+				continue
+			}
+			seen[zone] = true
+			zones = append(zones, zone)
+		}
+	}
+	sort.Strings(zones)
+	return zones
+}
+
+func publishLabels(id string, hosts []string, zones map[string]string, port int) string {
+	var b strings.Builder
+	b.WriteString(" --label 'traefik.enable=true'")
+	b.WriteString(" --label 'traefik.http.middlewares.https.redirectscheme.scheme=https'")
+	b.WriteString(" --label 'traefik.http.middlewares.https.redirectscheme.permanent=true'")
+	for _, group := range hostGroups(hosts, zones) {
+		router := routerName(id + cert.Resolver(group.zone))
+		rule := hostRule(group.hosts)
+		fmt.Fprintf(&b, " --label 'traefik.http.routers.%s-http.rule=%s'", router, "("+rule+") && !PathPrefix(`/.well-known/acme-challenge/`)")
+		fmt.Fprintf(&b, " --label 'traefik.http.routers.%s-http.entrypoints=web'", router)
+		fmt.Fprintf(&b, " --label 'traefik.http.routers.%s-http.middlewares=https'", router)
+		fmt.Fprintf(&b, " --label 'traefik.http.routers.%s.rule=%s'", router, rule)
+		fmt.Fprintf(&b, " --label 'traefik.http.routers.%s.entrypoints=websecure'", router)
+		fmt.Fprintf(&b, " --label 'traefik.http.routers.%s.tls=true'", router)
+		fmt.Fprintf(&b, " --label 'traefik.http.routers.%s.tls.certresolver=%s'", router, cert.Resolver(group.zone))
+		fmt.Fprintf(&b, " --label 'traefik.http.services.%s.loadbalancer.server.port=%d'", router, port)
+	}
+	return b.String()
+}
+
+type hostGroup struct {
+	zone  string
+	hosts []string
+}
+
+func hostGroups(hosts []string, zones map[string]string) []hostGroup {
+	byZone := map[string][]string{}
+	for _, host := range hosts {
+		zone := cert.Zone(host, zones[host])
+		if !hostPattern.MatchString(zone) {
+			continue
+		}
+		byZone[zone] = append(byZone[zone], host)
+	}
+	order := make([]string, 0, len(byZone))
+	for zone := range byZone {
+		order = append(order, zone)
+	}
+	sort.Strings(order)
+	out := make([]hostGroup, 0, len(order))
+	for _, zone := range order {
+		out = append(out, hostGroup{zone: zone, hosts: byZone[zone]})
+	}
+	return out
+}
+
+func ensureProxy(zones []string) string {
+	seen := map[string]bool{}
+	var clean []string
+	for _, zone := range zones {
+		zone = strings.ToLower(strings.Trim(strings.TrimSpace(zone), "."))
+		if zone == "" || seen[zone] || !hostPattern.MatchString(zone) {
+			continue
+		}
+		seen[zone] = true
+		clean = append(clean, zone)
+	}
+	sort.Strings(clean)
+	stamp := "off"
+	args := "--providers.docker=true --providers.docker.exposedbydefault=false --providers.docker.network=myinfra " +
+		"--entryPoints.web.address=:80 --entryPoints.websecure.address=:443"
+	if len(clean) > 0 {
+		var names []string
+		for _, zone := range clean {
+			name := cert.Resolver(zone)
+			names = append(names, name)
+			args += " --certificatesresolvers." + name + ".acme.email=" + cert.Email(zone) +
+				" --certificatesresolvers." + name + ".acme.storage=/acme/acme-" + name + ".json" +
+				" --certificatesresolvers." + name + ".acme.tlschallenge=true"
+		}
+		stamp = strings.Join(names, ",")
+	}
+	// A new proxy version replaces the container, like a new zone does.
+	stamp = proxyImage + "|" + stamp
+	return "docker network inspect myinfra >/dev/null 2>&1 || docker network create myinfra\n" +
+		"have=''\n" +
+		"if docker inspect myinfra-proxy >/dev/null 2>&1; then\n" +
+		"  have=$(docker inspect -f '{{index .Config.Labels \"myinfra.proxy\"}}' myinfra-proxy)\n" +
+		"fi\n" +
+		"if [ \"$have\" != '" + stamp + "' ]; then\n" +
+		"  docker rm -f myinfra-proxy >/dev/null 2>&1 || true\n" +
+		"  mkdir -p /var/lib/myinfra/acme\n" +
+		"  chown 65532:65532 /var/lib/myinfra/acme\n" +
+		"  docker run -d --name myinfra-proxy --restart unless-stopped --network myinfra -p 80:80 -p 443:443 -v /var/run/docker.sock:/var/run/docker.sock:ro -v /var/lib/myinfra/acme:/acme --label 'myinfra.proxy=" + stamp + "' " +
+		proxyImage + " " + args + "\n" +
+		"fi\n"
+}
+
+func cleanEndpoint(baseURL, token string) (string, string, error) {
+	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	token = strings.TrimSpace(token)
+	if base == "" || strings.ContainsAny(base, "'\n\r`") || strings.ContainsAny(token, "'\n\r`") {
+		return "", "", fmt.Errorf("adresse de liaison illisible")
+	}
+	return base, token, nil
+}
+
+func safeWorkload(app Workload) bool {
+	if !imagePattern.MatchString(app.Image) || strings.Contains(app.Image, "..") {
+		return false
+	}
+	if app.Listen < 0 || app.Listen > 65535 {
+		return false
+	}
+	if app.Disk && (!diskPathPattern.MatchString(diskPathOf(app)) || strings.Contains(diskPathOf(app), "..")) {
+		return false
+	}
+	for _, arg := range app.Args {
+		if !argPattern.MatchString(arg) {
+			return false
+		}
+	}
+	for _, host := range app.Hosts {
+		if !hostPattern.MatchString(host) {
+			return false
+		}
+	}
+	for key, value := range app.Env {
+		if !envKey.MatchString(key) || strings.ContainsAny(value, "'\n\r") {
+			return false
+		}
+	}
+	return true
+}
+
+func specOf(app Workload) string {
+	hosts := append([]string(nil), app.Hosts...)
+	sort.Strings(hosts)
+	parts := make([]string, 0, len(app.Env))
+	for _, key := range envKeys(app.Env) {
+		parts = append(parts, key+"="+app.Env[key])
+	}
+	return app.Image + "|" + strings.Join(hosts, ",") + "|" + strings.Join(parts, ",") + "|" + fmt.Sprint(listenOf(app)) + "|" + diskPathOf(app) + "|" + fmt.Sprint(diskGiOf(app)) + "|" + strings.Join(app.Args, " ")
+}
+
+func listenOf(app Workload) int {
+	if app.Listen < 1 {
+		return ContainerPort
+	}
+	return app.Listen
+}
+
+func diskPathOf(app Workload) string {
+	if app.DiskPath == "" {
+		return "/data"
+	}
+	return app.DiskPath
+}
+
+func diskGiOf(app Workload) int {
+	if app.DiskGi < 1 {
+		return 1
+	}
+	return app.DiskGi
+}
+
+func envKeys(env map[string]string) []string {
+	keys := make([]string, 0, len(env))
+	for key := range env {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func hostFirewall() (string, error) {
+	script, err := firewall.Script(firewall.Spec{})
+	if err != nil {
+		return "", err
+	}
+	return "if [ ! -x /usr/local/bin/k3s ]; then\n(\n" + script + ")\nfi\n", nil
+}
+
+func hostRule(hosts []string) string {
+	ordered := append([]string(nil), hosts...)
+	sort.Strings(ordered)
+	parts := make([]string, len(ordered))
+	for i, host := range ordered {
+		parts[i] = "Host(`" + host + "`)"
+	}
+	return strings.Join(parts, " || ")
+}
+
+func routerName(id string) string {
+	compact := strings.ReplaceAll(id, "-", "")
+	if len(compact) > 12 {
+		compact = compact[:12]
+	}
+	return "app" + compact
+}

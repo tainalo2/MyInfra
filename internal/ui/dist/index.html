@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MyInfra</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script>
+      try {
+        if (localStorage.getItem("myinfra-theme") === "dark") {
+          document.documentElement.classList.add("dark");
+        }
+        var lang = localStorage.getItem("myinfra-lang");
+        var known = { fr: 1, en: 1, pt: 1, it: 1, de: 1 };
+        if (!known[lang]) {
+          lang = (navigator.language || "fr").slice(0, 2).toLowerCase();
+        }
+        document.documentElement.lang = known[lang] ? lang : "fr";
+      } catch (e) {}
+    </script>
+    <script type="module" crossorigin src="/assets/index-tMh8PdwE.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-PhQdUGKt.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

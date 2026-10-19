@@ -1,0 +1,318 @@
+#!/bin/sh
+# Lance l'API et l'interface de développement.
+# PostgreSQL local vit dans .pgdata et survit à l'arrêt.
+# ./dev reset sauvegarde ~/.myinfra/dev.sql puis efface .pgdata.
+# ./dev restore recharge cette sauvegarde.
+# MYINFRA_PEERS=https://autre.exemple la synchronise : elle devient alors une
+# réplique qui ne pilote pas les machines, sauf avec MYINFRA_REPLICA=0.
+set -eu
+cd "$(dirname "$0")"
+
+if [ -f .env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . ./.env
+  set +a
+fi
+
+if [ -z "${DATABASE_URL:-}" ]; then
+  echo "DATABASE_URL manquant. Renseignez-le dans .env." >&2
+  exit 1
+fi
+
+pgdata="$(pwd)/.pgdata"
+pgbin=""
+pghost=""
+pgport=""
+pgmode=start
+backup="${HOME}/.myinfra/dev.sql"
+
+# Renseigne pghost et pgport. 0 si l'URL vise cette machine.
+parse_target() {
+  rest=${DATABASE_URL#*://}
+  rest=${rest#*@}
+  hostport=${rest%%/*}
+  hostport=${hostport%%\?*}
+  case "$hostport" in
+    *:*)
+      pghost=${hostport%:*}
+      pgport=${hostport##*:}
+      ;;
+    *)
+      pghost=$hostport
+      pgport=5432
+      ;;
+  esac
+  case "$pghost" in
+    127.0.0.1|localhost) ;;
+    *) return 1 ;;
+  esac
+  case "$pgport" in
+    *[!0-9]*)
+      echo "Port invalide dans DATABASE_URL." >&2
+      exit 1
+      ;;
+  esac
+  return 0
+}
+
+find_pgbin() {
+  if command -v initdb >/dev/null 2>&1; then
+    pgbin=$(dirname "$(command -v initdb)")
+    return 0
+  fi
+  for dir in \
+    /opt/homebrew/opt/postgresql@17/bin \
+    /opt/homebrew/opt/postgresql@16/bin \
+    /usr/local/opt/postgresql@17/bin \
+    /usr/local/opt/postgresql@16/bin
+  do
+    if [ -x "$dir/initdb" ]; then
+      pgbin=$dir
+      return 0
+    fi
+  done
+  echo "PostgreSQL est introuvable." >&2
+  exit 1
+}
+
+psql_db() {
+  "$pgbin/psql" -h 127.0.0.1 -p "$pgport" -v ON_ERROR_STOP=1 "$@"
+}
+
+postgres_ours() {
+  if [ ! -f "$pgdata/postmaster.pid" ]; then
+    return 1
+  fi
+  pid=$(head -n 1 "$pgdata/postmaster.pid")
+  if kill -0 "$pid" 2>/dev/null; then
+    return 0
+  fi
+  return 1
+}
+
+confirm() {
+  printf "Tapez %s pour confirmer : " "$1"
+  read -r answer || true
+  if [ "$answer" != "$1" ]; then
+    echo "Annulé."
+    exit 1
+  fi
+}
+
+api_busy() {
+  port="${MYINFRA_ADDR:-:8080}"
+  port="${port##*:}"
+  if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "L'API écoute encore sur le port $port. Arrêtez ./dev d'abord." >&2
+    exit 1
+  fi
+}
+
+ensure_role() {
+  exists=$(psql_db -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='myinfra'")
+  if [ "$exists" != "1" ]; then
+    psql_db -d postgres -c "CREATE ROLE myinfra LOGIN"
+  fi
+  exists=$(psql_db -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='myinfra'")
+  if [ "$exists" != "1" ]; then
+    psql_db -d postgres -c "CREATE DATABASE myinfra OWNER myinfra"
+  fi
+}
+
+init_cluster() {
+  if [ -d "$pgdata" ] && [ -n "$(ls -A "$pgdata")" ]; then
+    echo ".pgdata n'est pas un cluster PostgreSQL." >&2
+    exit 1
+  fi
+  mkdir -p "$pgdata"
+  echo "Création du cluster dans .pgdata"
+  "$pgbin/initdb" --locale=en_US.UTF-8 --encoding=UTF8 --auth=trust -D "$pgdata"
+  cat >> "$pgdata/postgresql.conf" <<EOF
+listen_addresses = '127.0.0.1'
+port = $pgport
+EOF
+}
+
+ensure_postgres() {
+  if ! parse_target; then
+    return 0
+  fi
+  find_pgbin
+  if postgres_ours; then
+    echo "PostgreSQL : .pgdata, port $pgport"
+    ensure_role
+    return 0
+  fi
+  if "$pgbin/pg_isready" -h 127.0.0.1 -p "$pgport" >/dev/null 2>&1; then
+    echo "Le port $pgport est déjà pris par un autre PostgreSQL." >&2
+    echo "Arrêtez-le. Les données de dev sont dans .pgdata." >&2
+    exit 1
+  fi
+  if [ ! -f "$pgdata/PG_VERSION" ]; then
+    init_cluster
+  elif ! grep -q "^port = $pgport\$" "$pgdata/postgresql.conf"; then
+    if [ "$pgmode" = "reset" ]; then
+      found=$(sed -n 's/^port = \([0-9][0-9]*\)$/\1/p' "$pgdata/postgresql.conf" | head -n 1)
+      if [ -n "$found" ]; then
+        pgport=$found
+      fi
+    else
+      echo "Le cluster .pgdata n'écoute pas sur le port $pgport." >&2
+      echo "Lancez ./dev reset pour le recréer." >&2
+      exit 1
+    fi
+  fi
+  "$pgbin/pg_ctl" -D "$pgdata" -l "$pgdata/server.log" -w -t 30 start
+  echo "PostgreSQL : .pgdata, port $pgport"
+  ensure_role
+}
+
+save_dump() {
+  mkdir -p "${HOME}/.myinfra"
+  chmod 700 "${HOME}/.myinfra"
+  echo "Sauvegarde dans $backup"
+  if ! "$pgbin/pg_dump" -h 127.0.0.1 -p "$pgport" -U myinfra --no-password --no-owner --no-acl -d myinfra -f "$backup"; then
+    echo "Sauvegarde impossible. .pgdata est conservé." >&2
+    exit 1
+  fi
+  chmod 600 "$backup"
+}
+
+cmd_reset() {
+  if ! parse_target; then
+    echo "DATABASE_URL n'est pas local. Rien n'est effacé." >&2
+    exit 1
+  fi
+  if [ ! -f "$pgdata/PG_VERSION" ]; then
+    echo "Aucun cluster dans .pgdata."
+    exit 0
+  fi
+  api_busy
+  confirm reset
+  pgmode=reset
+  ensure_postgres
+  save_dump
+  "$pgbin/pg_ctl" -D "$pgdata" -m fast -w stop
+  rm -rf "$pgdata"
+  echo "Cluster effacé. Pour revenir en arrière : ./dev restore"
+}
+
+cmd_restore() {
+  if ! parse_target; then
+    echo "DATABASE_URL n'est pas local. Rien n'est restauré." >&2
+    exit 1
+  fi
+  if [ ! -f "$backup" ]; then
+    echo "Aucune sauvegarde dans $backup" >&2
+    exit 1
+  fi
+  api_busy
+  confirm restore
+  ensure_postgres
+  psql_db -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'myinfra' AND pid <> pg_backend_pid()"
+  psql_db -d postgres -c "DROP DATABASE IF EXISTS myinfra"
+  psql_db -d postgres -c "CREATE DATABASE myinfra OWNER myinfra"
+  psql_db -U myinfra -d myinfra -f "$backup"
+  echo "Sauvegarde restaurée. Relancez ./dev"
+}
+
+case "${1:-}" in
+  reset) cmd_reset; exit 0 ;;
+  restore) cmd_restore; exit 0 ;;
+  "") ;;
+  *)
+    echo "Commande inconnue : $1" >&2
+    exit 1
+    ;;
+esac
+
+ensure_postgres
+
+# Réplique par défaut seulement quand une copie principale la synchronise :
+# seule, une réplique enregistre des demandes que personne n'exécute.
+if [ -z "${MYINFRA_REPLICA:-}" ]; then
+  if [ -n "${MYINFRA_PEERS:-}" ]; then
+    MYINFRA_REPLICA=1
+  else
+    MYINFRA_REPLICA=0
+  fi
+  export MYINFRA_REPLICA
+fi
+
+if ! command -v go >/dev/null 2>&1; then
+  echo "Go est introuvable." >&2
+  exit 1
+fi
+if ! command -v npm >/dev/null 2>&1; then
+  echo "npm est introuvable." >&2
+  exit 1
+fi
+
+port="${MYINFRA_ADDR:-:8080}"
+port="${port##*:}"
+if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "Le port $port est déjà pris." >&2
+  exit 1
+fi
+
+if [ ! -d web/node_modules ]; then
+  (cd web && npm ci)
+fi
+
+api=""
+web=""
+kill_tree() {
+  if [ -z "$1" ]; then
+    return 0
+  fi
+  pkill -P "$1" 2>/dev/null || true
+  kill "$1" 2>/dev/null || true
+}
+cleanup() {
+  kill_tree "$web"
+  kill_tree "$api"
+}
+trap cleanup EXIT INT TERM
+
+if [ "$MYINFRA_REPLICA" = "1" ]; then
+  echo "Réplique : cette copie ne déploie pas les machines."
+else
+  echo "Cette copie déploie les machines."
+fi
+if [ -n "${MYINFRA_PEERS:-}" ]; then
+  echo "Synchronisation : $MYINFRA_PEERS"
+fi
+
+go run ./cmd/myinfra &
+api=$!
+
+i=0
+while [ "$i" -lt 60 ]; do
+  if ! kill -0 "$api" 2>/dev/null; then
+    echo "L'API s'est arrêtée." >&2
+    exit 1
+  fi
+  if command -v curl >/dev/null 2>&1 && curl -sf -o /dev/null "http://127.0.0.1:${port}/api/health"; then
+    break
+  fi
+  i=$((i + 1))
+  sleep 0.5
+done
+
+if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:5173 -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "Interface déjà lancée : http://127.0.0.1:5173"
+else
+  (cd web && npm run vite) &
+  web=$!
+  echo "Interface : http://127.0.0.1:5173"
+fi
+echo "API : http://127.0.0.1:${port}"
+
+while kill -0 "$api" 2>/dev/null; do
+  if [ -n "$web" ] && ! kill -0 "$web" 2>/dev/null; then
+    echo "L'interface s'est arrêtée." >&2
+    exit 1
+  fi
+  sleep 1
+done

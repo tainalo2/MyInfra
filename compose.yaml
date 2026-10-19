@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: myinfra
+      POSTGRES_PASSWORD: myinfra
+      POSTGRES_DB: myinfra
+    ports:
+      - "5432:5432"
+    volumes:
+      - myinfra-pg:/var/lib/postgresql/data
+
+volumes:
+  myinfra-pg:

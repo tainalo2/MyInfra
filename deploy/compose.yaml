@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: myinfra
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: myinfra
+    volumes:
+      - pg:/var/lib/postgresql/data
+  myinfra:
+    image: ${MYINFRA_IMAGE}
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: postgres://myinfra:${POSTGRES_PASSWORD}@postgres:5432/myinfra?sslmode=disable
+      MYINFRA_MASTER_KEY: ${MYINFRA_MASTER_KEY}
+      MYINFRA_PUBLIC_URL: ${MYINFRA_PUBLIC_URL:-http://127.0.0.1}
+      MYINFRA_ADDR: ":8080"
+    ports:
+      - "80:8080"
+
+volumes:
+  pg:

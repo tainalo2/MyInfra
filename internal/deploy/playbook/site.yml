@@ -1,0 +1,198 @@
+---
+- name: Préparer le nœud du cluster
+  hosts: node
+  become: true
+  vars:
+    kubernetes_engine: k3s
+    cluster_name: cluster
+    node_name: node
+    node_role: server
+    k3s_server_url: ""
+    k3s_token: ""
+    wireguard_address: 10.66.0.1/24
+    wireguard_peers: []
+    k3s_extra: ""
+  tasks:
+    - name: Attendre la fin de cloud-init
+      ansible.builtin.command: cloud-init status --wait
+      changed_when: false
+      failed_when: false
+      tags: [keys]
+
+    - name: Préparer le dossier SSH
+      ansible.builtin.file:
+        path: /root/.ssh
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+      tags: [keys]
+
+    - name: Ajouter les clés SSH
+      ansible.builtin.lineinfile:
+        path: /root/.ssh/authorized_keys
+        line: "{{ item }}"
+        create: true
+        owner: root
+        group: root
+        mode: "0600"
+      loop: "{{ ssh_keys | default([], true) }}"
+      tags: [keys]
+
+    - name: Installer le serveur k3s
+      ansible.builtin.shell: curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server --cluster-init --node-name {{ node_name }} {{ k3s_extra }}" sh -
+      args:
+        creates: /usr/local/bin/k3s
+      when: kubernetes_engine == "k3s" and node_role == "server" and k3s_server_url | length == 0
+      tags: [kubernetes]
+
+    - name: Joindre un control plane k3s
+      ansible.builtin.shell: |
+        systemctl disable --now k3s >/dev/null 2>&1 || true
+        systemctl stop k3s-agent >/dev/null 2>&1 || true
+        sleep 2
+        if ! curl -sfL https://get.k3s.io | INSTALL_K3S_FORCE_RESTART=true K3S_TOKEN="{{ k3s_token }}" sh -s - server --server "{{ k3s_server_url }}" --node-name "{{ node_name }}" {{ k3s_extra }}; then
+          echo "L'installation du control plane a échoué."
+          journalctl -u k3s -n 15 --no-pager || true
+          exit 1
+        fi
+        systemctl enable --now k3s >/dev/null 2>&1 || true
+        i=0
+        while [ "$i" -lt 15 ]; do
+          if systemctl is-active --quiet k3s; then exit 0; fi
+          i=$((i + 1))
+          sleep 2
+        done
+        echo "k3s n'est pas resté actif."
+        journalctl -u k3s -n 15 --no-pager || true
+        exit 1
+      args:
+        executable: /bin/bash
+      when: kubernetes_engine == "k3s" and node_role == "server" and k3s_server_url | length > 0
+      tags: [kubernetes]
+
+    - name: Joindre le nœud au serveur k3s
+      ansible.builtin.shell: |
+        systemctl disable --now k3s >/dev/null 2>&1 || true
+        systemctl stop k3s-agent >/dev/null 2>&1 || true
+        sleep 2
+        if ! curl -sfL https://get.k3s.io | INSTALL_K3S_FORCE_RESTART=true K3S_URL="{{ k3s_server_url }}" K3S_TOKEN="{{ k3s_token }}" INSTALL_K3S_EXEC="agent --node-name {{ node_name }} {{ k3s_extra }}" sh -; then
+          echo "L'installation de l'agent a échoué."
+          journalctl -u k3s-agent -n 15 --no-pager || true
+          exit 1
+        fi
+        systemctl enable --now k3s-agent >/dev/null 2>&1 || true
+        i=0
+        while [ "$i" -lt 15 ]; do
+          if systemctl is-active --quiet k3s-agent; then exit 0; fi
+          i=$((i + 1))
+          sleep 2
+        done
+        echo "k3s-agent n'est pas resté actif."
+        journalctl -u k3s-agent -n 15 --no-pager || true
+        exit 1
+      args:
+        executable: /bin/bash
+      when: kubernetes_engine == "k3s" and node_role == "agent"
+      tags: [kubernetes]
+
+    - name: Préparer le dossier du cluster
+      ansible.builtin.file:
+        path: /etc/myinfra
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      tags: [cluster]
+
+    - name: Repérer le kubeconfig
+      ansible.builtin.shell: |
+        if [ -f /etc/rancher/k3s/k3s.yaml ]; then echo /etc/rancher/k3s/k3s.yaml
+        elif [ -f /etc/kubernetes/admin.conf ]; then echo /etc/kubernetes/admin.conf
+        else exit 1
+        fi
+      args:
+        executable: /bin/bash
+      register: kube_path
+      changed_when: false
+      when: node_role == "server"
+      tags: [cluster]
+
+    - name: Lire le kubeconfig
+      ansible.builtin.slurp:
+        src: "{{ kube_path.stdout | trim }}"
+      register: kubeconfig
+      when: node_role == "server"
+      tags: [cluster]
+
+    - name: Écrire le kubeconfig du cluster
+      ansible.builtin.copy:
+        dest: /etc/myinfra/{{ cluster_name }}.kubeconfig
+        content: "{{ kubeconfig.content | b64decode | replace('127.0.0.1', ansible_host) }}"
+        owner: root
+        group: root
+        mode: "0600"
+      when: node_role == "server"
+      tags: [cluster]
+
+    - name: Installer WireGuard
+      ansible.builtin.apt:
+        name:
+          - wireguard
+          - wireguard-tools
+        state: present
+        update_cache: true
+      register: wireguard_packages
+      retries: 30
+      delay: 10
+      until: wireguard_packages is succeeded
+      tags: [wireguard]
+
+    - name: Générer la clé WireGuard du nœud
+      ansible.builtin.shell: umask 077 && wg genkey > /etc/wireguard/myinfra.key && wg pubkey < /etc/wireguard/myinfra.key > /etc/wireguard/myinfra.pub
+      args:
+        creates: /etc/wireguard/myinfra.key
+        executable: /bin/bash
+      tags: [wireguard]
+
+    - name: Lire la clé privée WireGuard
+      ansible.builtin.slurp:
+        src: /etc/wireguard/myinfra.key
+      register: wireguard_key
+      tags: [wireguard]
+
+    - name: Écrire le réseau WireGuard du cluster
+      ansible.builtin.copy:
+        dest: /etc/wireguard/myinfra.conf
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          [Interface]
+          Address = {{ wireguard_address }}
+          PrivateKey = {{ wireguard_key.content | b64decode | trim }}
+          ListenPort = 51820
+          {% for peer in wireguard_peers | default([], true) %}
+
+          [Peer]
+          PublicKey = {{ peer.public_key }}
+          AllowedIPs = {{ peer.address }}/32
+          Endpoint = {{ peer.endpoint }}:51820
+          PersistentKeepalive = 25
+          {% endfor %}
+      tags: [wireguard]
+
+    - name: Démarrer WireGuard
+      ansible.builtin.systemd:
+        name: wg-quick@myinfra
+        enabled: true
+        state: restarted
+        daemon_reload: true
+      tags: [wireguard]
+
+    - name: Fermer les entrées non prévues
+      ansible.builtin.script: firewall.sh
+      args:
+        executable: /bin/sh
+      when: kubernetes_engine == "k3s"
+      tags: [firewall]

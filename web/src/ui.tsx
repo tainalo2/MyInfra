@@ -1,0 +1,748 @@
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { langNames, langs, text, type MsgKey } from "./i18n";
+import { useI18n } from "./lang";
+import { Suspense, createContext, useContext, useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
+import {
+  Boxes,
+  ChevronDown,
+  ChevronUp,
+  Cloud,
+  GitBranch,
+  Globe,
+  ArrowRightLeft,
+  History,
+  KeyRound,
+  LayoutDashboard,
+  LayoutGrid,
+  LayoutTemplate,
+  List,
+  Lock,
+  Moon,
+  MoreHorizontal,
+  Network,
+  Plug,
+  Plus,
+  Rocket,
+  Shield,
+  Sun,
+  Trash2,
+  Waypoints,
+  type LucideIcon,
+} from "lucide-react";
+import { api, type Deployment, type Destruction } from "./api";
+import { Palette, SearchButton } from "./palette";
+import { useTheme } from "./theme";
+
+const focus =
+  "focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-focus";
+
+export function Icon({ icon: Glyph, className }: { icon: LucideIcon; className?: string }) {
+  return <Glyph size={16} strokeWidth={1.5} className={className} aria-hidden />;
+}
+
+export function Button({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button {...props} className={`inline-flex items-center gap-2 rounded-md bg-ink px-4 py-2 text-canvas disabled:opacity-40 ${focus}`}>
+      {children}
+    </button>
+  );
+}
+
+export function TextButton({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button {...props} className={`-mx-1.5 inline-flex items-center gap-2 rounded-md px-1.5 py-0.5 text-ink disabled:opacity-40 ${focus}`}>
+      {children}
+    </button>
+  );
+}
+
+export function IconButton({
+  icon,
+  label,
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & { icon: LucideIcon; label: string }) {
+  return (
+    <button {...props} aria-label={label} className={`-m-1 rounded-md p-1 text-ink ${focus}`}>
+      <Icon icon={icon} />
+    </button>
+  );
+}
+
+export function ActionsMenu({ label, children }: { label: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointer(event: MouseEvent) {
+      if (!root.current?.contains(event.target as Node)) setOpen(false);
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={root}>
+      <IconButton icon={MoreHorizontal} label={label} aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((value) => !value)} />
+      {open ? (
+        <div role="menu" onClick={() => setOpen(false)} className="absolute right-0 z-20 mt-2 min-w-48 rounded-md border border-line bg-surface p-1">
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function MenuItem({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button type="button" role="menuitem" {...props} className={`block w-full rounded-md px-3 py-2 text-left ${focus}`}>
+      {children}
+    </button>
+  );
+}
+
+const DestructionJobs = createContext<Destruction[]>([]);
+const OpenDeployments = createContext<Deployment[]>([]);
+
+export function useDeployments() {
+  return useContext(OpenDeployments);
+}
+
+export function useDestructions() {
+  return useContext(DestructionJobs);
+}
+
+export function removalOf(jobs: Destruction[], kind: string, id: string) {
+  return jobs.find((job) => job.kind === kind && job.targetId === id && job.status === "running");
+}
+
+export function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-muted">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+const control = "w-full rounded-md border border-line bg-surface px-3 py-2 outline-none focus:border-focus";
+
+export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
+  return <input {...props} className={control} />;
+}
+
+export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
+  return <select {...props} className={control} />;
+}
+
+export function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea {...props} className={`${control} min-h-24`} />;
+}
+
+export function ErrorText({ children }: { children: ReactNode }) {
+  return <p className="text-bad">{children}</p>;
+}
+
+export function Skeleton({ className = "h-4 w-32" }: { className?: string }) {
+  return <span className={`block max-w-full animate-pulse rounded bg-line ${className}`} aria-hidden />;
+}
+
+export function LoadingLines({ lines = 3, label }: { lines?: number; label?: string }) {
+  const caption = label ?? text("list.loading");
+  const widths = ["w-48", "w-64", "w-40", "w-56", "w-36"];
+  return (
+    <div className="flex flex-col gap-3" role="status" aria-label={caption}>
+      {Array.from({ length: lines }, (_, index) => (
+        <Skeleton key={index} className={`h-4 ${widths[index % widths.length]}`} />
+      ))}
+    </div>
+  );
+}
+
+export function LoadingCards({ count = 4 }: { count?: number }) {
+  return (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2" role="status" aria-label={text("list.loading")}>
+      {Array.from({ length: count }, (_, index) => (
+        <div key={index} className="flex flex-col gap-3 rounded-md border border-line p-4">
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-4 w-44" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function SectionTitle({ children }: { children: ReactNode }) {
+  return <h2 className="text-base">{children}</h2>;
+}
+
+export function Fold({ title, children }: { title: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section>
+      <h2 className="text-base">
+        <button type="button" className={`-mx-1.5 inline-flex items-center gap-2 rounded-md px-1.5 py-0.5 ${focus}`} aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+          <Icon icon={open ? ChevronUp : ChevronDown} />
+          {title}
+        </button>
+      </h2>
+      {open ? <div className="mt-4">{children}</div> : null}
+    </section>
+  );
+}
+
+const failedReasons = new Set([
+  "CrashLoopBackOff",
+  "ImagePullBackOff",
+  "ErrImagePull",
+  "InvalidImageName",
+  "CreateContainerConfigError",
+  "CreateContainerError",
+  "RunContainerError",
+  "StartError",
+  "OOMKilled",
+  "Error",
+]);
+
+export function podFailed(pod: { phase: string; reason: string }) {
+  return pod.phase === "Failed" || failedReasons.has(pod.reason);
+}
+
+export function podHealth(pod: { ready: boolean; phase: string; reason: string }) {
+  if (podFailed(pod)) {
+    return { text: text("status.failed"), tone: "text-bad" };
+  }
+  if (pod.phase === "Pending") return { text: text("status.starting"), tone: "text-muted" };
+  if (pod.ready) return { text: text("status.healthy"), tone: "text-ok" };
+  return { text: text("status.notReady"), tone: "text-muted" };
+}
+
+const nav: NavSpec[] = [
+  { to: "/", label: "nav.overview", icon: LayoutDashboard, end: true },
+  { to: "/applications", label: "nav.apps", icon: LayoutGrid, match: ["/applications", "/nouveau", "/catalogue"] },
+  { to: "/clusters", label: "nav.clusters", icon: Network, match: ["/serveurs"] },
+  { to: "/historique", label: "nav.history", icon: History },
+  { to: "/templates", label: "nav.templates", icon: LayoutTemplate, match: ["/templates"] },
+];
+
+const connect: NavSpec[] = [
+  { to: "/providers", label: "nav.providers", icon: Cloud },
+  { to: "/dns", label: "nav.dns", icon: Globe },
+  { to: "/git", label: "nav.git", icon: GitBranch },
+];
+
+const ssh: NavSpec = { to: "/cles", label: "nav.ssh", icon: KeyRound };
+const secretsNav: NavSpec = { to: "/secrets", label: "nav.secrets", icon: Shield, match: ["/secrets"] };
+const transfer: NavSpec = { to: "/transfert", label: "nav.transfer", icon: ArrowRightLeft };
+const copies: NavSpec = { to: "/copies", label: "nav.copies", icon: Waypoints };
+const account: NavSpec = { to: "/compte", label: "nav.account", icon: Lock };
+
+type NavSpec = { to: string; label: MsgKey; icon: LucideIcon; end?: boolean; match?: string[] };
+
+function itemClass(active: boolean) {
+  return `flex items-center gap-3 rounded-md px-3 py-2 ${focus} ${active ? "bg-status text-ink" : "text-muted"}`;
+}
+
+function NavItem({ to, label, icon, end, match }: NavSpec) {
+  useI18n();
+  const location = useLocation();
+  const covered = match?.some((prefix) => location.pathname.startsWith(prefix)) ?? false;
+  const name = text(label);
+  return (
+    <NavLink to={to} end={end} aria-label={name} className={({ isActive }) => itemClass(isActive || covered)}>
+      <Icon icon={icon} />
+      <span className="hidden md:inline" aria-hidden>
+        {name}
+      </span>
+    </NavLink>
+  );
+}
+
+function ConnectMenu() {
+  useI18n();
+  const location = useLocation();
+  const inside = connect.some((item) => location.pathname === item.to);
+  const [open, setOpen] = useState(inside);
+
+  useEffect(() => {
+    if (inside) setOpen(true);
+  }, [inside]);
+
+  return (
+    <div>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-label={text("nav.connect")}
+        onClick={() => setOpen((value) => !value)}
+        className={`flex w-full items-center gap-3 rounded-md px-3 py-2 ${focus} ${inside ? "text-ink" : "text-muted"}`}
+      >
+        <Icon icon={Plug} />
+        <span className="hidden flex-1 text-left md:inline" aria-hidden>
+          {text("nav.connect")}
+        </span>
+        <ChevronDown size={16} strokeWidth={1.5} className={`hidden md:inline ${open ? "rotate-180" : ""}`} aria-hidden />
+      </button>
+      {open ? (
+        <div className="mt-1 flex flex-col gap-1 md:pl-4">
+          {connect.map((item) => (
+            <NavItem key={item.to} {...item} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function Header({ search = false }: { search?: boolean }) {
+  const { theme, toggle } = useTheme();
+  const { lang, setLang } = useI18n();
+  const label = theme === "dark" ? text("header.themeLight") : text("header.themeDark");
+  return (
+    <header className="shrink-0 border-b border-line">
+      <div className="flex items-center justify-between gap-4 px-6 py-4">
+        <Link to="/" className={`inline-flex items-center gap-2 font-medium ${focus}`}>
+          <Icon icon={Boxes} />
+          MyInfra
+        </Link>
+        <div className="flex items-center gap-3">
+          {search ? <SearchButton /> : null}
+          <select
+            aria-label={text("header.lang")}
+            value={lang}
+            onChange={(event) => setLang(event.target.value as (typeof langs)[number])}
+            className={`bg-transparent text-ink ${focus}`}
+          >
+            {langs.map((code) => (
+              <option key={code} value={code}>
+                {langNames[code]}
+              </option>
+            ))}
+          </select>
+          <button type="button" onClick={toggle} aria-label={label} className={`-m-1 rounded-md p-1 text-ink ${focus}`}>
+            <Icon icon={theme === "dark" ? Sun : Moon} />
+          </button>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+export function AuthFrame({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex h-dvh flex-col overflow-hidden">
+      <Header />
+      <main className="mx-auto min-h-0 w-full max-w-[720px] flex-1 overflow-y-auto px-6 py-24">{children}</main>
+    </div>
+  );
+}
+
+function useRunningDestructions() {
+  const location = useLocation();
+  const [jobs, setJobs] = useState<Destruction[]>([]);
+
+  useEffect(() => {
+    let stop = false;
+    const load = () => {
+      api<Destruction[]>("/api/destructions")
+        .then((rows) => {
+          if (!stop) setJobs(rows);
+        })
+        .catch(() => undefined);
+    };
+    load();
+    const timer = window.setInterval(load, 3000);
+    return () => {
+      stop = true;
+      window.clearInterval(timer);
+    };
+  }, [location.pathname]);
+
+  return jobs;
+}
+
+function useOpenDeployments() {
+  const location = useLocation();
+  const [items, setItems] = useState<Deployment[]>([]);
+
+  useEffect(() => {
+    let stop = false;
+    const load = () => {
+      api<Deployment[]>("/api/deployments")
+        .then((rows) => {
+          if (!stop) setItems(rows);
+        })
+        .catch(() => undefined);
+    };
+    load();
+    const timer = window.setInterval(load, 3000);
+    return () => {
+      stop = true;
+      window.clearInterval(timer);
+    };
+  }, [location.pathname]);
+
+  return items;
+}
+
+type Crumb = { label: string; to?: string };
+
+const TrailContext = createContext<{
+  override: Crumb[] | null;
+  setOverride: (crumbs: Crumb[] | null) => void;
+}>({ override: null, setOverride: () => undefined });
+
+export function useTrail(crumbs: Crumb[]) {
+  const { setOverride } = useContext(TrailContext);
+  const serialized = JSON.stringify(crumbs);
+  useEffect(() => {
+    setOverride(JSON.parse(serialized) as Crumb[]);
+    return () => setOverride(null);
+  }, [serialized, setOverride]);
+}
+
+export function Shell() {
+  useI18n();
+  const location = useLocation();
+  const jobs = useRunningDestructions();
+  const deploys = useOpenDeployments();
+  const [override, setOverride] = useState<Crumb[] | null>(null);
+  return (
+    <TrailContext.Provider value={{ override, setOverride }}>
+    <DestructionJobs.Provider value={jobs}>
+    <OpenDeployments.Provider value={deploys}>
+    <div className="flex h-dvh flex-col overflow-hidden">
+      <Header search />
+      <div className="flex min-h-0 flex-1">
+        <aside className="flex h-full min-h-0 w-16 shrink-0 flex-col border-r border-line md:w-56">
+          <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 py-4 md:px-4">
+            {nav.map((item) => (
+              <NavItem key={item.to} {...item} />
+            ))}
+            {deploys.length > 0 ? <NavItem to="/deploiements" label="nav.deployments" icon={Rocket} match={["/deploiements"]} /> : null}
+            {jobs.length > 0 ? <NavItem to="/suppressions" label="nav.destructions" icon={Trash2} match={["/suppressions", "/destructions"]} /> : null}
+            <ConnectMenu />
+            <NavItem {...ssh} />
+            <NavItem {...secretsNav} />
+            <div className="mt-auto flex flex-col gap-1 border-t border-line pt-4">
+              <NavItem {...transfer} />
+              <NavItem {...copies} />
+              <NavItem {...account} />
+            </div>
+          </nav>
+          <p className="hidden shrink-0 px-4 pb-4 text-[11px] leading-tight text-faint md:block">{text("footer.license")}</p>
+        </aside>
+        {location.pathname === "/" ? (
+          <main className="relative min-w-0 flex-1 overflow-y-auto md:overflow-hidden">
+            <Suspense fallback={<LoadingLines lines={4} />}>
+              <Outlet />
+            </Suspense>
+          </main>
+        ) : (
+          <main className="min-w-0 flex-1 overflow-y-auto px-6 py-12">
+            <div className="mx-auto w-full max-w-[960px]">
+              <Breadcrumb />
+              <Suspense fallback={<LoadingLines lines={4} />}>
+                <Outlet />
+              </Suspense>
+            </div>
+          </main>
+        )}
+      </div>
+    <Palette />
+    </div>
+    </OpenDeployments.Provider>
+    </DestructionJobs.Provider>
+    </TrailContext.Provider>
+  );
+}
+
+function Breadcrumb() {
+  useI18n();
+  const { pathname } = useLocation();
+  const { override } = useContext(TrailContext);
+  const names = useCrumbNames(pathname);
+  const crumbs = override ?? crumbsFor(pathname, names);
+  if (crumbs.length === 0) return null;
+  return (
+    <nav aria-label={text("crumb.trail")} className="breadcrumb mb-8">
+      <ol className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        {crumbs.map((crumb, index) => {
+          const last = index === crumbs.length - 1;
+          return (
+            <li key={`${crumb.label}-${index}`} className="flex items-center gap-2">
+              {index > 0 ? <span className="text-faint" aria-hidden="true">/</span> : null}
+              {last || !crumb.to ? (
+                <span className={last ? "text-ink" : "text-muted"}>{crumb.label}</span>
+              ) : (
+                <Link to={crumb.to} className={`text-link ${focus}`}>
+                  {crumb.label}
+                </Link>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
+  );
+}
+
+function useCrumbNames(pathname: string) {
+  const [names, setNames] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let stop = false;
+    loadCrumbNames(pathname)
+      .then((found) => {
+        if (!stop && found) setNames((current) => ({ ...current, ...found }));
+      })
+      .catch(() => undefined);
+    return () => {
+      stop = true;
+    };
+  }, [pathname]);
+  return names;
+}
+
+async function loadCrumbNames(pathname: string) {
+  const app = pathname.match(/^\/applications\/([^/]+)/);
+  if (app) {
+    const id = decodeURIComponent(app[1]);
+    const row = await api<{ name: string }>(`/api/applications/${id}`);
+    return { [`app:${id}`]: row.name };
+  }
+  const server = pathname.match(/^\/serveurs\/([^/]+)/);
+  if (server) {
+    const id = decodeURIComponent(server[1]);
+    const row = await api<{ name: string }>(`/api/servers/${id}`);
+    return { [`server:${id}`]: row.name };
+  }
+  const run = pathname.match(/^\/templates\/suivis\/([^/]+)$/);
+  if (run) {
+    const id = decodeURIComponent(run[1]);
+    const row = await api<{ templateId: string }>(`/api/template-runs/${id}`);
+    const template = row.templateId ? await api<{ name: string }>(`/api/templates/${row.templateId}`) : null;
+    return { [`run:${id}`]: template?.name || "Template", [`run-template:${id}`]: row.templateId };
+  }
+  const template = pathname.match(/^\/templates\/([^/]+)/);
+  if (template && template[1] !== "nouveau" && template[1] !== "suivis") {
+    const id = decodeURIComponent(template[1]);
+    const row = await api<{ name: string }>(`/api/templates/${id}`);
+    return { [`template:${id}`]: row.name };
+  }
+  const job = pathname.match(/^\/destructions\/([^/]+)$/);
+  if (job) {
+    const id = decodeURIComponent(job[1]);
+    const row = await api<{ name: string }>(`/api/destructions/${id}`);
+    return { [`job:${id}`]: row.name };
+  }
+  return null;
+}
+
+function crumbsFor(pathname: string, names: Record<string, string>): Crumb[] {
+  const path = pathname.replace(/\/$/, "") || "/";
+  if (path === "/") return [];
+  if (path === "/applications") return [{ label: text("nav.apps") }];
+  if (path === "/nouveau") return [{ label: text("nav.apps"), to: "/applications" }, { label: text("crumb.newApp") }];
+  const app = path.match(/^\/applications\/([^/]+)(\/terminal\/[^/]+)?$/);
+  if (app) {
+    const id = decodeURIComponent(app[1]);
+    const crumbs: Crumb[] = [{ label: text("nav.apps"), to: "/applications" }, { label: names[`app:${id}`] || text("crumb.application"), to: `/applications/${id}` }];
+    if (app[2]) crumbs.push({ label: text("crumb.terminal") });
+    return current(crumbs);
+  }
+  if (path === "/clusters") return [{ label: text("nav.clusters") }];
+  if (path === "/historique") return [{ label: text("nav.history") }];
+  const server = path.match(/^\/serveurs\/([^/]+)(\/terminal)?$/);
+  if (server) {
+    const id = decodeURIComponent(server[1]);
+    const crumbs: Crumb[] = [{ label: text("nav.clusters"), to: "/clusters" }, { label: names[`server:${id}`] || text("crumb.server"), to: `/serveurs/${id}` }];
+    if (server[2]) crumbs.push({ label: text("crumb.terminal") });
+    return current(crumbs);
+  }
+  if (path === "/templates") return [{ label: text("nav.templates") }];
+  if (path === "/templates/nouveau") return [{ label: text("nav.templates"), to: "/templates" }, { label: text("crumb.newTemplate") }];
+  const follow = path.match(/^\/templates\/suivis\/([^/]+)$/);
+  if (follow) {
+    const id = decodeURIComponent(follow[1]);
+    const templateId = names[`run-template:${id}`];
+    return current([
+      { label: text("nav.templates"), to: "/templates" },
+      { label: names[`run:${id}`] || text("crumb.template"), to: templateId ? `/templates/${templateId}` : undefined },
+      { label: text("crumb.follow") },
+    ]);
+  }
+  const template = path.match(/^\/templates\/([^/]+)(\/deploy)?$/);
+  if (template) {
+    const id = decodeURIComponent(template[1]);
+    const crumbs: Crumb[] = [{ label: text("nav.templates"), to: "/templates" }, { label: names[`template:${id}`] || text("crumb.template"), to: `/templates/${id}` }];
+    if (template[2]) crumbs.push({ label: text("crumb.deploy") });
+    return current(crumbs);
+  }
+  if (path === "/deploiements") return [{ label: text("crumb.deployments") }];
+  if (path === "/suppressions") return [{ label: text("crumb.destructions") }];
+  const job = path.match(/^\/destructions\/([^/]+)$/);
+  if (job) {
+    const id = decodeURIComponent(job[1]);
+    return current([{ label: text("crumb.destructions"), to: "/suppressions" }, { label: names[`job:${id}`] || text("crumb.destruction") }]);
+  }
+  const secret = path.match(/^\/secrets\/([^/]+)$/);
+  if (secret) {
+    const id = decodeURIComponent(secret[1]);
+    return current([{ label: text("crumb.secrets"), to: "/secrets" }, { label: names[`secret:${id}`] || text("crumb.secret") }]);
+  }
+  const fixed: Record<string, MsgKey> = {
+    "/cles": "nav.ssh",
+    "/secrets": "nav.secrets",
+    "/providers": "nav.providers",
+    "/dns": "nav.dns",
+    "/git": "nav.git",
+    "/compte": "nav.account",
+    "/transfert": "nav.transfer",
+    "/transfert/suivi": "crumb.transferFollow",
+    "/copies": "nav.copies",
+  };
+  if (fixed[path]) return [{ label: text(fixed[path]) }];
+  return [];
+}
+
+function current(crumbs: Crumb[]): Crumb[] {
+  return crumbs.map((crumb, index) => (index === crumbs.length - 1 ? { label: crumb.label } : crumb));
+}
+
+export function PageTitle({
+  title,
+  icon,
+  mark,
+  action,
+}: {
+  title: string;
+  icon?: LucideIcon;
+  mark?: ReactNode;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="mb-12 flex items-center justify-between gap-6">
+      <h1 className="flex items-center gap-3 text-2xl font-medium">
+        {mark ? mark : icon ? <Icon icon={icon} /> : null}
+        {title}
+      </h1>
+      {action}
+    </div>
+  );
+}
+
+export type ListMode = "cards" | "rows";
+
+const listKey = "myinfra-list";
+
+export function useListMode(): [ListMode, () => void] {
+  const [mode, setMode] = useState<ListMode>(() => (localStorage.getItem(listKey) === "rows" ? "rows" : "cards"));
+
+  function toggle() {
+    setMode((current) => {
+      const next = current === "cards" ? "rows" : "cards";
+      localStorage.setItem(listKey, next);
+      return next;
+    });
+  }
+
+  return [mode, toggle];
+}
+
+export function ListModeButton({ mode, onToggle }: { mode: ListMode; onToggle: () => void }) {
+  useI18n();
+  const cards = mode === "cards";
+  return (
+    <button type="button" onClick={onToggle} aria-label={cards ? text("list.rows") : text("list.cards")} className={`-m-1 rounded-md p-1 text-ink ${focus}`}>
+      <Icon icon={cards ? List : LayoutGrid} />
+    </button>
+  );
+}
+
+export function ListActions({
+  mode,
+  onToggle,
+  label,
+  onCreate,
+}: {
+  mode: ListMode;
+  onToggle: () => void;
+  label: string;
+  onCreate: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-4">
+      <ListModeButton mode={mode} onToggle={onToggle} />
+      <Button type="button" onClick={onCreate}>
+        <Icon icon={Plus} />
+        {label}
+      </Button>
+    </div>
+  );
+}
+
+export function EmptyList({ message, label, onCreate }: { message: string; label: string; onCreate: () => void }) {
+  return (
+    <div className="flex flex-col items-start gap-6">
+      <p className="text-muted">{message}</p>
+      <Button type="button" onClick={onCreate}>
+        <Icon icon={Plus} />
+        {label}
+      </Button>
+    </div>
+  );
+}
+
+export function ItemList({ mode, columns = 2, children }: { mode: ListMode; columns?: 1 | 2; children: ReactNode }) {
+  const cards = columns === 2 ? "grid grid-cols-1 gap-4 md:grid-cols-2" : "grid grid-cols-1 gap-4";
+  return <ul className={mode === "cards" ? cards : "flex flex-col"}>{children}</ul>;
+}
+
+export function entryClass(mode: ListMode, layout: "spread" | "stack" = "spread") {
+  if (mode === "cards") {
+    return "flex h-full flex-col gap-3 rounded-md border border-line bg-surface p-4";
+  }
+  if (layout === "stack") {
+    return "flex flex-col gap-3 border-t border-line py-4";
+  }
+  return "flex items-center justify-between gap-6 border-t border-line py-4";
+}
+
+export function HealthDot({ status }: { status?: string }) {
+  const label = statusLabel(status || "");
+  const color = label.tone === "text-ok" ? "bg-ok" : label.tone === "text-bad" ? "bg-bad" : label.tone === "text-warn" ? "bg-warn" : "bg-faint";
+  return <span className={`inline-block size-2.5 shrink-0 rounded-full ${color}`} role="img" aria-label={label.text} title={label.text} />;
+}
+
+export function statusLabel(status: string) {
+  switch (status) {
+    case "linked":
+      return { text: text("status.linked"), tone: "text-ok" };
+    case "deploying":
+    case "updating":
+      return { text: text("status.deploying"), tone: "text-warn" };
+    case "pending":
+      return { text: text("status.pending"), tone: "text-warn" };
+    case "pending_dns":
+      return { text: text("status.pending_dns"), tone: "text-warn" };
+    case "ready":
+      return { text: text("status.ready"), tone: "text-ok" };
+    case "preparing":
+      return { text: text("status.preparing"), tone: "text-warn" };
+    case "running":
+      return { text: text("status.running"), tone: "text-ok" };
+    case "failed":
+      return { text: text("status.failed"), tone: "text-bad" };
+    case "paused":
+      return { text: text("status.paused"), tone: "text-muted" };
+    default:
+      return { text: text("status.unpublished"), tone: "text-muted" };
+  }
+}
