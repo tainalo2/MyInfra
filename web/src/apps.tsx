@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { ConfirmDialog, Spinner, StatusBadge, Steps, appHealth, useToast } from "./kit";
+import { ConfirmDialog, Sheet, Spinner, StatusBadge, Steps, appHealth, useToast } from "./kit";
 import { usePoll } from "./poll";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ChevronDown, ChevronUp, Copy, ExternalLink, Plus, Trash2 } from "lucide-react";
@@ -13,7 +13,7 @@ import { podCpu, size } from "./measure";
 import { ImageEditor } from "./images";
 import { AppSecretLinks } from "./secrets";
 import { PodActions } from "./pods";
-import { NameList } from "./names";
+import { NameList, namesOf, type AppName } from "./names";
 import { TofuFiles } from "./tofu";
 import { ActionsMenu, Button, ErrorText, Field, Fold, Group, Icon, IconButton, Input, LoadingLines, MenuItem, PageTitle, SectionTitle, Select, TextArea, TextButton, focus, podFailed, podHealth, statusLabel, useTrail } from "./ui";
 
@@ -527,6 +527,7 @@ export function ApplicationPage() {
   const [copied, setCopied] = useState("");
   const [confirm, setConfirm] = useState<"" | "delete" | "pause">("");
   const [pausing, setPausing] = useState(false);
+  const [editingNames, setEditingNames] = useState(false);
 
   // A new version is followed closely until it answers.
   useEffect(() => {
@@ -650,11 +651,21 @@ export function ApplicationPage() {
           {!runtime ? <LoadingLines lines={2} label={text("apps.instances")} /> : pods.length === 0 ? <p className="text-muted">{runtime.measured ? text("common.noPod") : text("common.noMeasure")}</p> : null}
         </Fold>
       </div>
-      {app.domains && app.domains.length > 0 ? (
+      {(app.domains && app.domains.length > 0) || !app.guarded ? (
         <section className="mt-10">
-          <SectionTitle>{text("apps.addresses")}</SectionTitle>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <SectionTitle>{text("apps.addresses")}</SectionTitle>
+            {app.guarded ? null : (
+              <TextButton type="button" onClick={() => setEditingNames(true)}>
+                {text("names.edit")}
+              </TextButton>
+            )}
+          </div>
           <ul className="mt-2 flex flex-col">
-            {app.domains.map((domain) => (
+            {(app.domains ?? []).filter((domain) => domain.kind === "custom").length === 0 ? (
+              <li className="border-t border-line py-4 text-muted">{text("names.none")}</li>
+            ) : null}
+            {(app.domains ?? []).filter((domain) => domain.kind === "custom").map((domain) => (
               <li key={domain.hostname} className="border-t border-line py-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
                   <a href={`https://${domain.hostname}`} target="_blank" rel="noreferrer" className="break-all font-mono text-[13px] underline">
@@ -691,6 +702,17 @@ export function ApplicationPage() {
             {text("common.delete")}
           </TextButton>
         </div>
+      ) : null}
+      {editingNames ? (
+        <NamesSheet
+          app={app}
+          onClose={() => setEditingNames(false)}
+          onSaved={(next) => {
+            setApp(next);
+            setEditingNames(false);
+            toast(text("names.saved", { name: next.name }));
+          }}
+        />
       ) : null}
       {confirm === "pause" ? (
         <ConfirmDialog title={text("apps.pauseTitle", { name: app.name })} confirmLabel={text("apps.pauseAction")} onConfirm={() => setPaused(true)} onClose={() => setConfirm("")}>
@@ -758,5 +780,73 @@ function AppVariables({ app }: { app: Application }) {
         <p className="mt-3 text-faint">{text("app.variablesHint")}</p>
       </Fold>
     </div>
+  );
+}
+
+// NamesSheet changes the addresses of an application while it runs: the names
+// kept are not touched, a new one answers once its record and certificate are
+// there, a name taken away stops answering.
+function NamesSheet({ app, onClose, onSaved }: { app: Application; onClose: () => void; onSaved: (app: Application) => void }) {
+  const [names, setNames] = useState<AppName[]>(() => namesOf(app.domains));
+  const [zones, setZones] = useState<DnsZone[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const before = namesOf(app.domains);
+  const removed = before.filter((old) => !names.some((name) => name.subdomain === old.subdomain && name.zone === old.zone));
+
+  useEffect(() => {
+    api<DnsZone[]>("/api/dns/zones")
+      .then(setZones)
+      .catch((err) => {
+        setZones([]);
+        setError(err instanceof Error ? err.message : text("common.error"));
+      });
+  }, []);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const kept = names.filter((name) => name.zone !== "" && (name.subdomain.trim() !== "" || before.some((old) => old.zone === name.zone && old.subdomain === "")));
+      onSaved(await api<Application>(`/api/applications/${app.id}/names`, { method: "PUT", body: JSON.stringify({ names: kept }) }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : text("common.error"));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Sheet title={text("names.title", { name: app.name })} onClose={onClose} busy={busy} wide>
+      <form onSubmit={submit} className="flex flex-col gap-6">
+        <p className="text-muted">{text("names.hint")}</p>
+        {zones === null ? (
+          <LoadingLines lines={2} label={text("apps.domains")} />
+        ) : zones.length === 0 ? (
+          <p className="text-muted">
+            {text("apps.noDomain")}{" "}
+            <Link to="/dns" className="text-ink underline">
+              {text("apps.linkDns")}
+            </Link>
+          </p>
+        ) : (
+          <NameList names={names} zones={zones} onChange={setNames} />
+        )}
+        {removed.length > 0 ? (
+          <p className="text-warn">{text("names.removing", { names: removed.map((name) => (name.subdomain ? `${name.subdomain}.${name.zone}` : name.zone)).join(", ") })}</p>
+        ) : null}
+        {error ? <ErrorText>{error}</ErrorText> : null}
+        <div className="flex flex-wrap items-center gap-4">
+          <Button type="submit" disabled={busy || zones === null}>
+            {busy ? <Spinner /> : null}
+            {text("common.save")}
+          </Button>
+          <TextButton type="button" onClick={onClose} disabled={busy}>
+            {text("common.cancel")}
+          </TextButton>
+        </div>
+      </form>
+    </Sheet>
   );
 }

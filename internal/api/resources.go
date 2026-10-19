@@ -13,7 +13,6 @@ import (
 
 	"myinfra/internal/catalog"
 	"myinfra/internal/deploy"
-	"myinfra/internal/dns"
 	"myinfra/internal/join"
 	"myinfra/internal/manifest"
 	"myinfra/internal/market"
@@ -545,11 +544,8 @@ func (a *API) getApplication(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) createApplication(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Name  string `json:"name"`
-		Names []struct {
-			Subdomain string `json:"subdomain"`
-			Zone      string `json:"zone"`
-		} `json:"names"`
+		Name            string            `json:"name"`
+		Names           []nameBody        `json:"names"`
 		SourceKind      string            `json:"sourceKind"`
 		Source          string            `json:"source"`
 		DestinationKind string            `json:"destinationKind"`
@@ -655,32 +651,12 @@ func (a *API) createApplication(w http.ResponseWriter, r *http.Request) {
 		}
 		in.ClusterID = body.ClusterID
 	}
-	seen := map[string]bool{}
-	accounts := map[string]string{}
-	for _, item := range body.Names {
-		host, err := dns.Join(item.Subdomain, item.Zone)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		if seen[host] {
-			writeError(w, http.StatusBadRequest, "Ce nom est déjà dans la liste.")
-			return
-		}
-		seen[host] = true
-		zone := strings.ToLower(strings.Trim(strings.TrimSpace(item.Zone), "."))
-		secretID, ok := accounts[zone]
-		if !ok {
-			found, lookupErr := a.accountForZone(r.Context(), in.OwnerID, zone)
-			if lookupErr != nil {
-				writeError(w, http.StatusBadRequest, lookupErr.Error())
-				return
-			}
-			secretID = found
-			accounts[zone] = secretID
-		}
-		in.Names = append(in.Names, store.Name{ID: newID(), Hostname: host, Zone: zone, SecretID: secretID})
+	names, err := a.parseNames(r.Context(), in.OwnerID, body.Names)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
 	}
+	in.Names = names
 	sealed, err := a.sealVars(in.Variables)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())

@@ -761,6 +761,13 @@ const fr = {
   "steps.servers": "Serveurs",
   "steps.apps": "Applications",
   "server.billing": "Facturation",
+  "names.edit": "Modifier",
+  "names.none": "Aucune adresse publique.",
+  "names.title": "Adresses de {name}",
+  "names.hint": "L'application continue de tourner. Une nouvelle adresse répond dès que son nom est publié et son certificat HTTPS obtenu, en une à deux minutes.",
+  "names.removing": "Ne répondra plus : {names}",
+  "names.saved": "Adresses de {name} enregistrées.",
+  "err.self_names": "L'adresse de MyInfra se change depuis Transfert.",
 } as const;
 
 export type MsgKey = keyof typeof fr;
@@ -1453,6 +1460,13 @@ const en: Record<MsgKey, string> = {
   "steps.servers": "Servers",
   "steps.apps": "Applications",
   "server.billing": "Billing",
+  "names.edit": "Edit",
+  "names.none": "No public address.",
+  "names.title": "Addresses of {name}",
+  "names.hint": "The application keeps running. A new address answers once its name is published and its HTTPS certificate obtained, within a minute or two.",
+  "names.removing": "Will stop answering: {names}",
+  "names.saved": "Addresses of {name} saved.",
+  "err.self_names": "MyInfra's address is changed from Transfer.",
 };
 
 const pt: Record<MsgKey, string> = {
@@ -2135,6 +2149,13 @@ const pt: Record<MsgKey, string> = {
   "steps.servers": "Servidores",
   "steps.apps": "Aplicações",
   "server.billing": "Faturação",
+  "names.edit": "Alterar",
+  "names.none": "Nenhum endereço público.",
+  "names.title": "Endereços de {name}",
+  "names.hint": "A aplicação continua a correr. Um novo endereço responde assim que o nome é publicado e o certificado HTTPS obtido, em um a dois minutos.",
+  "names.removing": "Deixará de responder: {names}",
+  "names.saved": "Endereços de {name} guardados.",
+  "err.self_names": "O endereço do MyInfra altera-se em Transferência.",
 };
 
 const it: Record<MsgKey, string> = {
@@ -2816,6 +2837,13 @@ const it: Record<MsgKey, string> = {
   "steps.servers": "Server",
   "steps.apps": "Applicazioni",
   "server.billing": "Fatturazione",
+  "names.edit": "Modifica",
+  "names.none": "Nessun indirizzo pubblico.",
+  "names.title": "Indirizzi di {name}",
+  "names.hint": "L'applicazione continua a girare. Un nuovo indirizzo risponde appena il nome è pubblicato e il certificato HTTPS ottenuto, in uno o due minuti.",
+  "names.removing": "Non risponderà più: {names}",
+  "names.saved": "Indirizzi di {name} salvati.",
+  "err.self_names": "L'indirizzo di MyInfra si cambia da Trasferimento.",
 };
 
 const de: Record<MsgKey, string> = {
@@ -3499,6 +3527,13 @@ const de: Record<MsgKey, string> = {
   "steps.servers": "Server",
   "steps.apps": "Anwendungen",
   "server.billing": "Abrechnung",
+  "names.edit": "Ändern",
+  "names.none": "Keine öffentliche Adresse.",
+  "names.title": "Adressen von {name}",
+  "names.hint": "Die Anwendung läuft weiter. Eine neue Adresse antwortet, sobald ihr Name veröffentlicht und ihr HTTPS-Zertifikat ausgestellt ist, in ein bis zwei Minuten.",
+  "names.removing": "Antwortet nicht mehr: {names}",
+  "names.saved": "Adressen von {name} gespeichert.",
+  "err.self_names": "Die Adresse von MyInfra wird unter Übertragung geändert.",
 };
 
 const tables: Record<Lang, Record<MsgKey, string>> = { fr, en, pt, it, de };

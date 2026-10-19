@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -358,12 +359,21 @@ func (a *API) checkHealth(ctx context.Context, host deploy.Host, clusterID strin
 // namesAnswer says whether every name of the application is published and
 // answers in HTTPS. A name still waiting for its record counts as not yet.
 func (a *API) namesAnswer(ctx context.Context, appID string) bool {
-	names, err := a.Store.CustomNames(ctx, appID)
+	published, err := a.Store.CustomNames(ctx, appID)
 	if err != nil {
 		return false
 	}
-	for name, published := range names {
-		if !published || !answers(ctx, name) {
+	names, err := a.Store.AppNames(ctx, appID)
+	if err != nil {
+		return false
+	}
+	for _, name := range names {
+		if !published[name.Hostname] {
+			return false
+		}
+		// The zone's own servers say where the name points now; a resolver may
+		// keep an older answer, such as a catch-all, for up to an hour.
+		if !answers(ctx, name.Hostname, a.dnsClient().Announced(ctx, name.Zone, name.Hostname)) {
 			return false
 		}
 	}
@@ -396,14 +406,37 @@ func healthOf(replicas, waiting string) string {
 
 // answers says whether the address replies over HTTPS with a certificate the
 // browser accepts. A proxy error (502, 503, 504) means the service is not up.
-func answers(ctx context.Context, name string) bool {
+// answers asks the name in HTTPS, with its certificate checked as a browser
+// does. With addresses, it connects to them instead of what the resolver of
+// this machine says: the first one that takes the connection answers.
+func answers(ctx context.Context, name string, addresses []string) bool {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+name+"/", nil)
 	if err != nil {
 		return false
 	}
-	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if len(addresses) > 0 {
+		dialer := &net.Dialer{Timeout: 4 * time.Second}
+		transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+			_, port, err := net.SplitHostPort(address)
+			if err != nil {
+				return nil, err
+			}
+			var last error
+			for _, ip := range addresses {
+				conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(ip, port))
+				if err == nil {
+					return conn, nil
+				}
+				last = err
+			}
+			return nil, last
+		}
+	}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, err := client.Do(req)
 	if err != nil {
 		return false

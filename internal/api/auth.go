@@ -196,6 +196,7 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("GET /api/applications/{id}/redundancy", a.auth(a.redundancyOptions))
 	mux.HandleFunc("POST /api/redundancy/preview", a.auth(a.redundancyPreview))
 	mux.HandleFunc("POST /api/applications/{id}/redundancy", a.auth(a.drives(a.setRedundancy)))
+	mux.HandleFunc("PUT /api/applications/{id}/names", a.auth(a.drives(a.setNames)))
 	mux.HandleFunc("GET /api/applications/{id}/variables/{name}", a.auth(a.revealVariable))
 	mux.HandleFunc("GET /api/applications/{id}/runtime", a.auth(a.applicationRuntime))
 	mux.HandleFunc("GET /api/applications/{id}/releases", a.auth(a.applicationReleases))

@@ -776,6 +776,67 @@ func readyHosts(ctx context.Context, s *Store, applicationID string) ([]string, 
 	return hosts, zones, rows.Err()
 }
 
+// AppNames are the names a person gave an application, with the DNS account
+// that publishes each one.
+func (s *Store) AppNames(ctx context.Context, applicationID string) ([]Name, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, hostname, COALESCE(zone, ''), COALESCE(secret_id, '') FROM domains
+		WHERE application_id = $1 AND kind = 'custom'
+		ORDER BY created_at, hostname`, applicationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Name
+	for rows.Next() {
+		var name Name
+		if err := rows.Scan(&name.ID, &name.Hostname, &name.Zone, &name.SecretID); err != nil {
+			return nil, err
+		}
+		out = append(out, name)
+	}
+	return out, rows.Err()
+}
+
+// AddNames gives an application new names, waiting for their DNS record. A
+// name another application holds refuses them all.
+func (s *Store) AddNames(ctx context.Context, applicationID string, names []Name) error {
+	if len(names) == 0 {
+		return nil
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	for _, name := range names {
+		var exists bool
+		if err := tx.QueryRow(ctx, `SELECT exists(SELECT 1 FROM domains WHERE hostname = $1)`, name.Hostname).Scan(&exists); err != nil {
+			return err
+		}
+		if exists {
+			return ErrNameTaken
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO domains (id, application_id, hostname, kind, status, zone, secret_id)
+			VALUES ($1, $2, $3, 'custom', 'pending_dns', $4, $5)`,
+			name.ID, applicationID, name.Hostname, name.Zone, name.SecretID); err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+				return ErrNameTaken
+			}
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+// RemoveName takes a name from an application.
+func (s *Store) RemoveName(ctx context.Context, applicationID, hostname string) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM domains WHERE application_id = $1 AND kind = 'custom' AND hostname = $2`, applicationID, hostname)
+	return err
+}
+
 // CustomNames are the names a person gave an application, with whether
 // each one is published yet.
 func (s *Store) CustomNames(ctx context.Context, applicationID string) (map[string]bool, error) {

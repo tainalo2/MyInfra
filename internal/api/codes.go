@@ -38,6 +38,7 @@ var errorCodes = map[string]string{
 	"Choisissez une machine.":                                                   "pick_machine",
 	"Choisissez un cluster.":                                                    "pick_cluster",
 	"Dix noms au plus.":                                                         "ten_names",
+	"L'adresse de MyInfra se change depuis Transfert.":                          "self_names",
 	"Cette machine appartient à un cluster.":                                    "machine_in_cluster",
 	"Ce cluster est lu par Argo CD.":                                            "argo_readonly",
 	"Ce nom est déjà dans la liste.":                                            "name_listed",

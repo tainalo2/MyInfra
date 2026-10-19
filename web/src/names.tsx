@@ -74,3 +74,14 @@ export function NameList({
     </Group>
   );
 }
+
+// namesOf turns the custom domains of an application back into rows.
+export function namesOf(domains: { hostname: string; kind: string; zone?: string }[] = []): AppName[] {
+  return domains
+    .filter((domain) => domain.kind === "custom")
+    .map((domain) => {
+      const zone = domain.zone ?? "";
+      const subdomain = zone && domain.hostname.endsWith(`.${zone}`) ? domain.hostname.slice(0, -zone.length - 1) : domain.hostname === zone ? "" : domain.hostname;
+      return { subdomain, zone };
+    });
+}
