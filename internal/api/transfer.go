@@ -317,8 +317,18 @@ func (a *API) startPodTransfer(w http.ResponseWriter, r *http.Request) {
 		refuse(http.StatusConflict, "Ce nom est déjà utilisé.")
 		return
 	}
-	if _, err := a.clusterHost(r.Context(), owner, clusterID); err != nil {
+	host, err := a.clusterHost(r.Context(), owner, clusterID)
+	if err != nil {
 		refuse(http.StatusBadRequest, err.Error())
+		return
+	}
+	// A MyInfra already in the cluster lives in the same namespace: a second
+	// one would take over its configuration, and a failure would remove it.
+	if present, err := podNamespaceExists(r.Context(), host); err != nil {
+		refuse(http.StatusBadGateway, "Le cluster ne répond pas.")
+		return
+	} else if present {
+		refuse(http.StatusConflict, "MyInfra tourne déjà dans ce cluster. Retirez-le d'abord, ou choisissez un autre cluster.")
 		return
 	}
 	// A name that already answers elsewhere belongs to something else, often
@@ -387,6 +397,12 @@ func (a *API) runPodTransfer(owner, clusterID, hostName, publicURL string) {
 	})
 	if err != nil {
 		a.setTransfer(false, "failed", "Préparation du pod", publicURL, "Une erreur est survenue.")
+		return
+	}
+	// Checked again just before: only a namespace this transfer creates is
+	// removed when it fails.
+	if present, err := podNamespaceExists(ctx, host); err != nil || present {
+		a.setTransfer(false, "failed", "Préparation du pod", publicURL, "MyInfra tourne déjà dans ce cluster. Retirez-le d'abord, ou choisissez un autre cluster.")
 		return
 	}
 	kept := false
@@ -969,6 +985,15 @@ func (a *API) podProxy(ctx context.Context, host deploy.Host, owner, clusterID, 
 	return a.applyProxy(ctx, host, store.ClusterLeader{ClusterID: clusterID, OwnerID: owner}, zones)
 }
 
+// podNamespaceExists tells whether a MyInfra already runs in the cluster.
+func podNamespaceExists(ctx context.Context, host deploy.Host) (bool, error) {
+	out, err := deploy.SSH(ctx, host, "k3s kubectl get ns "+transfer.PodNamespace+" -o name --ignore-not-found")
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) != "", nil
+}
+
 func pushSnapshot(ctx context.Context, base, token string, snap store.Snapshot) error {
 	body, err := json.Marshal(snap)
 	if err != nil {
@@ -993,7 +1018,8 @@ func pushSnapshot(ctx context.Context, base, token string, snap store.Snapshot) 
 		if json.Unmarshal(raw, &payload) == nil && payload.Error != "" {
 			return errors.New(payload.Error)
 		}
-		return fmt.Errorf("La copie des données a échoué.")
+		// Not an answer of MyInfra: the proxy, or a copy that was already set up.
+		return fmt.Errorf("La nouvelle copie a refusé les données (HTTP %d).", res.StatusCode)
 	}
 	return nil
 }
