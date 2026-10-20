@@ -537,8 +537,8 @@ export function ServerCard({
       {server.plan ? (
         <p className="text-muted">
           {server.plan.name} · {server.plan.vcpu} vCPU · {memory(server.plan.memoryMb)}
-          {server.plan.diskGb > 0 ? ` · ${server.plan.diskGb} Go` : ""}
-          {server.plan.storageGb ? ` · ${server.plan.storageLabel} ${server.plan.storageGb} Go` : ""}
+          {server.plan.diskGb > 0 ? ` · ${server.plan.diskGb} ${text("unit.gb")}` : ""}
+          {server.plan.storageGb ? ` · ${server.plan.storageLabel} ${server.plan.storageGb} ${text("unit.gb")}` : ""}
           {" · "}
           {server.plan.period === "month"
             ? formatPrice(server.plan.monthly, false, server.plan.currency)

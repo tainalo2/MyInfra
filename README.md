@@ -1,34 +1,147 @@
 # MyInfra
 
-MyInfra puts an application online without asking you to know Docker or Kubernetes.
+**Your own application platform, on servers you rent.** Open source, self-hosted, Apache-2.0.
 
-You pick an application, a name, and a place to run it: a machine you already have, or a group of machines. MyInfra handles what you can see: the domain name, the certificate, the proxy, and keeping the application running. The screen talks about applications, machines, and domains. It does not talk about namespaces, ingresses, or ports.
+MyInfra puts an application online without asking you to know Docker or Kubernetes. You pick an application, a name, and a place to run it: a machine you already have, or a cluster of machines bought from your cloud provider. MyInfra handles the domain name, the HTTPS certificate, the proxy, the redundancy, and keeping the application running. The screen talks about applications, servers, and addresses — not namespaces, ingresses, or ports.
 
-The program is open source. The published image contains the same program. Anyone can read what they run.
+It is one program you run yourself, on your laptop or on a server. There is no account to create, no subscription, and no hosted service: the code you read is the code you run. **It is free**, under the Apache-2.0 license; you only pay your provider for the servers you choose.
 
-Apache-2.0 license.
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/tainalo2/MyInfra?include_prereleases)](https://github.com/tainalo2/MyInfra/releases)
+[![CI](https://github.com/tainalo2/MyInfra/actions/workflows/ci.yml/badge.svg)](https://github.com/tainalo2/MyInfra/actions/workflows/ci.yml)
+
+Project page: **https://tainalo2.github.io/MyInfra/** — in English, French, German, Italian and Portuguese (for example [`?lang=fr`](https://tainalo2.github.io/MyInfra/?lang=fr)).
+
+![Overview: every server on a map, the applications and their pods, what needs attention, and the hourly cost](docs/screenshots/overview.png)
+
+## Contents
+
+- [Screenshots](#screenshots)
+- [Features](#features)
+- [Quick start](#quick-start)
+- [Technologies](#technologies)
+- [Architecture](#architecture)
+- [Build it yourself](#build-it-yourself)
+- [How it works](#how-it-works)
+- [Validated integrations](#validated-integrations)
+- [Transparency](#transparency)
+
+## Screenshots
+
+The screenshots show demo data (invented names, `example.com` domains, documentation addresses) in the dark theme. The interface also has a light theme and five languages: English, French, German, Italian and Portuguese.
+
+| | |
+| --- | --- |
+| ![Application page](docs/screenshots/application.png) | ![Catalogue](docs/screenshots/catalogue.png) |
+| **An application**: status, address, resources, where its image comes from, its pods and addresses. | **The catalogue**: ready-made applications, each with the registry its image comes from. |
+| ![Clusters](docs/screenshots/clusters.png) | ![Imported images](docs/screenshots/images.png) |
+| **Clusters and machines**: nodes across providers and places, usage and billed cost. | **Imported images**: bring your own image as a `docker save` archive, sent or fetched from a URL. |
+| ![Applications](docs/screenshots/applications.png) | ![Image registries](docs/screenshots/registries.png) |
+| **Applications**: every application and its state at a glance. | **Image registries**: logins for private registries, checked before they are saved. |
+| ![Automatic redundancy](docs/screenshots/redundancy.png) | ![Transfer](docs/screenshots/transfer.png) |
+| **Automatic redundancy**: copies on different servers, continuous backups, replicated databases — one button. | **Start locally, continue online**: move MyInfra itself to a server or into your cluster. |
+| ![Providers](docs/screenshots/providers.png) | ![DNS](docs/screenshots/dns.png) |
+| **Providers**: your own accounts at Scaleway, Hetzner, OVHcloud and nine more. | **DNS**: records written and removed for every address. |
+| ![Terminal](docs/screenshots/terminal.png) | ![Overview with a selection](docs/screenshots/overview-selection.png) |
+| **Terminal**: a shell on any server or inside any pod, in the browser. | **Overview**: pick an application to see the servers that run it. |
+
+On a phone, the same application, laid out for the thumb:
+
+<p>
+  <img src="docs/screenshots/mobile-overview.png" alt="Overview on a phone" width="260">
+  <img src="docs/screenshots/mobile-application.png" alt="Application page on a phone" width="260">
+</p>
 
 ## Features
 
-- **Overview.** The first screen after signing in. A map shows where the machines run; switch it to applications or pods, where each machine ring shows the state of its pods. Pick an application to light up the machines that run its pods. A panel lists what needs attention: failures, deployments and removals in progress, and applications whose pods all run on a single machine of a larger cluster. The hourly and monthly cost of the machines is shown at the top. ⌘K (Ctrl K) opens a search to jump to any application, machine, or page.
-- **Catalogue.** Ready-made applications (site, database, tool). Pick one, or start from an image.
+**Run applications**
+
+- **Catalogue.** Ready-made applications (sites, wikis, monitoring, notes, media…). Pick one, or start from any image. Each one says which registry its image is pulled from.
 - **One machine or a cluster.** The same form. On a machine, the application is a Docker container. On a cluster, it becomes Kubernetes pods.
-- **Pause.** The pods stop. The disk and the data stay. Visitors see a page that says the service is paused.
-- **Domains and certificates.** MyInfra writes the DNS record when an account is linked, then obtains the certificate. Otherwise it shows the record to create.
-- **Providers.** Buy and destroy a machine at Hetzner, Scaleway, OVH, DigitalOcean, Infomaniak, UpCloud, Akamai, Vultr, Exoscale, Gcore, Kamatera, and IONOS, with your own token. MyInfra does not resell compute.
-- **A machine alone.** A machine bought from a provider, or one you already have with a command to paste. Its applications run in Docker, without a cluster.
-- **Clusters.** Several linked machines, k3s, Traefik at the edge. Kubernetes talks between nodes over WireGuard only. The number of control planes is odd. A name points to every node, so losing one node keeps it up.
-- **Redundancy.** When every pod of an app runs on one server, a button spreads it. An app without a disk runs several copies on different servers. An app that keeps its data in SQLite, such as Uptime Kuma, keeps one copy whose database is backed up continuously; if its server fails, it starts again on another one with its data. An app that can use PostgreSQL, such as Vikunja, moves to a database replicated on two servers and its files to the cluster storage, then runs several copies.
-- **Templates.** A template describes an application, a machine, or a cluster, then deploys, exports, or deletes it.
-- **SSH keys.** Generate an ed25519 key, or import a public key you already own. The chosen keys are allowed on the machines.
-- **Secrets.** Declare keys, then check the applications allowed to receive them. Values never come back to the screen. On a cluster they become a Kubernetes Secret. On a machine, environment variables. An application variable with the same name wins.
-- **Vault.** Provider, DNS, and Git tokens, encrypted. A list never returns the secret in clear text.
-- **Logs, terminal, meters.** Pod status, a terminal on the machine or the pod, CPU and memory use.
-- **Transfer.** Move MyInfra itself to a new machine or to a pod in the cluster, and follow the steps.
-- **Copies.** Several MyInfra instances of the same owner exchange their database so nothing is left behind. A replica copy reads and syncs, and does not drive the machines: what it records is carried out by the main copy.
-- **Online means online.** An application is shown online once its pods are ready and its address answers in HTTPS with a valid certificate.
-- **Destruction.** Deleting an application, a machine, or a cluster asks you to type the name again. Destroying the cluster that runs MyInfra asks for a separate phrase.
-- **One file.** In production, one executable contains the interface. Linux, macOS, and Windows.
+- **Your own images.** Use any public image, add a private registry (Docker Hub, GitHub Container Registry, GitLab, Quay, or your own), or import an image you built: the `docker save` archive, sent from the browser or fetched from a raw URL. MyInfra loads it on the servers itself over SSH, so they never need to reach MyInfra or a registry.
+- **Domains and certificates.** MyInfra writes the DNS record when a DNS account is linked, then gets the Let's Encrypt certificate. Addresses can be added and removed while the application runs.
+- **Redundancy.** When every pod of an application runs on one server, a button spreads it. A stateless application runs several copies on different servers. A SQLite application such as Uptime Kuma keeps one copy whose database is backed up continuously and restarts elsewhere with its data. An application that can use PostgreSQL, such as Vikunja, moves to a database replicated on two servers.
+- **Pause.** The pods stop; the disk and the data stay. Visitors see a page saying the service is paused.
+- **Logs, terminal, meters.** Pod status and logs, a terminal on the machine or in the pod, CPU, memory and disk use.
+- **Online means online.** An application is shown online only once its pods are ready and its address answers in HTTPS with a valid certificate.
+
+**Run servers**
+
+- **Providers.** Buy and destroy machines at Hetzner, Scaleway, OVH, DigitalOcean, Infomaniak, UpCloud, Akamai, Vultr, Exoscale, Gcore, Kamatera and IONOS, with your own API token. MyInfra does not resell compute.
+- **Bring your own machine.** Any Linux machine you already have joins with one command to paste.
+- **Clusters.** Linked machines running k3s, Traefik at the edge, Kubernetes traffic between nodes over WireGuard only, an odd number of control planes, a name pointing at every node.
+- **Overview.** A map of every server; switch to applications or pods. Pick an application to light up the servers that run it. A panel lists what needs attention, and the hourly and monthly cost is always at the top.
+- **Templates.** Describe applications, machines and a cluster once; deploy, export or share it.
+
+**Keep control**
+
+- **Vault.** Provider, DNS, Git and registry tokens, SSH private keys and application secrets are sealed with AES-GCM before they are stored. A list never returns a secret in clear text.
+- **Secrets for applications.** Declare keys, then choose the applications allowed to receive them.
+- **Copies.** Several MyInfra instances of the same owner keep their databases in sync; a replica does not drive the machines.
+- **Transfer.** Move MyInfra itself to a new machine or into a pod of the cluster, and follow the steps.
+- **Careful destruction.** Deleting an application, a machine or a cluster asks you to type its name again.
+- **Mobile.** Bottom tabs, step-by-step forms, a full-screen terminal with an Esc/Tab/Ctrl key bar.
+- **One file.** One executable contains the interface and its PostgreSQL, for Linux, macOS and Windows.
+
+## Quick start
+
+### The executable
+
+Download the file for your system from the [latest release](https://github.com/tainalo2/MyInfra/releases/latest), then run it:
+
+```sh
+chmod +x myinfra_*_linux_amd64        # macOS: also xattr -d com.apple.quarantine <file>
+./myinfra_*_linux_amd64
+```
+
+It prints its address, for example `http://127.0.0.1:8080`, and opens it. On the first start it creates `~/.myinfra`, writes a master key there, and starts the PostgreSQL it carries. Choose a password, then follow the guided start: an SSH key, a provider token, a DNS account. Each step can be skipped.
+
+### Docker Compose
+
+Each release ships a `compose.yaml` that starts PostgreSQL and MyInfra with the image of that version:
+
+```sh
+export POSTGRES_PASSWORD=$(openssl rand -hex 16)
+export MYINFRA_MASTER_KEY=$(head -c 32 /dev/urandom | base64)   # keep it: it opens your secrets
+export MYINFRA_PUBLIC_URL=https://myinfra.example.com
+docker compose up -d
+```
+
+The image is `ghcr.io/tainalo2/myinfra`, for `linux/amd64` and `linux/arm64`.
+
+### Settings
+
+| Variable | Meaning |
+| --- | --- |
+| `DATABASE_URL` | Use an external PostgreSQL instead of the embedded one. Then `MYINFRA_MASTER_KEY` is required. |
+| `MYINFRA_MASTER_KEY` | 32 random bytes, base64. Seals every secret. Never stored in the database. |
+| `MYINFRA_ADDR` | Listen address, `:8080` by default. |
+| `MYINFRA_PUBLIC_URL` | The address machines and browsers use to reach MyInfra. |
+| `MYINFRA_ACME_EMAIL` | The Let's Encrypt account address. |
+| `MYINFRA_NO_BROWSER=1` | Do not open the browser at startup. |
+
+## Technologies
+
+| Layer | Technology | What it does in MyInfra |
+| --- | --- | --- |
+| Control plane | **Go 1.24**, standard library HTTP server | The single program: API, deliveries, provider calls, SSH sessions. |
+| State | **PostgreSQL 16**, **pgx v5** | Applications, servers, secrets (sealed), events, imported images. An embedded PostgreSQL is unpacked on first start when `DATABASE_URL` is not set. |
+| Encryption | **AES-256-GCM**, one data key per secret wrapped by the master key | The vault for tokens, private keys, variables and registry logins. |
+| SSH | **golang.org/x/crypto/ssh**, **ed25519** keys | Every action on a machine: running the agent, applying manifests, streaming images. |
+| Interface | **React 19**, **TypeScript 5**, **React Router 7**, **Vite 6** | The web interface, embedded in the executable. |
+| Design | **Tailwind CSS 4**, **Geist** fonts, **Lucide** icons, **Simple Icons** | Light and dark themes, phone and desktop layouts. |
+| Terminal | **xterm.js 6**, WebSocket (**coder/websocket**) | The terminal on a machine or in a pod. |
+| Machine alone | **Docker Engine**, **Traefik** | Containers, routing and certificates on a single server. |
+| Cluster | **k3s**, **Traefik**, **WireGuard** | Kubernetes, the edge proxy, and an encrypted network between nodes. |
+| Installation | **Ansible**, **cloud-init**, optional **OpenTofu** | Installing WireGuard and k3s on a new node; describing Hetzner and Scaleway machines and DNS records. |
+| Certificates | **Let's Encrypt** (TLS-ALPN challenge via Traefik) | HTTPS for every address, kept by MyInfra across Traefik restarts. |
+| Cluster storage | **Garage** (S3 object store) | Three copies of each object on three servers, for backups and files. |
+| Databases | **Litestream**, **CloudNativePG** | Continuous SQLite backups; replicated PostgreSQL for applications that support it. |
+| Images | **OCI** and **Docker** registries, `docker save` archives | Public images, private registries with logins, and images imported into MyInfra. |
+| Providers | Hetzner, Scaleway, OVH, DigitalOcean, Infomaniak, UpCloud, Akamai, Vultr, Exoscale, Gcore, Kamatera, IONOS APIs | Buying, listing and destroying machines. |
+| DNS | OVH, Cloudflare, Scaleway, Hetzner DNS APIs | Writing and removing the records of each address. |
+| Packaging | One static binary; **distroless** image for `linux/amd64` and `linux/arm64` | The release artifacts. |
+| Quality | `go test`, **Playwright** browser tests, **GitHub Actions** | Checks on every push; releases built and published by CI. |
 
 ## Architecture
 
@@ -50,11 +163,7 @@ flowchart TB
   k3s --> pods[Application pods]
 ```
 
-The control plane is the only program you start. The interface is inside it. PostgreSQL keeps the state. The machines do not keep MyInfra's database: they run the applications.
-
-On a single machine, MyInfra installs Docker and Traefik, then starts the container over SSH. On a cluster, MyInfra opens an SSH session to a node and applies a Kubernetes manifest. Traefik receives the traffic in both cases.
-
-A service with a disk gets a volume local to the node, readable and writable by a single pod. Several copies of a service without a disk replace one another. Several copies of a service with a disk each get their own volume: that is not a shared folder, and it is not a database replica.
+The control plane is the only program you start. The interface is inside it. PostgreSQL keeps the state. The machines do not keep MyInfra's database: they run the applications, and they never need to reach MyInfra — every action goes out over SSH.
 
 ```mermaid
 flowchart LR
@@ -65,82 +174,120 @@ flowchart LR
     manifest[Manifest]
     agent[Docker agent]
     provision[Providers]
+    images[Image store]
   end
   api --> box
   api --> store
   api --> manifest
   api --> agent
   api --> provision
+  api --> images
   manifest --> k3s[k3s over SSH]
   agent --> docker[Docker on the machine]
+  images --> load[ctr import / docker load over SSH]
 ```
 
-## Tools
+## Build it yourself
 
-| Role | Tool |
-| --- | --- |
-| Control plane | Go 1.24 |
-| State | PostgreSQL, pgx driver |
-| Interface | React 19, TypeScript, Vite, React Router |
-| Style | Tailwind CSS v4, Geist, Lucide icons |
-| Encryption | AES-GCM, one data key per secret, wrapped by the master key |
-| SSH keys | ed25519 |
-| Single machine | Docker Engine, Traefik |
-| Cluster | k3s, Traefik, WireGuard between nodes |
-| Certificates | Let's Encrypt, obtained by Traefik with the TLS-ALPN challenge once the DNS record answers |
-| Cluster storage | Garage, an S3 object store on every node, three copies of each object on three servers |
-| Backups and databases | Litestream for SQLite apps, CloudNativePG for PostgreSQL |
-| Machines | Hetzner, Scaleway, OVH, DigitalOcean, Infomaniak, UpCloud, Akamai, Vultr, Exoscale, Gcore, Kamatera, and IONOS APIs |
-| DNS | OVH, Cloudflare, Scaleway, Hetzner DNS |
-| Image | One static binary, packed in a distroless image, published for linux/amd64 and linux/arm64 |
-| Development | `npm run dev`, `./build` |
+### Requirements
 
-## Validated APIs
+- **Go 1.24** or newer
+- **Node.js 24** and **npm**
+- **unzip** (to pack PostgreSQL into the executable)
+- For development only: a local **PostgreSQL 16** (`initdb`, `pg_ctl`), which `./dev` uses
+- Optional: **Docker** to build the image
 
-These integrations have been tried and confirmed. The others listed above are in the program, and have not been validated yet.
+### Get the code
+
+```sh
+git clone https://github.com/tainalo2/MyInfra.git
+cd MyInfra
+```
+
+### Run in development
+
+```sh
+./dev            # or npm run dev; on Windows: dev.cmd / dev.ps1
+```
+
+`./dev` starts a PostgreSQL cluster in `.pgdata` (port 54329) when `DATABASE_URL` points at this machine, then the Go API on `:8080` and the Vite interface on `:5173` with hot reload. One terminal is enough; stopping it keeps `.pgdata`. `./dev reset` asks for confirmation, saves `~/.myinfra/dev.sql`, then deletes `.pgdata`; `./dev restore` loads that file back. With `MYINFRA_PEERS` naming a main copy, the development copy runs as a replica so the two never drive the same machines.
+
+### Build the executable
+
+```sh
+./build                  # this system, into dist/
+./build linux arm64      # one target
+./build all              # Linux, macOS and Windows, amd64 and arm64
+```
+
+`./build` builds the interface, embeds it, downloads the PostgreSQL binaries for the target and packs them in, then compiles a static Go binary into `dist/`. `VERSION` and `IMAGE` set what the executable reports (`myinfra --version`). On Windows, use `build.cmd` or `build.ps1`. Windows arm64 has no embedded PostgreSQL and needs `DATABASE_URL`.
+
+### Build the Docker image
+
+```sh
+docker build -t myinfra --build-arg VERSION=dev .
+docker run -p 8080:8080 -e DATABASE_URL=… -e MYINFRA_MASTER_KEY=… myinfra
+```
+
+The image holds the static binary on a distroless base; it uses an external PostgreSQL (see `deploy/compose.yaml`).
+
+### Test
+
+```sh
+go vet ./... && go test ./...                         # uses the dev PostgreSQL on port 54329 when needed
+cd web && npx tsc --noEmit -p . && npm run build      # type-check and build the interface
+E2E_URL=http://127.0.0.1:8080 npm run e2e             # browser tests against a MyInfra started empty
+```
+
+### Release
+
+Push a tag such as `v1.4.0`, or run the **Publication** workflow from the Actions tab with a version. It checks the code, builds the `./build` executables for the six targets (each one is checked, and the Linux one is started with its embedded PostgreSQL), builds the multi-architecture image on `ghcr.io`, and publishes a GitHub release with the executables, a `compose.yaml` pinned to that image, and `SHA256SUMS`. A version with a suffix such as `1.4.0-rc.1` is a pre-release and leaves the `latest` image alone.
+
+## How it works
+
+**Startup.** With no variables, the binary creates `~/.myinfra`, writes a master key there, and starts the PostgreSQL it carries. The data stays when the process stops. Then you choose a password; one account per installation. On the pages that install a machine, a button installs Ansible into `~/.myinfra` when it is missing, and OpenTofu for Hetzner and Scaleway when `MYINFRA_TOFU_DIR` is set. Neither needs an administrator password.
+
+**Create an application.** The catalogue fills in the image, the port, the disk and the variables. For any other image, MyInfra reads the port and the folders to keep that the image declares (`EXPOSE`, `VOLUME`). The control plane stores the application, then delivers it.
+
+**Delivery on a cluster.** MyInfra renders a manifest — namespace, Deployment or StatefulSet, Service, Traefik routes, a Secret for the variables, and a pull secret when the image comes from a private registry — and applies it over SSH. An unreadable image, name or variable is not applied, and the application in place is not removed. The first SSH key of a node is remembered; a different key is refused.
+
+**Delivery on a machine.** MyInfra runs the agent script on the machine over SSH. The script creates the Docker network, the volume if the application keeps files, and the container; Traefik sends the domain name to that container.
+
+**Imported images.** An archive from `docker save` (Docker or OCI layout, compressed or not, up to 4 GB) is read, renamed `myinfra.local/<name>:<version>` and stored in PostgreSQL. Before a delivery, MyInfra streams it over SSH to every server that needs it (`ctr images import` on a cluster node, `docker load` on a machine) and checks again every ten minutes that it is still there.
+
+**Addresses.** A new address waits for its DNS record, then the next delivery gives it a route and Traefik a certificate. A removed address loses its record, then its route. Whether an address answers is checked against the zone's own name servers, so a resolver cache cannot keep an application waiting.
+
+**Machines.** A cluster node first joins the WireGuard network at an address that never changes, then installs k3s with that address. Removing a node moves its pods to the others before the machine is destroyed. A deployment cut off by a restart starts again where it stopped; a purchase cut off finds its machine again instead of buying a second one.
+
+**Redundancy.** With at least three linked servers, MyInfra installs Garage on the cluster: each object lives on three servers. A SQLite application gets Litestream next to it and restores its database when it starts, so Kubernetes can start it on any node 30 seconds after its node stopped answering. An application moving to PostgreSQL is stopped, its data dumped and restored into a CloudNativePG cluster of two instances, then checked before it runs several copies; if anything fails, it goes back to its disk, which MyInfra never removes. Traefik gets its certificates back when it moves, so moving asks Let's Encrypt for nothing.
+
+**Secrets.** Values are sealed before they are written and never returned by the API. At delivery time, MyInfra opens them and attaches them to the allowed application; if opening fails, the application is not redeployed without its secrets.
+
+**Copies.** Two MyInfra instances of the same owner exchange database rows; the newer version wins. Sessions and imported images do not travel. A replica deploys nothing.
+
+**Transfer.** MyInfra can move itself: to a machine with cloud-init, or into the cluster as two pods with Postgres. The data is copied, then the old copy stops.
+
+## Validated integrations
+
+These integrations have been tried end to end. The others listed above are in the program and have not been validated yet.
 
 | Kind | Validated |
 | --- | --- |
 | Provider | Scaleway, Hetzner, DigitalOcean, Vultr, OVH, Exoscale |
 | DNS | OVH |
+| Registry | None yet for private pulls; logins are checked against Docker Hub and GitHub Container Registry |
 | Git | None yet |
-
-## How it works
-
-**Startup.** With no variables, the binary creates `~/.myinfra`, writes a master key there, and starts the PostgreSQL it carries. The data stays when the process stops. Then you choose a password. MyInfra asks, in order, to install what is missing, then to add a first SSH key, a first provider and a first DNS account. Each step can be skipped. The terminal prints the address, for example `MyInfra : http://127.0.0.1:8080`. One session is enough: one account. `DATABASE_URL` keeps using an external database, and then `MYINFRA_MASTER_KEY` is still required. The key never goes into the database. `MYINFRA_NO_BROWSER=1` skips opening the browser. `MYINFRA_ACME_EMAIL` sets the Let's Encrypt account address, otherwise `certif@` followed by the zone. Windows arm64 has no embedded PostgreSQL and still needs `DATABASE_URL`.
-
-On the pages that install a machine, a button installs Ansible into `~/.myinfra` when it is missing. The same pages offer OpenTofu for a Hetzner or Scaleway machine when `MYINFRA_TOFU_DIR` is set and `tofu` is missing. Neither install needs an administrator password.
-
-**Create an application.** Source is the first choice. The catalogue fills in the image, the port, the disk, and the variables. You can cancel the selection and bring the list back. The control plane stores the application, then delivers it.
-
-**Delivery on a cluster.** MyInfra renders a manifest: namespace, Deployment or StatefulSet, Service, Traefik routes, and a Secret for the variables. The manifest is sent as base64, then `kubectl apply`. An unreadable image, name, or variable is not applied, and the application already in place is not removed. The first SSH key of a node is remembered. A different key is refused.
-
-**Delivery on a machine.** MyInfra runs the agent script on the machine over SSH, so the machine does not need to reach MyInfra. When it can, the agent also fetches the script by itself. The script creates the Docker network, the volume if the application keeps files, and the container. Traefik sends the domain name to that container.
-
-**Port and folder.** For an application started from an image, MyInfra reads the port and the folders to keep that the image declares (`EXPOSE`, `VOLUME`). A declared folder gets a disk. The port can still be set by hand in the settings.
-
-**Machines.** A cluster node first joins the WireGuard network, at an address that never changes, then installs k3s with that address. Removing a node moves its pods to the others before the machine is destroyed. A deployment cut off by a restart of MyInfra starts again where it stopped; a purchase cut off finds its machine again instead of buying a second one. Machines are tagged with their MyInfra server at Scaleway and Hetzner.
-
-**Redundancy.** With at least three linked servers, MyInfra installs Garage on the cluster: every node holds part of the data, each object lives on three servers, and losing one changes nothing. A SQLite app gets Litestream next to it: its database is copied into Garage within a second. Its pod keeps no node disk; it restores the database when it starts, so Kubernetes can start it on any node, 30 seconds after its node stopped answering. An app moving to PostgreSQL is stopped, its data dumped and restored into a CloudNativePG cluster of two instances on two servers, then checked: the dump must exist and the tables that had rows must have rows after. Only then does it run several copies. If anything fails, it goes back to its disk. The old disk is never removed by MyInfra. Traefik, CoreDNS and the database operator also move within about a minute when their node fails, and Traefik gets its certificates back when it starts, so moving asks Let's Encrypt for nothing.
-
-**Secrets.** Values are sealed before they are written. The API does not return them. At delivery time, MyInfra opens them and attaches them to the allowed application. If opening fails, the application is not redeployed without its secrets. An application variable whose name looks like a password, a key or a token is sealed the same way. The screen shows it masked; showing it is recorded in the history. A template file does not carry it.
-
-**Copies.** Two MyInfra instances of the same owner exchange database rows. The newer version wins. Sessions do not travel. A copy marked as a replica deploys nothing and refuses the actions that act on machines right away.
-
-**Transfer.** MyInfra can move itself. To a machine, cloud-init installs Docker and starts the program. To a cluster, two pods and Postgres are created, the data is copied, then the old copy stops. A page follows the steps.
-
-**Build.** `npm run dev` starts a PostgreSQL cluster in `.pgdata` when `DATABASE_URL` points at this machine, then the API and the interface, as a replica when `MYINFRA_PEERS` names a main copy, so the two do not drive the machines at the same time. Without a peer it is the main copy: a replica alone would record requests that nothing carries out, and it refuses them. One terminal is enough. Stopping it leaves `.pgdata` in place. `./dev reset` asks for confirmation, saves `~/.myinfra/dev.sql`, then deletes `.pgdata`. `./dev restore` loads that file back. `./build` produces one executable, interface included, and packs PostgreSQL for that system; it needs Go, npm and `unzip`. `./build all` covers Linux, macOS, and Windows, amd64 and arm64. `go test ./...` runs the tests; those that need PostgreSQL use the local cluster on port 54329. `npm run e2e` in `web` runs the browser tests against a MyInfra started on `E2E_URL`. The CI runs both on each push.
-
-**Release.** Pushing a tag such as `v1.4.0`, or running the *Publication* workflow from the Actions tab with a version, checks the code, builds the `./build` executables (PostgreSQL included) for Linux, macOS and Windows, amd64 and arm64, and the `linux/amd64` and `linux/arm64` image on `ghcr.io`, then publishes a GitHub release with the executables, a `compose.yaml` pinned to that image, and `SHA256SUMS`. A version with a suffix, such as `1.4.0-rc.1`, is published as a pre-release and leaves the `latest` image alone. `myinfra --version` prints the version an executable was built as.
 
 ## Transparency
 
 This project was 100% vibe coded.
 
-test it, brake it, fix it, use it
+> test it, brake it, fix it, use it
 
-The code, the interface, and the image are public so anyone can check what they run, break it, fix it, and then use it. Your installation's secrets are not in the repository or in the image: they are encrypted in your database, or injected at startup.
+The code, the interface and the image are public so anyone can check what they run, break it, fix it, and then use it. Your installation's secrets are not in the repository or in the image: they are sealed in your database, or injected at startup.
 
-## Page
+## License
 
-The project page is [docs/index.html](docs/index.html). To publish it: in the GitHub repository, Pages, the `docs` folder on the main branch.
+[Apache-2.0](LICENSE).
+
+The project page lives in [docs/index.html](docs/index.html), published by GitHub Pages from the `docs` folder of the `main` branch.

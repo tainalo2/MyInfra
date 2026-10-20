@@ -818,6 +818,18 @@ const fr = {
   "images.of": "Image de {name}",
   "images.proposed": "Version proposée : {version}",
   "images.sourceHint": "Une image privée ? Ajoutez son registre, ou importez l'image elle-même :",
+  "unit.kb": "Ko",
+  "unit.byte": "o",
+  "usage.disk": "Disque",
+  "images.choose": "Choisir un fichier",
+  "images.noFile": "Aucun fichier choisi",
+  "connect.noProvider": "Aucun provider.",
+  "connect.newProvider": "Nouveau provider",
+  "connect.noDns": "Aucun compte DNS.",
+  "connect.newDns": "Nouveau compte DNS",
+  "connect.noGit": "Aucun compte Git.",
+  "connect.newGit": "Nouveau compte Git",
+  "connect.host": "Hôte",
 } as const;
 
 export type MsgKey = keyof typeof fr;
@@ -1567,6 +1579,18 @@ const en: Record<MsgKey, string> = {
   "images.of": "Image of {name}",
   "images.proposed": "Suggested version: {version}",
   "images.sourceHint": "A private image? Add its registry, or import the image itself:",
+  "unit.kb": "KB",
+  "unit.byte": "B",
+  "usage.disk": "Disk",
+  "images.choose": "Choose a file",
+  "images.noFile": "No file chosen",
+  "connect.noProvider": "No provider.",
+  "connect.newProvider": "New provider",
+  "connect.noDns": "No DNS account.",
+  "connect.newDns": "New DNS account",
+  "connect.noGit": "No Git account.",
+  "connect.newGit": "New Git account",
+  "connect.host": "Host",
 };
 
 const pt: Record<MsgKey, string> = {
@@ -2306,6 +2330,18 @@ const pt: Record<MsgKey, string> = {
   "images.of": "Imagem de {name}",
   "images.proposed": "Versão proposta: {version}",
   "images.sourceHint": "Uma imagem privada? Adicione o seu registo, ou importe a própria imagem:",
+  "unit.kb": "KB",
+  "unit.byte": "B",
+  "usage.disk": "Disco",
+  "images.choose": "Escolher um ficheiro",
+  "images.noFile": "Nenhum ficheiro escolhido",
+  "connect.noProvider": "Nenhum fornecedor.",
+  "connect.newProvider": "Novo fornecedor",
+  "connect.noDns": "Nenhuma conta DNS.",
+  "connect.newDns": "Nova conta DNS",
+  "connect.noGit": "Nenhuma conta Git.",
+  "connect.newGit": "Nova conta Git",
+  "connect.host": "Anfitrião",
 };
 
 const it: Record<MsgKey, string> = {
@@ -3044,6 +3080,18 @@ const it: Record<MsgKey, string> = {
   "images.of": "Immagine di {name}",
   "images.proposed": "Versione proposta: {version}",
   "images.sourceHint": "Un'immagine privata? Aggiungi il suo registro, o importa l'immagine stessa:",
+  "unit.kb": "KB",
+  "unit.byte": "B",
+  "usage.disk": "Disco",
+  "images.choose": "Scegli un file",
+  "images.noFile": "Nessun file scelto",
+  "connect.noProvider": "Nessun provider.",
+  "connect.newProvider": "Nuovo provider",
+  "connect.noDns": "Nessun account DNS.",
+  "connect.newDns": "Nuovo account DNS",
+  "connect.noGit": "Nessun account Git.",
+  "connect.newGit": "Nuovo account Git",
+  "connect.host": "Host",
 };
 
 const de: Record<MsgKey, string> = {
@@ -3784,6 +3832,18 @@ const de: Record<MsgKey, string> = {
   "images.of": "Image von {name}",
   "images.proposed": "Vorgeschlagene Version: {version}",
   "images.sourceHint": "Ein privates Image? Fügen Sie seine Registry hinzu oder importieren Sie das Image selbst:",
+  "unit.kb": "KB",
+  "unit.byte": "B",
+  "usage.disk": "Festplatte",
+  "images.choose": "Datei wählen",
+  "images.noFile": "Keine Datei gewählt",
+  "connect.noProvider": "Kein Anbieter.",
+  "connect.newProvider": "Neuer Anbieter",
+  "connect.noDns": "Kein DNS-Konto.",
+  "connect.newDns": "Neues DNS-Konto",
+  "connect.noGit": "Kein Git-Konto.",
+  "connect.newGit": "Neues Git-Konto",
+  "connect.host": "Host",
 };
 
 const tables: Record<Lang, Record<MsgKey, string>> = { fr, en, pt, it, de };

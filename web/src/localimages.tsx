@@ -181,15 +181,23 @@ function AddImage({ onAdded }: { onAdded: (image: LocalImage) => void }) {
         </div>
       </Group>
       {mode === "file" ? (
-        <Field label={text("images.file")} hint={text("images.fileHint")}>
-          <input
-            ref={input}
-            type="file"
-            accept=".tar,.tar.gz,.tgz,application/x-tar,application/gzip"
-            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-            className={`block w-full rounded-md border border-line bg-canvas px-3 py-2 ${focus}`}
-          />
-        </Field>
+        <Group label={text("images.file")} hint={text("images.fileHint")}>
+          {/* The native control would speak the browser's language: a button speaks the interface's. */}
+          <label className={`flex min-h-11 cursor-pointer flex-wrap items-center gap-3 rounded-md border border-dashed border-line bg-canvas px-3 py-2 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus`}>
+            <input
+              ref={input}
+              type="file"
+              accept=".tar,.tar.gz,.tgz,application/x-tar,application/gzip"
+              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              className="sr-only"
+            />
+            <span className="inline-flex items-center gap-2 rounded-md border border-line bg-surface px-3 py-1.5">
+              <Icon icon={Upload} />
+              {text("images.choose")}
+            </span>
+            <span className={`min-w-0 break-all ${file ? "" : "text-faint"}`}>{file ? `${file.name} · ${size(file.size)}` : text("images.noFile")}</span>
+          </label>
+        </Group>
       ) : (
         <Field label={text("images.url")} hint={text("images.urlHint")}>
           <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="https://exemple.fr/mon-image.tar.gz" inputMode="url" autoCapitalize="off" spellCheck={false} />

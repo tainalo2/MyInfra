@@ -136,7 +136,7 @@ function TerminalView({ title, socket }: { title: string; socket: string }) {
           </span>
         }
       />
-      <div className="-mx-4 flex h-[calc(100dvh-13rem-env(safe-area-inset-bottom))] flex-col md:mx-0 md:h-[32rem]">
+      <div className="-mx-4 flex h-[calc(100dvh-17rem-env(safe-area-inset-bottom))] flex-col md:mx-0 md:h-[32rem]">
         <div ref={host} className="min-h-0 flex-1 overflow-hidden border-y border-line bg-[#1c1917] md:rounded-md md:border" />
         <div className="flex gap-1 overflow-x-auto border-b border-line bg-surface p-1 md:hidden" aria-label={text("terminal.keys")}>
           {keys.map((key) => (

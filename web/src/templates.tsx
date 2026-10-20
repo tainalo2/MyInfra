@@ -939,7 +939,7 @@ function ServerLine({ server, providers, keys }: { server: TemplateServer; provi
       {provider?.name || server.providerName || text("ui.provider")}
       {server.location ? ` · ${server.location}` : ""}
       {server.offerId ? ` · ${server.offerId}` : ""}
-      {server.period === "month" ? " · mois" : server.period ? " · heure" : ""}
+      {server.period === "month" ? ` · ${text("ui.mois")}` : server.period ? ` · ${text("ui.heure")}` : ""}
       {quote ? ` · ${quote}` : ""}
       {named.filter(Boolean).length > 0 ? ` · ${named.filter(Boolean).join(", ")}` : ""}
     </p>
@@ -1058,7 +1058,7 @@ function summary(body: TemplateBody) {
   const servers = body.servers?.length ?? 0;
   const apps = body.applications?.length ?? 0;
   const cluster = body.clusterName ? `${text("field.cluster")} ${body.clusterName}` : text("ui.clusterAuLancement");
-  return `${cluster} · ${text(servers > 1 ? "template.serversMany" : "template.serversOne", { count: servers })} · ${text(apps > 1 ? "template.appsMany" : "template.appsOne", { count: apps })}`;
+  return `${cluster} · ${text(servers === 1 ? "template.serversOne" : "template.serversMany", { count: servers })} · ${text(apps === 1 ? "template.appsOne" : "template.appsMany", { count: apps })}`;
 }
 
 function stepText(status: string) {

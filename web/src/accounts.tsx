@@ -331,8 +331,8 @@ export function Providers() {
       icon={Cloud}
       kind="provider_token"
       options={providerOptions}
-      empty="Aucun provider."
-      createLabel="Nouveau provider"
+      empty={text("connect.noProvider")}
+      createLabel={text("connect.newProvider")}
     />
   );
 }
@@ -368,8 +368,8 @@ export function Dns() {
       icon={Globe}
       kind="dns_token"
       options={dnsOptions}
-      empty="Aucun compte DNS."
-      createLabel="Nouveau compte DNS"
+      empty={text("connect.noDns")}
+      createLabel={text("connect.newDns")}
       chooseFirst
     />
   );
@@ -387,9 +387,9 @@ export function Git() {
       icon={GitBranch}
       kind="git_token"
       options={gitHosts}
-      empty="Aucun compte Git."
-      createLabel="Nouveau compte Git"
-      selectLabel="Hôte"
+      empty={text("connect.noGit")}
+      createLabel={text("connect.newGit")}
+      selectLabel={text("connect.host")}
     />
   );
 }
