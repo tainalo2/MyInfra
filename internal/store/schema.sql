@@ -116,7 +116,7 @@ ALTER TABLE secrets ADD COLUMN IF NOT EXISTS key_id text NOT NULL DEFAULT '';
 
 ALTER TABLE secrets DROP CONSTRAINT IF EXISTS secrets_kind_check;
 
-ALTER TABLE secrets ADD CONSTRAINT secrets_kind_check CHECK (kind IN ('ssh_key', 'provider_token', 'dns_token', 'git_token'));
+ALTER TABLE secrets ADD CONSTRAINT secrets_kind_check CHECK (kind IN ('ssh_key', 'provider_token', 'dns_token', 'git_token', 'registry_token'));
 
 ALTER TABLE clusters ADD COLUMN IF NOT EXISTS origin text NOT NULL DEFAULT 'created';
 
@@ -292,3 +292,27 @@ ALTER TABLE application_services ADD COLUMN IF NOT EXISTS backup text NOT NULL D
 -- Empty: the service keeps its data on its disk. migrating: a replicated PostgreSQL
 -- is being built and the data moved into it. ready: the service runs from it.
 ALTER TABLE application_services ADD COLUMN IF NOT EXISTS database text NOT NULL DEFAULT '';
+
+-- Images a person brought: an archive from docker save, sent or fetched from a
+-- URL. MyInfra loads them on the servers itself, under myinfra.local/<name>:<tag>:
+-- the servers need not reach MyInfra, which often runs behind a home router.
+CREATE TABLE IF NOT EXISTS images (
+    id text PRIMARY KEY,
+    owner_id text NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    ref text NOT NULL UNIQUE,
+    source text NOT NULL CHECK (source IN ('upload', 'url')),
+    source_url text NOT NULL DEFAULT '',
+    size bigint NOT NULL,
+    digest text NOT NULL,
+    platform text NOT NULL DEFAULT '',
+    config bytea NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- The archive, cut in pieces: PostgreSQL holds it wherever MyInfra runs.
+CREATE TABLE IF NOT EXISTS image_chunks (
+    image_id text NOT NULL REFERENCES images (id) ON DELETE CASCADE,
+    seq integer NOT NULL,
+    data bytea NOT NULL,
+    PRIMARY KEY (image_id, seq)
+);

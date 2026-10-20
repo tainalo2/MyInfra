@@ -32,6 +32,22 @@ const billing: Record<string, Parameters<typeof text>[0]> = {
 
 const plain = { autoComplete: "off", spellCheck: false } as const;
 
+const registryHints: Record<string, Parameters<typeof text>[0]> = {
+  "registry-dockerhub": "registry.hintDockerhub",
+  "registry-ghcr": "registry.hintGhcr",
+  "registry-gitlab": "registry.hintGitlab",
+  "registry-quay": "registry.hintQuay",
+};
+
+// The registries MyInfra knows by name; any other is given by its address.
+export const registryOptions = [
+  { value: "registry-dockerhub", label: "Docker Hub", logo: "docker" },
+  { value: "registry-ghcr", label: "GitHub Container Registry", logo: "github" },
+  { value: "registry-gitlab", label: "GitLab Container Registry", logo: "gitlab" },
+  { value: "registry-quay", label: "Quay.io", logo: "quay" },
+  { value: "registry-custom", label: "Autre registre", logo: "registry" },
+];
+
 // CredentialFields asks for the keys of one provider, with how it bills.
 export function CredentialFields({
   kind,
@@ -48,7 +64,25 @@ export function CredentialFields({
   const note = kind === "provider_token" ? billing[provider] : undefined;
 
   let fields;
-  if (provider === "ovh") {
+  if (provider.startsWith("registry-")) {
+    // A registry login: the address for one MyInfra does not know, the user,
+    // then a password or, better, an access token limited to reading images.
+    fields = (
+      <>
+        {provider === "registry-custom" ? (
+          <Field label={text("registry.address")} hint={text("registry.addressHint")}>
+            <Input value={value.applicationKey} onChange={set("applicationKey")} required placeholder="registry.exemple.fr" {...plain} />
+          </Field>
+        ) : null}
+        <Field label={text("registry.user")}>
+          <Input value={value.keyId} onChange={set("keyId")} required {...plain} />
+        </Field>
+        <Field label={text("registry.secret")} hint={text(registryHints[provider] ?? "registry.hintCustom")}>
+          <Input type="password" value={value.token} onChange={set("token")} required />
+        </Field>
+      </>
+    );
+  } else if (provider === "ovh") {
     fields = (
       <>
         <Field label={text("provider.appKey")}>

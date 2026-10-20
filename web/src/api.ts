@@ -69,6 +69,21 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+export type LocalImage = {
+  id: string;
+  ref: string;
+  name: string;
+  tag: string;
+  source: "upload" | "url";
+  sourceUrl?: string;
+  size: number;
+  platform?: string;
+  ports: number[];
+  volumes: string[];
+  usedBy: string[];
+  createdAt: string;
+};
+
 export type Secret = {
   id: string;
   kind: string;

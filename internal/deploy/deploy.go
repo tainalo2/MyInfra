@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -346,7 +347,7 @@ func sshTransient(err error) bool {
 func SSHInput(ctx context.Context, host Host, command string, input []byte) (string, error) {
 	var last error
 	for attempt := 0; attempt < 6; attempt++ {
-		out, err := sshRun(ctx, host, command, input)
+		out, err := sshRun(ctx, host, command, bytes.NewReader(input))
 		if err == nil {
 			return out, nil
 		}
@@ -363,11 +364,33 @@ func SSHInput(ctx context.Context, host Host, command string, input []byte) (str
 	return "", last
 }
 
+// SSHStream runs a command with a large input, such as an image archive, read
+// from open: it never sits in memory, and a new attempt opens it again.
+func SSHStream(ctx context.Context, host Host, command string, open func() io.Reader) (string, error) {
+	var last error
+	for attempt := 0; attempt < 3; attempt++ {
+		out, err := sshRun(ctx, host, command, open())
+		if err == nil {
+			return out, nil
+		}
+		last = err
+		if attempt == 2 || !sshTransient(err) {
+			return "", err
+		}
+		select {
+		case <-ctx.Done():
+			return "", err
+		case <-time.After(3 * time.Second):
+		}
+	}
+	return "", last
+}
+
 func sshOnce(ctx context.Context, host Host, command string) (string, error) {
 	return sshRun(ctx, host, command, nil)
 }
 
-func sshRun(ctx context.Context, host Host, command string, input []byte) (string, error) {
+func sshRun(ctx context.Context, host Host, command string, input io.Reader) (string, error) {
 	if strings.TrimSpace(host.PrivateKey) == "" {
 		return "", fmt.Errorf("Aucune clé privée pour ouvrir la session SSH.")
 	}
@@ -404,7 +427,7 @@ func sshRun(ctx context.Context, host Host, command string, input []byte) (strin
 	session.Stdout = &stdout
 	session.Stderr = &stderr
 	if input != nil {
-		session.Stdin = bytes.NewReader(input)
+		session.Stdin = input
 	}
 	run := make(chan error, 1)
 	go func() { run <- session.Run(command) }()

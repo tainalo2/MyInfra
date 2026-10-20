@@ -160,6 +160,8 @@ func (a *API) deliverCluster(ctx context.Context, leader store.ClusterLeader) {
 			_, _ = a.rememberApplied(proxyKey, digest(raw))
 		}
 	}
+	// The images MyInfra keeps are on every node before the pods ask for them.
+	unloaded := a.loadClusterImages(ctx, leader, apps)
 	// The store of the cluster holds the copies of the applications' data.
 	keep := map[string]bool{manifest.StorageNamespace: true}
 	var watch []store.ClusterApp
@@ -176,8 +178,15 @@ func (a *API) deliverCluster(ctx context.Context, leader store.ClusterLeader) {
 			keep[manifest.Namespace(app.ID)] = true
 			continue
 		}
+		if detail := imageTrouble(app.Services, unloaded); detail != "" {
+			_ = a.Store.SetRunStatus(ctx, app.ID, "failed")
+			_ = a.Store.SetRunDetail(ctx, app.ID, detail)
+			keep[manifest.Namespace(app.ID)] = true
+			continue
+		}
 		spec := manifest.App{ID: app.ID, Paused: app.Paused, Hosts: app.Hosts, Zones: app.Zones, Env: env,
-			Services: parts.Services, Databases: parts.Databases, Secrets: parts.Secrets}
+			Services: parts.Services, Databases: parts.Databases, Secrets: parts.Secrets,
+			Pull: a.pullConfig(ctx, serviceImages(app.Services))}
 		if err := a.attachShared(ctx, leader.OwnerID, app.ID, &spec); err != nil {
 			slog.Info("secrets", "app", app.ID, "err", "lecture impossible")
 			_ = a.Store.SetRunStatus(ctx, app.ID, "failed")

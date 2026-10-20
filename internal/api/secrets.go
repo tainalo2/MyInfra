@@ -172,6 +172,9 @@ func (a *API) deleteSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	forgetZones(owner, sec.ID)
+	if sec.Kind == registryKind {
+		forgetRegistryLogins()
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -198,7 +201,7 @@ func (a *API) createToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Donnez un nom au jeton.")
 		return
 	}
-	if body.Kind != "provider_token" && body.Kind != "dns_token" && body.Kind != "git_token" {
+	if body.Kind != "provider_token" && body.Kind != "dns_token" && body.Kind != "git_token" && body.Kind != registryKind {
 		writeError(w, http.StatusBadRequest, "Type de jeton inconnu.")
 		return
 	}
@@ -247,6 +250,9 @@ type storedToken struct {
 
 func (a *API) checkToken(r *http.Request, body tokenBody) (storedToken, string, error) {
 	ctx := r.Context()
+	if body.Kind == registryKind {
+		return a.checkRegistry(ctx, body)
+	}
 	switch body.Provider {
 	case "hetzner":
 		if strings.TrimSpace(body.Token) == "" {
@@ -424,6 +430,10 @@ func (a *API) checkToken(r *http.Request, body tokenBody) (storedToken, string, 
 }
 
 func publicKeyID(provider string, tok storedToken) string {
+	if strings.HasPrefix(provider, "registry-") {
+		// The host and the user say which login it is, without the password.
+		return tok.KeyID + "@" + tok.ApplicationKey
+	}
 	if tok.KeyID != "" {
 		return tok.KeyID
 	}

@@ -8,7 +8,9 @@ import {
   ChevronLeft,
   ChevronUp,
   Cloud,
+  Container,
   GitBranch,
+  HardDrive,
   Globe,
   ArrowRightLeft,
   History,
@@ -270,6 +272,8 @@ const connect: NavSpec[] = [
   { to: "/providers", label: "nav.providers", icon: Cloud },
   { to: "/dns", label: "nav.dns", icon: Globe },
   { to: "/git", label: "nav.git", icon: GitBranch },
+  { to: "/registres", label: "nav.registries", icon: Container },
+  { to: "/images", label: "nav.images", icon: HardDrive },
 ];
 
 const ssh: NavSpec = { to: "/cles", label: "nav.ssh", icon: KeyRound };
@@ -650,6 +654,8 @@ function crumbsFor(pathname: string, names: Record<string, string>): Crumb[] {
     "/providers": "nav.providers",
     "/dns": "nav.dns",
     "/git": "nav.git",
+    "/registres": "nav.registries",
+    "/images": "nav.images",
     "/compte": "nav.account",
     "/transfert": "nav.transfer",
     "/transfert/suivi": "crumb.transferFollow",

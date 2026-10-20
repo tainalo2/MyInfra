@@ -170,7 +170,13 @@ type App struct {
 	Databases []Database
 	// Secrets are rendered as they are, for the keys services read.
 	Secrets []SharedSecret
+	// Pull is the docker config JSON of the private registries the images
+	// come from. Given to the default service account, it reaches every pod.
+	Pull string
 }
+
+// PullSecret is the secret the pods of an application pull private images with.
+const PullSecret = "myinfra-pull"
 
 func SecretObject(id string) string {
 	var b strings.Builder
@@ -321,6 +327,10 @@ func Render(app App) string {
 	ns := Namespace(app.ID)
 	var b strings.Builder
 	fmt.Fprintf(&b, "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: %s\n  labels:\n    myinfra.io/managed: \"true\"\n    myinfra.io/app: %q\n", ns, app.ID)
+	if app.Pull != "" {
+		fmt.Fprintf(&b, "---\napiVersion: v1\nkind: Secret\nmetadata:\n  name: %s\n  namespace: %s\ntype: kubernetes.io/dockerconfigjson\ndata:\n  .dockerconfigjson: %s\n", PullSecret, ns, base64.StdEncoding.EncodeToString([]byte(app.Pull)))
+		fmt.Fprintf(&b, "---\napiVersion: v1\nkind: ServiceAccount\nmetadata:\n  name: default\n  namespace: %s\nimagePullSecrets:\n  - name: %s\n", ns, PullSecret)
+	}
 	if len(app.Env) > 0 {
 		fmt.Fprintf(&b, "---\napiVersion: v1\nkind: Secret\nmetadata:\n  name: env\n  namespace: %s\ntype: Opaque\nstringData:\n", ns)
 		for _, key := range sortedKeys(app.Env) {

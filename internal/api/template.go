@@ -746,7 +746,10 @@ func (a *API) createRunApp(ctx context.Context, owner string, run *blueprint.Run
 	if err != nil {
 		return err
 	}
-	fillFromImages(ctx, stored, len(services) == 0)
+	if err := a.checkLocalImages(ctx, owner, serviceImages(stored)); err != nil {
+		return err
+	}
+	a.fillFromImages(ctx, stored, len(services) == 0)
 	if err := a.shapeRedundancy(ctx, owner, clusterID, stored, app.Replicas); err != nil {
 		return err
 	}

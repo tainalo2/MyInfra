@@ -128,6 +128,28 @@ export function ProviderLogo({ id }: { id: string }) {
           <path fill="#FCA326" d="M5.1 8.8 3.6 4.2 2.2 8.4 5.1 8.8Zm5.8 0 1.5-4.6 1.4 4.2-2.9.4Z" />
         </svg>
       );
+    case "docker":
+      return (
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+          <rect width="16" height="16" rx="3" fill="#1D63ED" />
+          <path d="M3 8.6h9.4c.2-.8.7-1.3 1.3-1.5-.4-.5-1-.6-1.5-.4-.1-.6-.5-1-.9-1.3-.4.5-.5 1.1-.3 1.7H3c-.2 2.3 1.3 4.3 4.5 4.3 2.5 0 4.2-1.1 4.9-2.8" fill="none" stroke="#fff" strokeWidth="1" strokeLinejoin="round" />
+          <path d="M4.6 6.4h1.4v1.4H4.6zM6.4 6.4h1.4v1.4H6.4zM8.2 6.4h1.4v1.4H8.2zM6.4 4.6h1.4V6H6.4z" fill="#fff" />
+        </svg>
+      );
+    case "quay":
+      return (
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+          <rect width="16" height="16" rx="3" fill="#EE0000" />
+          <path d="M6 4 3 8l3 4M10 4l3 4-3 4" fill="none" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "registry":
+      return (
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+          <rect x="1.5" y="1.5" width="13" height="13" rx="3" fill="none" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M4.5 6h7M4.5 8.5h7M4.5 11h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      );
     default:
       return null;
   }

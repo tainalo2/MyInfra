@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -59,7 +60,20 @@ func (a *API) deliverMachine(ctx context.Context, server store.AloneServer) {
 	if privateKey == "" {
 		return
 	}
-	out, err := deploy.SSH(ctx, deploy.Host{Address: server.Address, PrivateKey: privateKey}, deploy.RunScript(script))
+	host := deploy.Host{Address: server.Address, PrivateKey: privateKey}
+	images := make([]string, 0, len(work))
+	for _, item := range work {
+		images = append(images, item.Image)
+	}
+	// The images MyInfra keeps are loaded before the script starts them.
+	for ref, err := range a.loadImages(ctx, server.ID, host, dockerLoader, localImagesOf(images)) {
+		for _, item := range work {
+			if item.Image == ref {
+				_ = a.Store.SetRunDetail(ctx, item.ID, fmt.Sprintf("L'image %s n'a pas pu être chargée sur la machine %s : %v", ref, server.Address, err))
+			}
+		}
+	}
+	out, err := deploy.SSH(ctx, host, deploy.RunScript(script))
 	if err != nil {
 		slog.Info("machine", "server", server.ID, "err", err)
 		if !appRejected(err) {

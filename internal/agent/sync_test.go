@@ -152,3 +152,38 @@ func TestSyncStartsAgainAContainerStoppedByAPause(t *testing.T) {
 		t.Fatal(script)
 	}
 }
+
+func TestSyncNeverPullsALocalImage(t *testing.T) {
+	script, err := Sync("http://127.0.0.1:8080", "tok_en", []Workload{{ID: "7d49736b-58e7-4386-b947-720823531792", Image: "myinfra.local/demo:1.0", Listen: 80}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(script, "docker pull") {
+		t.Fatalf("une image chargée par MyInfra est tirée d'un registre :\n%s", script)
+	}
+	if !strings.Contains(script, "'myinfra.local/demo:1.0'") {
+		t.Fatal("l'image n'est pas lancée")
+	}
+}
+
+func TestSyncLogsInBeforeAPrivatePull(t *testing.T) {
+	login := &Login{Host: "ghcr.io", User: "me", Password: "tok"}
+	script, err := Sync("http://127.0.0.1:8080", "tok_en", []Workload{{ID: "7d49736b-58e7-4386-b947-720823531792", Image: "ghcr.io/me/app:2", Listen: 80, Login: login}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := strings.Index(script, "docker login 'ghcr.io' -u 'me' --password-stdin")
+	pull := strings.Index(script, "docker pull 'ghcr.io/me/app:2'")
+	if at < 0 || pull < 0 || at > pull {
+		t.Fatalf("connexion absente ou après le pull :\n%s", script)
+	}
+	// A password that would break the quoting is never written.
+	login.Password = "x'; rm -rf / #"
+	script, err = Sync("http://127.0.0.1:8080", "tok_en", []Workload{{ID: "7d49736b-58e7-4386-b947-720823531792", Image: "ghcr.io/me/app:2", Listen: 80, Login: login}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(script, "rm -rf") {
+		t.Fatal("un mot de passe dangereux a été écrit dans le script")
+	}
+}

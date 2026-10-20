@@ -159,3 +159,18 @@ func TestDatabaseServiceAndMigration(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderGivesPrivateRegistryLoginToPods(t *testing.T) {
+	app := App{ID: "7d49736b-58e7-4386-b947-720823531792", Pull: `{"auths":{"ghcr.io":{"auth":"bWU6dG9r"}}}`,
+		Services: []Service{{Name: "web", Image: "ghcr.io/me/app:2", Published: true, Replicas: 1, Listen: 80}}}
+	raw := Render(app)
+	for _, want := range []string{"type: kubernetes.io/dockerconfigjson", "name: " + PullSecret, "kind: ServiceAccount", "imagePullSecrets:"} {
+		if !strings.Contains(raw, want) {
+			t.Fatalf("absent : %q\n%s", want, raw)
+		}
+	}
+	app.Pull = ""
+	if strings.Contains(Render(app), PullSecret) {
+		t.Fatal("secret de connexion rendu sans registre privé")
+	}
+}

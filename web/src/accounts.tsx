@@ -1,12 +1,12 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Cloud, GitBranch, Globe, Plus, Trash2, type LucideIcon } from "lucide-react";
+import { Cloud, Container, GitBranch, Globe, Plus, Trash2, type LucideIcon } from "lucide-react";
 import { api, type Secret } from "./api";
 import { text } from "./i18n";
-import { CredentialFields, emptyCredentials, type Credentials } from "./credentials";
+import { CredentialFields, emptyCredentials, registryOptions, type Credentials } from "./credentials";
 import { ConfirmDialog, Spinner, useToast } from "./kit";
 import { ProviderLogo } from "./logos";
 import { ProviderGuide, hasGuide } from "./provider-guide";
-import { ProviderSelect } from "./provider-select";
+import { ProviderSelect, type ProviderOption } from "./provider-select";
 import { ActionsMenu, Button, EmptyList, ErrorText, Field, Icon, Input, ItemList, ListActions, LoadingCards, LoadingLines, PageTitle, MenuItem, Skeleton, TextButton, entryClass, focus, useListMode } from "./ui";
 
 export const providerOptions = [
@@ -85,8 +85,8 @@ function TokenPage({
 }: {
   title: string;
   icon: LucideIcon;
-  kind: "provider_token" | "dns_token" | "git_token";
-  options: { value: string; label: string }[];
+  kind: "provider_token" | "dns_token" | "git_token" | "registry_token";
+  options: ProviderOption[];
   empty: string;
   createLabel: string;
   selectLabel?: string;
@@ -132,7 +132,8 @@ function TokenPage({
       .finally(() => setLoaded(true));
   }, [kind]);
 
-  const watchedIds = kind === "git_token" ? "" : secrets.map((secret) => secret.id).join(" ");
+  // A Git or registry login is checked once, when it is saved.
+  const watchedIds = kind === "git_token" || kind === "registry_token" ? "" : secrets.map((secret) => secret.id).join(" ");
 
   useEffect(() => {
     if (!watchedIds) return;
@@ -269,14 +270,14 @@ function TokenPage({
                 <span className="min-w-0">
                   {secret.name}
                   <span className="mt-1 flex items-center gap-2 text-muted">
-                    <ProviderLogo id={secret.provider ?? ""} />
+                    <ProviderLogo id={options.find((option) => option.value === secret.provider)?.logo ?? secret.provider ?? ""} />
                     {options.find((option) => option.value === secret.provider)?.label ?? secret.provider}
                     {kind === "provider_token" ? null : <span>····{secret.hint}</span>}
                   </span>
-                  {kind === "provider_token" && secret.keyId ? (
+                  {(kind === "provider_token" || kind === "registry_token") && secret.keyId ? (
                     <span className="mt-1 block break-all font-mono text-muted">{secret.keyId}</span>
                   ) : null}
-                  {kind === "git_token" ? null : (
+                  {kind === "git_token" || kind === "registry_token" ? null : (
                     <span className="mt-2 flex flex-col gap-2">
                       <ConnectionState link={links[secret.id]} />
                       {kind === "dns_token" && links[secret.id]?.state === "up" ? <ZoneList id={secret.id} /> : null}
@@ -389,6 +390,20 @@ export function Git() {
       empty="Aucun compte Git."
       createLabel="Nouveau compte Git"
       selectLabel="Hôte"
+    />
+  );
+}
+
+export function Registries() {
+  return (
+    <TokenPage
+      title={text("registry.title")}
+      icon={Container}
+      kind="registry_token"
+      options={registryOptions}
+      empty={text("registry.empty")}
+      createLabel={text("registry.new")}
+      selectLabel={text("registry.which")}
     />
   );
 }

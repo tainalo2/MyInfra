@@ -613,7 +613,11 @@ func (a *API) createApplication(w http.ResponseWriter, r *http.Request) {
 	if implicit && len(services) == 1 && body.Listen > 0 {
 		services[0].Listen = body.Listen
 	}
-	fillFromImages(r.Context(), services, implicit)
+	if err := a.checkLocalImages(r.Context(), userID(r.Context()), serviceImages(services)); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	a.fillFromImages(r.Context(), services, implicit)
 	clusterID := ""
 	if body.DestinationKind == "cluster" {
 		clusterID = strings.TrimSpace(body.ClusterID)
@@ -917,7 +921,7 @@ var imageVolume = regexp.MustCompile(`^/[A-Za-z0-9._/-]+$`)
 // do not say where they listen or keep files. A registry that does not answer
 // leaves the defaults in place. keepVolumes gives a disk to an image that
 // declares a folder to keep, when the person did not describe the services.
-func fillFromImages(ctx context.Context, services []store.Service, keepVolumes bool) {
+func (a *API) fillFromImages(ctx context.Context, services []store.Service, keepVolumes bool) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	for i := range services {
@@ -925,7 +929,7 @@ func fillFromImages(ctx context.Context, services []store.Service, keepVolumes b
 		if svc.Listen > 0 && (!svc.Disk || svc.DiskPath != "") && !(keepVolumes && !svc.Disk) {
 			continue
 		}
-		img, err := registry.Inspect(ctx, svc.Image)
+		img, err := a.inspectImage(ctx, svc.Image)
 		if err != nil {
 			continue
 		}
@@ -967,6 +971,14 @@ func slug(name string) string {
 	}
 	if len(out) > 40 {
 		out = strings.Trim(out[:40], "-")
+	}
+	return out
+}
+
+func serviceImages(services []store.Service) []string {
+	out := make([]string, 0, len(services))
+	for _, svc := range services {
+		out = append(out, svc.Image)
 	}
 	return out
 }

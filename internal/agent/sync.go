@@ -8,6 +8,7 @@ import (
 
 	"myinfra/internal/cert"
 	"myinfra/internal/firewall"
+	"myinfra/internal/imagefile"
 	"myinfra/internal/pause"
 )
 
@@ -44,6 +45,15 @@ type Workload struct {
 	Published bool
 	Replicas  int
 	Paused    bool
+	// Login opens the private registry the image comes from.
+	Login *Login
+}
+
+// Login is what docker login needs for one registry.
+type Login struct {
+	Host     string
+	User     string
+	Password string
 }
 
 // Install prepares a machine alone: firewall, Docker and the proxy.
@@ -142,7 +152,7 @@ func Sync(baseURL, token string, apps []Workload) (string, error) {
 		fmt.Fprintf(&b, "  have=$(docker inspect -f '{{index .Config.Labels \"myinfra.spec\"}}' '%s')\n", name)
 		b.WriteString("fi\n")
 		fmt.Fprintf(&b, "if [ \"$have\" != '%s' ]; then\n", spec)
-		fmt.Fprintf(&b, "  docker pull '%s'\n", app.Image)
+		writePull(&b, app)
 		fmt.Fprintf(&b, "  docker rm -f '%s-next' >/dev/null 2>&1 || true\n", name)
 		fmt.Fprintf(&b, "  docker run -d --name '%s-next' --restart unless-stopped --network myinfra", name)
 		fmt.Fprintf(&b, " --label 'myinfra.spec=%s'", spec)
@@ -216,7 +226,7 @@ func writeService(b *strings.Builder, report string, app Workload) error {
 			runName = name + "-next"
 		}
 		fmt.Fprintf(b, "if [ \"$have\" != '%s' ]; then\n", spec)
-		fmt.Fprintf(b, "  docker pull '%s'\n", app.Image)
+		writePull(b, app)
 		fmt.Fprintf(b, "  docker rm -f '%s' >/dev/null 2>&1 || true\n", runName)
 		if app.Disk {
 			volume := "myinfra-data-" + compact(app.ID) + "-" + app.Service
@@ -266,6 +276,31 @@ func writeService(b *strings.Builder, report string, app Workload) error {
 }
 
 // pausedName is the container of the pause page of a published application.
+// writePull fetches the image of a workload: after a login for a private
+// registry, and not at all for an image MyInfra loaded itself.
+func writePull(b *strings.Builder, app Workload) {
+	if imagefile.IsLocal(app.Image) {
+		return
+	}
+	if login := app.Login; login != nil && safeLogin(*login) {
+		fmt.Fprintf(b, "  printf '%%s' '%s' | docker login '%s' -u '%s' --password-stdin >/dev/null 2>&1 || true\n", login.Password, login.Host, login.User)
+	}
+	fmt.Fprintf(b, "  docker pull '%s'\n", app.Image)
+}
+
+// safeLogin keeps a login out of the script when a value could break its quoting.
+func safeLogin(login Login) bool {
+	if !hostPattern.MatchString(login.Host) && !strings.Contains(login.Host, ":") {
+		return false
+	}
+	for _, value := range []string{login.Host, login.User, login.Password} {
+		if value == "" || strings.ContainsAny(value, "'\n\r") {
+			return false
+		}
+	}
+	return true
+}
+
 func pausedName(app Workload) string {
 	if !app.Paused || !app.Published || len(app.Hosts) == 0 {
 		return ""

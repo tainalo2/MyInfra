@@ -13,7 +13,9 @@ import { podCpu, size } from "./measure";
 import { ImageEditor } from "./images";
 import { AppSecretLinks } from "./secrets";
 import { PodActions } from "./pods";
+import { LocalImagePicker } from "./localimages";
 import { NameList, namesOf, type AppName } from "./names";
+import { ImageOrigin } from "./registries";
 import { TofuFiles } from "./tofu";
 import { ActionsMenu, Button, ErrorText, Field, Fold, Group, Icon, IconButton, Input, LoadingLines, MenuItem, PageTitle, SectionTitle, Select, TextArea, TextButton, focus, podFailed, podHealth, statusLabel, useTrail } from "./ui";
 
@@ -256,6 +258,11 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
                             <span>
                               <span className="font-medium">{article.name}</span>
                               <p className="mt-1 text-muted">{localizeCard(article).summary}</p>
+                              {(article.services.find((service) => service.published) ?? article.services[0]) ? (
+                                <p className="mt-1">
+                                  <ImageOrigin image={(article.services.find((service) => service.published) ?? article.services[0]).image} />
+                                </p>
+                              ) : null}
                             </span>
                           </span>
                           <Link to={`/catalogue/${article.id}`} className="shrink-0 text-ink underline">
@@ -301,9 +308,34 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
                       />
                     )
                   ) : (
-                    <Field label={sourceLabel}>
-                      <Input value={source} onChange={(e) => setSource(e.target.value)} required />
-                    </Field>
+                    <div className="flex flex-col gap-3">
+                      <Field label={sourceLabel}>
+                        <Input
+                          value={source}
+                          onChange={(e) => setSource(e.target.value)}
+                          required
+                          autoCapitalize="off"
+                          spellCheck={false}
+                          placeholder={sourceKind === "image" ? "ghcr.io/organisation/app:1.0.0" : undefined}
+                        />
+                      </Field>
+                      {sourceKind === "image" ? (
+                        <>
+                          {source.trim() ? <ImageOrigin image={source.trim()} /> : null}
+                          <LocalImagePicker value={source} onPick={setSource} />
+                          <p className="text-faint">
+                            {text("images.sourceHint")}{" "}
+                            <Link to="/registres" className="text-ink underline">
+                              {text("nav.registries")}
+                            </Link>
+                            {" · "}
+                            <Link to="/images" className="text-ink underline">
+                              {text("nav.images")}
+                            </Link>
+                          </p>
+                        </>
+                      ) : null}
+                    </div>
                   )}
                   <Field label={text("field.name")}>
                     <Input

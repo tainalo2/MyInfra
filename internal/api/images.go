@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"myinfra/internal/deploy"
+	"myinfra/internal/imagefile"
 	"myinfra/internal/manifest"
 	"myinfra/internal/market"
 	"myinfra/internal/registry"
@@ -75,7 +76,14 @@ func (a *API) applicationReleases(w http.ResponseWriter, r *http.Request) {
 		go func(i int, svc store.Service) {
 			defer group.Done()
 			item := view{Name: svc.Name, Image: svc.Image, Tags: []string{}}
-			tags, tagErr := registry.Tags(r.Context(), svc.Image)
+			var tags []string
+			var tagErr error
+			if imagefile.IsLocal(svc.Image) {
+				// The versions are the ones brought to MyInfra under this name.
+				tags = registry.Choose(a.localTags(r.Context(), userID(r.Context()), svc.Image))
+			} else {
+				tags, tagErr = registry.Tags(r.Context(), svc.Image)
+			}
 			if tagErr != nil {
 				item.Detail = "Les versions n'ont pas pu être lues."
 			} else {
@@ -142,6 +150,14 @@ func (a *API) replaceImages(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		images[item.Name] = image
+	}
+	wanted := make([]string, 0, len(images))
+	for _, image := range images {
+		wanted = append(wanted, image)
+	}
+	if err := a.checkLocalImages(r.Context(), userID(r.Context()), wanted); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
 	}
 	changed := false
 	for name, image := range images {

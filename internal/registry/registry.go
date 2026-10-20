@@ -2,6 +2,7 @@ package registry
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -195,12 +196,12 @@ func getTags(ctx context.Context, client *http.Client, rawURL string) ([]string,
 		return nil, "", err
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
-		token, authErr := tokenFrom(ctx, client, resp.Header.Get("WWW-Authenticate"))
+		auth, authErr := authFrom(ctx, client, rawURL, resp.Header.Get("WWW-Authenticate"))
 		resp.Body.Close()
 		if authErr != nil {
 			return nil, "", authErr
 		}
-		resp, err = do(ctx, client, rawURL, token)
+		resp, err = do(ctx, client, rawURL, auth)
 		if err != nil {
 			return nil, "", err
 		}
@@ -221,15 +222,15 @@ func getTags(ctx context.Context, client *http.Client, rawURL string) ([]string,
 	return payload.Tags, nextLink(resp.Header.Get("Link"), rawURL), nil
 }
 
-func do(ctx context.Context, client *http.Client, rawURL, token string) (*http.Response, error) {
+func do(ctx context.Context, client *http.Client, rawURL, auth string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "MyInfra")
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
+	if auth != "" {
+		req.Header.Set("Authorization", auth)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -238,7 +239,52 @@ func do(ctx context.Context, client *http.Client, rawURL, token string) (*http.R
 	return resp, nil
 }
 
-func tokenFrom(ctx context.Context, client *http.Client, header string) (string, error) {
+// Credentials gives the login MyInfra holds for a registry host, if any. A
+// registry without one is read anonymously, as public images are.
+var Credentials func(host string) (user, password string, ok bool)
+
+// loginFor finds the login of the registry rawURL points at.
+func loginFor(rawURL string) (string, string, bool) {
+	if Credentials == nil {
+		return "", "", false
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return "", "", false
+	}
+	host := parsed.Host
+	if host == "registry-1.docker.io" || host == "index.docker.io" {
+		host = "docker.io"
+	}
+	return Credentials(host)
+}
+
+func basic(user, password string) string {
+	return "Basic " + base64.StdEncoding.EncodeToString([]byte(user+":"+password))
+}
+
+// authFrom answers the challenge of a registry: Basic with the login held for
+// it, or Bearer with a token asked with that login, anonymously without one.
+func authFrom(ctx context.Context, client *http.Client, rawURL, header string) (string, error) {
+	user, password, login := loginFor(rawURL)
+	if strings.HasPrefix(header, "Basic") {
+		if !login {
+			return "", fmt.Errorf("Ce registre demande un identifiant.")
+		}
+		return basic(user, password), nil
+	}
+	tokenAuth := ""
+	if login {
+		tokenAuth = basic(user, password)
+	}
+	token, err := tokenFrom(ctx, client, header, tokenAuth)
+	if err != nil {
+		return "", err
+	}
+	return "Bearer " + token, nil
+}
+
+func tokenFrom(ctx context.Context, client *http.Client, header, auth string) (string, error) {
 	if !strings.HasPrefix(header, "Bearer ") {
 		return "", fmt.Errorf("registre indisponible")
 	}
@@ -259,11 +305,14 @@ func tokenFrom(ctx context.Context, client *http.Client, header string) (string,
 	if len(query) > 0 {
 		target += "?" + query.Encode()
 	}
-	resp, err := do(ctx, client, target, "")
+	resp, err := do(ctx, client, target, auth)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return "", fmt.Errorf("Identifiant refusé par le registre.")
+	}
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("registre indisponible")
 	}
@@ -493,4 +542,29 @@ func Suggest(current string, tags []string) string {
 		return "latest"
 	}
 	return ""
+}
+
+// Check tries a login on a registry, the way a pull would use it.
+func Check(ctx context.Context, host, user, password string) error {
+	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
+	defer cancel()
+	client := &http.Client{Timeout: 12 * time.Second}
+	base := "https://" + registryHost(host) + "/v2/"
+	resp, err := do(ctx, client, base, basic(user, password))
+	if err != nil {
+		return fmt.Errorf("Ce registre ne répond pas à l'adresse %s.", host)
+	}
+	resp.Body.Close()
+	switch {
+	case resp.StatusCode == http.StatusOK:
+		return nil
+	case resp.StatusCode == http.StatusUnauthorized && strings.HasPrefix(resp.Header.Get("WWW-Authenticate"), "Bearer"):
+		_, err := tokenFrom(ctx, client, resp.Header.Get("WWW-Authenticate"), basic(user, password))
+		return err
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		return fmt.Errorf("Identifiant refusé par le registre.")
+	case resp.StatusCode == http.StatusNotFound:
+		return fmt.Errorf("Ce n'est pas un registre d'images : %s.", host)
+	}
+	return fmt.Errorf("registre indisponible")
 }

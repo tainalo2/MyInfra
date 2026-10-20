@@ -15,6 +15,7 @@ import (
 	"myinfra/internal/api"
 	"myinfra/internal/boot"
 	"myinfra/internal/box"
+	"myinfra/internal/registry"
 	"myinfra/internal/store"
 	"myinfra/internal/tools"
 	"myinfra/internal/verify"
@@ -93,6 +94,8 @@ func main() {
 		Bootstrap:    strings.TrimSpace(os.Getenv("MYINFRA_BOOTSTRAP_TOKEN")),
 		Replica:      os.Getenv("MYINFRA_REPLICA") == "1",
 	}
+	// The versions of private images are read with the logins kept for their registries.
+	registry.Credentials = app.RegistryLogin
 	if app.Replica {
 		slog.Info("réplique, les machines restent pilotées par l'autre copie")
 	} else {

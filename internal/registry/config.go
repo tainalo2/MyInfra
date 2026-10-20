@@ -64,14 +64,24 @@ func Inspect(ctx context.Context, image string) (Image, error) {
 	if doc.Config.Digest == "" {
 		return Image{}, fmt.Errorf("registre illisible")
 	}
+	var config json.RawMessage
+	if _, err := fetchJSON(ctx, client, base+"/blobs/"+doc.Config.Digest, "application/json", token, &config); err != nil {
+		return Image{}, err
+	}
+	return ConfigImage(config)
+}
+
+// ConfigImage reads the ports and folders an image configuration declares:
+// from a registry, or from an archive a person brought.
+func ConfigImage(raw []byte) (Image, error) {
 	var config struct {
 		Config struct {
 			ExposedPorts map[string]struct{} `json:"ExposedPorts"`
 			Volumes      map[string]struct{} `json:"Volumes"`
 		} `json:"config"`
 	}
-	if _, err := fetchJSON(ctx, client, base+"/blobs/"+doc.Config.Digest, "application/json", token, &config); err != nil {
-		return Image{}, err
+	if err := json.Unmarshal(raw, &config); err != nil {
+		return Image{}, fmt.Errorf("configuration illisible")
 	}
 	var out Image
 	for key := range config.Config.ExposedPorts {
@@ -117,7 +127,7 @@ func fetchJSON(ctx context.Context, client *http.Client, rawURL, accept, token s
 		req.Header.Set("Accept", accept)
 		req.Header.Set("User-Agent", "MyInfra")
 		if token != "" {
-			req.Header.Set("Authorization", "Bearer "+token)
+			req.Header.Set("Authorization", token)
 		}
 		resp, err := client.Do(req)
 		if err != nil {
@@ -130,7 +140,7 @@ func fetchJSON(ctx context.Context, client *http.Client, rawURL, accept, token s
 		return token, err
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
-		next, authErr := tokenFrom(ctx, client, resp.Header.Get("WWW-Authenticate"))
+		next, authErr := authFrom(ctx, client, rawURL, resp.Header.Get("WWW-Authenticate"))
 		resp.Body.Close()
 		if authErr != nil {
 			return token, authErr

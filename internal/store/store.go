@@ -262,6 +262,27 @@ func (s *Store) ListSecrets(ctx context.Context, ownerID string) ([]Secret, erro
 	return out, rows.Err()
 }
 
+// SecretsOfKind are the secrets of one kind, sealed, whoever holds them: the
+// logins of the registries are read by the deliveries.
+func (s *Store) SecretsOfKind(ctx context.Context, kind string) ([]Secret, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, owner_id, kind, name, provider, hint, key_id, ciphertext, nonce, wrapped_dek, created_at
+		FROM secrets WHERE kind = $1 ORDER BY created_at`, kind)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Secret
+	for rows.Next() {
+		var sec Secret
+		if err := rows.Scan(&sec.ID, &sec.OwnerID, &sec.Kind, &sec.Name, &sec.Provider, &sec.Hint, &sec.KeyID, &sec.Ciphertext, &sec.Nonce, &sec.WrappedDEK, &sec.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, sec)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) Secret(ctx context.Context, ownerID, id string) (Secret, error) {
 	var sec Secret
 	err := s.pool.QueryRow(ctx, `

@@ -3,7 +3,9 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowRightLeft,
   Cloud,
+  Container,
   GitBranch,
+  HardDrive,
   Globe,
   History,
   House,
@@ -41,6 +43,8 @@ const more: Tab[] = [
   { to: "/providers", label: "nav.providers", icon: Cloud },
   { to: "/dns", label: "nav.dns", icon: Globe },
   { to: "/git", label: "nav.git", icon: GitBranch },
+  { to: "/registres", label: "nav.registries", icon: Container },
+  { to: "/images", label: "nav.images", icon: HardDrive },
   { to: "/cles", label: "nav.ssh", icon: KeyRound },
   { to: "/secrets", label: "nav.secrets", icon: Shield },
   { to: "/transfert", label: "nav.transfer", icon: ArrowRightLeft },

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { api, type Application, type ReleaseService } from "./api";
 import { knownMessage, text } from "./i18n";
+import { LocalImagePicker } from "./localimages";
+import { ImageOrigin } from "./registries";
 import { Button, Input, TextButton } from "./ui";
 
 export function ImageEditor({ app, onChange }: { app: Application; onChange: (next: Application) => void }) {
@@ -79,20 +81,30 @@ export function ImageEditor({ app, onChange }: { app: Application; onChange: (ne
               <div className="flex items-baseline justify-between gap-6">
                 <span>{service.name}</span>
                 <span className="text-muted">
-                  {service.published ? text("status.ready") : "Interne"}
-                  {service.disk ? " · Disque" : ""}
-                  {(service.replicas ?? 1) > 1 ? ` · Redondance ${service.replicas}` : ""}
+                  {service.published ? text("common.published") : text("common.internal")}
+                  {service.disk ? ` · ${text("common.disk")}` : ""}
+                  {(service.replicas ?? 1) > 1 ? ` · ${text("template.copies", { count: service.replicas ?? 1 })}` : ""}
                 </span>
               </div>
               <div className="mt-3">
                 <Input
                   value={draft[service.name] ?? service.image}
-                  aria-label={`Image ${service.name}`}
+                  aria-label={text("images.of", { name: service.name })}
                   disabled={updating}
                   onChange={(event) => setDraft((current) => ({ ...current, [service.name]: event.target.value }))}
                 />
               </div>
-              {release?.update ? <p className="mt-2 text-muted">Version proposée : {release.update}</p> : null}
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+                <ImageOrigin image={draft[service.name] ?? service.image} />
+                <div className="w-full sm:w-64">
+                  <LocalImagePicker
+                    value={draft[service.name] ?? service.image}
+                    disabled={updating}
+                    onPick={(ref) => setDraft((current) => ({ ...current, [service.name]: ref }))}
+                  />
+                </div>
+              </div>
+              {release?.update ? <p className="mt-2 text-muted">{text("images.proposed", { version: release.update })}</p> : null}
               {release?.detail ? <p className="mt-2 text-bad">{knownMessage(release.detail)}</p> : null}
             </li>
           );

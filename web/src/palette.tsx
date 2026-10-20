@@ -20,6 +20,8 @@ const pages: { label: MsgKey; to: string }[] = [
   { label: "nav.providers", to: "/providers" },
   { label: "nav.dns", to: "/dns" },
   { label: "nav.git", to: "/git" },
+  { label: "nav.registries", to: "/registres" },
+  { label: "nav.images", to: "/images" },
   { label: "nav.ssh", to: "/cles" },
   { label: "nav.secrets", to: "/secrets" },
   { label: "nav.transfer", to: "/transfert" },

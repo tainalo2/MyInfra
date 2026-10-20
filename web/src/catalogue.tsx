@@ -5,6 +5,7 @@ import { api, type CatalogueCard, type CatalogueGroup, type CatalogueVersions } 
 import { cardMatches, categoryName, localizeCard } from "./catalogue-copy";
 import { knownMessage, text } from "./i18n";
 import { AppLogo } from "./app-logo";
+import { ImageOrigin, imageSource } from "./registries";
 import { Button, ErrorText, Fold, Icon, Input, LoadingCards, LoadingLines, PageTitle, useTrail } from "./ui";
 
 export function CatalogueBrowser({ selected, onSelect }: { selected: string; onSelect: (article: CatalogueCard) => void }) {
@@ -51,7 +52,10 @@ export function CatalogueBrowser({ selected, onSelect }: { selected: string; onS
                     <AppLogo slug={article.logo} name={article.name} size={40} />
                     <span className="font-medium">{article.name}</span>
                   </span>
-                  <span className="text-muted">{categoryName(article.category)}</span>
+                  <span className="text-muted">
+                    {categoryName(article.category)}
+                    {publishedImage(article) ? ` · ${imageSource(publishedImage(article)).label}` : ""}
+                  </span>
                   <span>{localizeCard(article).summary}</span>
                 </button>
                 <Link to={`/catalogue/${article.id}`} className="text-ink">
@@ -84,30 +88,11 @@ export function withTag(image: string, tag: string) {
   return tag ? `${base}:${tag}` : image;
 }
 
-function imageRef(image: string) {
-  const slash = image.lastIndexOf("/");
-  const colon = image.lastIndexOf(":");
-  const tagged = colon > slash;
-  const name = tagged ? image.slice(0, colon) : image;
-  const tag = tagged ? image.slice(colon + 1) : "";
-  const version = tag.replace(/^version-/, "").replace(/^v(?=\d)/, "");
-  return { version: version || tag, href: registryHref(name) };
-}
 
-function registryHref(name: string) {
-  const parts = name.split("/");
-  const host = parts[0]?.includes(".") ? parts[0] : "";
-  if (host === "ghcr.io") {
-    const owner = parts[1];
-    const pkg = parts.slice(2).join("/");
-    return `https://github.com/orgs/${owner}/packages/container/package/${pkg}`;
-  }
-  if (host === "quay.io") return `https://quay.io/repository/${parts.slice(1).join("/")}`;
-  if (host === "lscr.io") return `https://docs.linuxserver.io/images/docker-${parts[parts.length - 1]}/`;
-  if (host === "codeberg.org") return `https://codeberg.org/${parts[1]}/-/packages/container/${parts.slice(2).join("/")}`;
-  if (host) return `https://${name}`;
-  if (parts.length === 1) return `https://hub.docker.com/_/${name}`;
-  return `https://hub.docker.com/r/${name}`;
+
+// publishedImage is the image that answers the visitors, the one an app is known by.
+function publishedImage(article: CatalogueCard) {
+  return (article.services.find((service) => service.published) ?? article.services[0])?.image ?? "";
 }
 
 function Filter({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
@@ -152,7 +137,6 @@ export function CatalogueArticle() {
   const published = article.services.find((service) => service.published) ?? article.services[0];
   const tag = versions?.tags?.includes("latest") ? "latest" : versions?.tags?.[0] || "latest";
   const chosen = published ? withTag(published.image, tag) : "";
-  const release = chosen ? imageRef(chosen) : null;
   const shownCard = localizeCard(article);
 
   return (
@@ -174,11 +158,9 @@ export function CatalogueArticle() {
             {siteLabel(article.site)}
           </a>
         </p>
-        {release ? (
+        {chosen ? (
           <p>
-            <a className="break-all text-link" href={release.href} target="_blank" rel="noreferrer">
-              {chosen}
-            </a>
+            <ImageOrigin image={chosen} />
           </p>
         ) : null}
         {versions?.detail ? <p className="text-bad">{knownMessage(versions.detail)}</p> : null}
@@ -188,15 +170,12 @@ export function CatalogueArticle() {
           <ul className="flex flex-col gap-3">
             {article.services.map((service) => {
               const shown = service.published && chosen ? chosen : service.image;
-              const image = imageRef(shown);
               return (
                 <li key={service.name}>
                   <span>{service.name}</span>
                   <span className="text-muted">{service.published ? ` · ${text("common.published")}` : ` · ${text("common.internal")}`}{service.disk ? ` · ${text("common.disk")}` : ""}</span>
                   <p className="mt-1">
-                    <a className="break-all text-link" href={image.href} target="_blank" rel="noreferrer">
-                      {shown}
-                    </a>
+                    <ImageOrigin image={shown} />
                   </p>
                 </li>
               );

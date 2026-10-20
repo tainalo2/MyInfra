@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -102,5 +103,63 @@ func TestImagePortPrefersWebPorts(t *testing.T) {
 		if got := (Image{Ports: c.ports}).Port(); got != c.want {
 			t.Fatalf("%v: got %d want %d", c.ports, got, c.want)
 		}
+	}
+}
+
+// withLogin makes Credentials answer one login for every host during a test.
+func withLogin(t *testing.T, user, password string) {
+	t.Helper()
+	before := Credentials
+	Credentials = func(string) (string, string, bool) { return user, password, true }
+	t.Cleanup(func() { Credentials = before })
+}
+
+func TestPrivateRegistryBearerUsesTheLogin(t *testing.T) {
+	withLogin(t, "me", "secret")
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v2/team/app/tags/list":
+			if r.Header.Get("Authorization") != "Bearer private-tok" {
+				w.Header().Set("WWW-Authenticate", `Bearer realm="`+srv.URL+`/token",service="reg"`)
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			_, _ = w.Write([]byte(`{"tags":["2.0.0"]}`))
+		case "/token":
+			// The token is only given against the login.
+			if user, pass, ok := r.BasicAuth(); !ok || user != "me" || pass != "secret" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			_, _ = w.Write([]byte(`{"token":"private-tok"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	tags, err := listTags(context.Background(), srv.Client(), srv.URL, "team/app")
+	if err != nil || len(tags) != 1 || tags[0] != "2.0.0" {
+		t.Fatalf("%v %v", tags, err)
+	}
+}
+
+func TestPrivateRegistryBasic(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if user, pass, ok := r.BasicAuth(); !ok || user != "me" || pass != "secret" {
+			w.Header().Set("WWW-Authenticate", `Basic realm="reg"`)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_, _ = w.Write([]byte(`{"tags":["1.0.0"]}`))
+	}))
+	defer srv.Close()
+	if _, err := listTags(context.Background(), srv.Client(), srv.URL, "team/app"); err == nil || !strings.Contains(err.Error(), "identifiant") {
+		t.Fatalf("sans identifiant : %v", err)
+	}
+	withLogin(t, "me", "secret")
+	tags, err := listTags(context.Background(), srv.Client(), srv.URL, "team/app")
+	if err != nil || len(tags) != 1 {
+		t.Fatalf("%v %v", tags, err)
 	}
 }
