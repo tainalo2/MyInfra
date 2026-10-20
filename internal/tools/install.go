@@ -30,21 +30,34 @@ func Install(ctx context.Context, name string) error {
 	}
 }
 
+// installAnsible puts Ansible in a virtual environment of MyInfra's folder.
+// Without a Python able to make one — none at all, or a Debian one without
+// its venv module — MyInfra installs its own Python first.
 func installAnsible(ctx context.Context) error {
-	python, err := exec.LookPath("python3")
-	if err != nil {
-		python, err = exec.LookPath("python")
-	}
-	if err != nil {
-		return errString("Python 3 est introuvable. Ansible n'a pas été installé.")
-	}
 	home, err := boot.Home()
 	if err != nil {
 		return err
 	}
 	venv := filepath.Join(home, "ansible")
-	if err := run(ctx, python, "-m", "venv", venv); err != nil {
-		return errString("Ansible n'a pas pu être installé.")
+	made := false
+	for _, name := range []string{"python3", "python"} {
+		python, err := exec.LookPath(name)
+		if err != nil {
+			continue
+		}
+		if err := run(ctx, python, "-m", "venv", "--clear", venv); err == nil {
+			made = true
+			break
+		}
+	}
+	if !made {
+		python, err := installPython(ctx, home)
+		if err != nil {
+			return err
+		}
+		if err := run(ctx, python, "-m", "venv", "--clear", venv); err != nil {
+			return errString("Ansible n'a pas pu être installé.")
+		}
 	}
 	pip := filepath.Join(venv, "bin", exe("pip"))
 	if runtime.GOOS == "windows" {

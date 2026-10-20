@@ -6,14 +6,19 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"myinfra/internal/dns"
+	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -37,6 +42,16 @@ type transferState struct {
 	url     string
 	method  string
 	err     string
+	// wait is what the waiting step waits for: starting or certificate.
+	wait string
+	// cluster receives MyInfra during a transfer into pods.
+	cluster string
+	// drift is true while the name of the new copy points elsewhere; note
+	// says why the waiting lasts.
+	drift bool
+	note  string
+	// keep leaves this copy running as a synced copy once the transfer ends.
+	keep bool
 }
 
 func (a *API) transferPreview(w http.ResponseWriter, r *http.Request) {
@@ -71,12 +86,15 @@ func (a *API) transferStatus(w http.ResponseWriter, r *http.Request) {
 	if status == "" {
 		status = "idle"
 	}
-	writeJSON(w, http.StatusOK, map[string]string{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"status": status,
 		"step":   a.transfer.step,
 		"url":    a.transfer.url,
 		"method": a.transfer.method,
 		"error":  a.transfer.err,
+		"wait":   a.transfer.wait,
+		"note":   a.transfer.note,
+		"keep":   a.transfer.keep,
 	})
 }
 
@@ -89,6 +107,8 @@ func (a *API) startTransfer(w http.ResponseWriter, r *http.Request) {
 		Period     string `json:"period"`
 		StorageID  string `json:"storageId"`
 		StorageGB  int    `json:"storageGb"`
+		// Keep leaves this copy running, synced with the new one.
+		Keep bool `json:"keep"`
 	}
 	if err := readJSON(w, r, &body); err != nil || body.ProviderID == "" {
 		writeError(w, http.StatusBadRequest, "Choisissez un provider.")
@@ -152,6 +172,7 @@ func (a *API) startTransfer(w http.ResponseWriter, r *http.Request) {
 	}
 	owner := userID(r.Context())
 	a.markTransferMethod("machine")
+	a.setTransferKeep(body.Keep)
 	a.setTransfer(true, "creating", "Ouverture de la machine", "", "")
 	go a.runTransfer(owner, sec, tok, cat, offer, userData, token, disk, plan.ProjectID)
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "creating", "step": "Ouverture de la machine"})
@@ -198,7 +219,7 @@ func (a *API) runTransfer(owner string, sec store.Secret, tok storedToken, cat c
 		return
 	}
 	a.setTransfer(true, "waiting", "La machine démarre", base, "")
-	if err := waitHealth(ctx, base); a.transferFailed(err, "La machine démarre", base, errText(err)) {
+	if err := waitHealth(ctx, base, a.setTransferWait); a.transferFailed(err, "La machine démarre", base, errText(err)) {
 		return
 	}
 	if a.transferFailed(nil, "", base, "") {
@@ -212,6 +233,7 @@ func (a *API) runTransfer(owner string, sec store.Secret, tok storedToken, cat c
 	snap.Installation = store.Installation{
 		Provider: sec.Provider, AccountID: sec.ID, ServerID: machine.ID, PublicURL: base,
 	}
+	snap.Peers = a.peersForNewCopy()
 	if err := pushSnapshot(ctx, base, token, snap); a.transferFailed(err, "Copie des données", base, errText(err)) {
 		return
 	}
@@ -244,6 +266,11 @@ func (a *API) startPodTransfer(w http.ResponseWriter, r *http.Request) {
 	}
 	var body struct {
 		Zone string `json:"zone"`
+		// Subdomain names the new copy, myinfra when left out: two copies
+		// moving to the same zone each need their own name.
+		Subdomain string `json:"subdomain"`
+		// Keep leaves this copy running, synced with the new one.
+		Keep bool `json:"keep"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		refuse(http.StatusBadRequest, "Choisissez un domaine.")
@@ -268,7 +295,15 @@ func (a *API) startPodTransfer(w http.ResponseWriter, r *http.Request) {
 		refuse(http.StatusBadRequest, "Ce cluster importé ne peut pas recevoir MyInfra.")
 		return
 	}
-	hostName := "myinfra." + zone
+	subdomain := strings.TrimSpace(body.Subdomain)
+	if subdomain == "" {
+		subdomain = "myinfra"
+	}
+	hostName, err := dns.Join(subdomain, zone)
+	if err != nil {
+		refuse(http.StatusBadRequest, err.Error())
+		return
+	}
 	if cert.Zone(hostName, "") != zone {
 		refuse(http.StatusBadRequest, "Choisissez un domaine.")
 		return
@@ -286,8 +321,19 @@ func (a *API) startPodTransfer(w http.ResponseWriter, r *http.Request) {
 		refuse(http.StatusBadRequest, err.Error())
 		return
 	}
+	// A name that already answers elsewhere belongs to something else, often
+	// another copy of MyInfra: taking it would fight over its record.
+	if elsewhere := a.nameElsewhere(r.Context(), zone, hostName, clusterID); elsewhere != "" {
+		a.setTransfer(false, "idle", "", "", "")
+		writeCoded(w, http.StatusConflict, "transfer_name_elsewhere", "Le nom "+hostName+" pointe déjà vers "+elsewhere+". Choisissez un autre nom.", map[string]string{"name": hostName, "addresses": elsewhere})
+		return
+	}
 	publicURL := "https://" + hostName
 	a.markTransferMethod("pod")
+	a.setTransferKeep(body.Keep)
+	a.transfer.mu.Lock()
+	a.transfer.cluster = clusterID
+	a.transfer.mu.Unlock()
 	a.setTransfer(true, "creating", "Préparation du pod", publicURL, "")
 	go a.runPodTransfer(owner, clusterID, hostName, publicURL)
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "creating", "step": "Préparation du pod", "url": publicURL})
@@ -356,10 +402,18 @@ func (a *API) runPodTransfer(owner, clusterID, hostName, publicURL string) {
 		return
 	}
 	a.setTransfer(true, "waiting", "Démarrage du pod", publicURL, "")
+	// Traefik asks a certificate for the name of MyInfra only with a resolver
+	// for its zone: on a cluster without application, it has none yet.
+	if err := a.podProxy(ctx, host, owner, clusterID, zone); a.transferFailed(err, "Démarrage du pod", publicURL, "Le proxy du cluster n'a pas pu être préparé.") {
+		return
+	}
 	if _, err := deploy.SSH(ctx, host, deploy.KubectlApply(manifest)); a.transferFailed(err, "Démarrage du pod", publicURL, "Le pod n'a pas été créé.") {
 		return
 	}
-	if err := waitHealth(ctx, publicURL); a.transferFailed(err, "Démarrage du pod", publicURL, errText(err)) {
+	stopWatch := a.watchTransferName(ctx, host, sec.Provider, credsOf(tok), zone, hostName, address)
+	err = waitHealth(ctx, publicURL, a.setTransferWait)
+	stopWatch()
+	if a.transferFailed(err, "Démarrage du pod", publicURL, errText(err)) {
 		return
 	}
 	if a.transferFailed(nil, "", publicURL, "") {
@@ -371,6 +425,7 @@ func (a *API) runPodTransfer(owner, clusterID, hostName, publicURL string) {
 		return
 	}
 	snap.Installation = store.Installation{Method: "pod", ClusterID: clusterID, PublicURL: publicURL}
+	snap.Peers = a.peersForNewCopy()
 	if err := pushSnapshot(ctx, publicURL, token, snap); a.transferFailed(err, "Copie des données", publicURL, errText(err)) {
 		return
 	}
@@ -379,6 +434,12 @@ func (a *API) runPodTransfer(owner, clusterID, hostName, publicURL string) {
 
 func (a *API) finishTransfer(ctx context.Context, client provision.Client, owner, base string, kept *bool) {
 	if a.transferFailed(nil, "", base, "") {
+		return
+	}
+	if a.transferKeep() {
+		// The new copy is online: nothing of it is cleaned up any more.
+		*kept = true
+		a.keepAsCopy(ctx, base)
 		return
 	}
 	a.setTransfer(true, "destroying", "Arrêt de cette copie", base, "")
@@ -478,6 +539,12 @@ func (a *API) bootstrap(w http.ResponseWriter, r *http.Request) {
 	if snap.Installation.PublicURL != "" {
 		a.PublicURL = snap.Installation.PublicURL
 		a.SecureCookie = strings.HasPrefix(a.PublicURL, "https://")
+	}
+	// The copy that moved this one stays beside it: each lists the other.
+	for _, peer := range snap.Peers {
+		if err := a.Store.AddPeer(r.Context(), peer); err != nil {
+			slog.Info("copie ignorée", "err", err)
+		}
 	}
 	a.Bootstrap = ""
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -597,6 +664,76 @@ func (a *API) setTransfer(running bool, status, step, url, failure string) {
 		a.transfer.stop = false
 	}
 	a.transfer.err = failure
+	if status != "waiting" {
+		a.transfer.wait = ""
+	}
+}
+
+func (a *API) setTransferKeep(keep bool) {
+	a.transfer.mu.Lock()
+	a.transfer.keep = keep
+	a.transfer.mu.Unlock()
+}
+
+func (a *API) transferKeep() bool {
+	a.transfer.mu.Lock()
+	defer a.transfer.mu.Unlock()
+	return a.transfer.keep
+}
+
+// peersForNewCopy is this copy's address for the new one to sync with, when
+// this copy stays and the new one can reach it. A copy on a laptop is not
+// reachable: it syncs by itself with the new one, both ways.
+func (a *API) peersForNewCopy() []string {
+	if !a.transferKeep() {
+		return nil
+	}
+	parsed, err := url.Parse(a.PublicURL)
+	if err != nil || parsed.Hostname() == "" {
+		return nil
+	}
+	host := parsed.Hostname()
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return nil
+	}
+	if ip := net.ParseIP(host); ip != nil && (ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified()) {
+		return nil
+	}
+	return []string{strings.TrimRight(a.PublicURL, "/")}
+}
+
+// keepAsCopy ends a transfer that keeps this copy: it syncs with the new one,
+// which drives the machines from now on, and starts again as a replica.
+func (a *API) keepAsCopy(ctx context.Context, base string) {
+	a.transfer.mu.Lock()
+	method, cluster := a.transfer.method, a.transfer.cluster
+	a.transfer.mu.Unlock()
+	role := store.CopyRole{Replica: true, MainMethod: method, MainURL: base}
+	if method == "pod" {
+		role.MainClusterID = cluster
+	}
+	if err := a.Store.AddPeer(ctx, base); err != nil {
+		a.setTransfer(false, "failed", "Arrêt de cette copie", base, "La copie est en ligne, mais elle n'a pas pu être ajoutée aux copies.")
+		return
+	}
+	if err := a.Store.SetCopyRole(ctx, role); err != nil {
+		a.setTransfer(false, "failed", "Arrêt de cette copie", base, "La copie est en ligne sur "+base+", mais cette copie pilote encore les machines.")
+		return
+	}
+	a.setTransfer(true, "done", "MyInfra est en ligne", base, "")
+	// Started again, this copy reads its new role and drives nothing.
+	go func() {
+		time.Sleep(5 * time.Second)
+		if a.Restart != nil {
+			a.Restart()
+			return
+		}
+		if a.Shutdown != nil {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = a.Shutdown(shutdownCtx)
+		}
+	}()
 }
 
 func (a *API) markTransferMethod(method string) {
@@ -642,31 +779,194 @@ func randomHex(n int) string {
 	return hex.EncodeToString(buf)
 }
 
-func waitHealth(ctx context.Context, base string) error {
+// waitHealth waits for the new copy to answer over a trusted connection. It
+// tells what it waits for: the copy itself, or, once the copy answers, the
+// certificate of its address.
+func waitHealth(ctx context.Context, base string, waiting func(string)) error {
 	client := &http.Client{Timeout: 5 * time.Second}
+	// Only to tell that the copy answers while its certificate is missing:
+	// nothing is sent to it over this connection.
+	loose := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
 	deadline := time.Now().Add(10 * time.Minute)
 	target := strings.TrimRight(base, "/") + "/api/health"
+	state := "starting"
 	for {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
-		if err == nil {
-			res, err := client.Do(req)
-			if err == nil {
-				io.Copy(io.Discard, io.LimitReader(res.Body, 1<<10))
-				res.Body.Close()
-				if res.StatusCode < 300 {
-					return nil
-				}
+		if healthy(ctx, client, target) {
+			return nil
+		}
+		// A reading cut by the end of the wait says nothing new.
+		if ctx.Err() == nil {
+			state = "starting"
+			if strings.HasPrefix(target, "https://") && healthy(ctx, loose, target) {
+				state = "certificate"
+			}
+			if waiting != nil {
+				waiting(state)
 			}
 		}
 		if ctx.Err() != nil || time.Now().After(deadline) {
-			return fmt.Errorf("La nouvelle copie ne répond pas.")
+			return waitFailure(state)
 		}
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("La nouvelle copie ne répond pas.")
+			return waitFailure(state)
 		case <-time.After(5 * time.Second):
 		}
 	}
+}
+
+func waitFailure(state string) error {
+	if state == "certificate" {
+		return fmt.Errorf("La nouvelle copie répond, mais son certificat HTTPS n'a pas été délivré.")
+	}
+	return fmt.Errorf("La nouvelle copie ne répond pas.")
+}
+
+func healthy(ctx context.Context, client *http.Client, target string) bool {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return false
+	}
+	res, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	io.Copy(io.Discard, io.LimitReader(res.Body, 1<<10))
+	res.Body.Close()
+	return res.StatusCode < 300
+}
+
+// nameElsewhere lists the addresses a name already answers with outside the
+// cluster, empty when the name is free or already on the cluster.
+func (a *API) nameElsewhere(ctx context.Context, zone, host, clusterID string) string {
+	lookup, cancel := context.WithTimeout(ctx, 6*time.Second)
+	defer cancel()
+	found, err := dns.Announced(lookup, zone, host)
+	if err != nil || len(found) == 0 {
+		return ""
+	}
+	// A catch-all record of the zone answers for every free name too.
+	if wildcard, err := dns.Announced(lookup, zone, "myinfra-probe-"+randomHex(6)+"."+zone); err == nil && sameAddresses(found, wildcard) {
+		return ""
+	}
+	mine, err := a.Store.DestinationAddresses(ctx, "cluster", "", clusterID)
+	if err != nil {
+		return ""
+	}
+	var foreign []string
+	for _, ip := range found {
+		if !slices.Contains(mine, ip) {
+			foreign = append(foreign, ip)
+		}
+	}
+	return strings.Join(foreign, ", ")
+}
+
+func sameAddresses(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for _, ip := range a {
+		if !slices.Contains(b, ip) {
+			return false
+		}
+	}
+	return true
+}
+
+// transferZone is the zone of MyInfra while it moves into pods of clusterID.
+func (a *API) transferZone(clusterID string) string {
+	a.transfer.mu.Lock()
+	defer a.transfer.mu.Unlock()
+	if !a.transfer.running || a.transfer.method != "pod" || a.transfer.cluster != clusterID {
+		return ""
+	}
+	return zoneOfURL(a.transfer.url)
+}
+
+// setTransferWait says what the transfer waits for, shown under its step. A
+// name that points elsewhere outweighs what the copy answers.
+func (a *API) setTransferWait(state string) {
+	a.transfer.mu.Lock()
+	defer a.transfer.mu.Unlock()
+	if a.transfer.drift && state != "" {
+		state = "dns"
+	}
+	a.transfer.wait = state
+}
+
+func (a *API) setTransferNote(drift bool, note string) {
+	a.transfer.mu.Lock()
+	defer a.transfer.mu.Unlock()
+	a.transfer.drift = drift
+	a.transfer.note = note
+	if drift {
+		a.transfer.wait = "dns"
+	}
+}
+
+// watchTransferName keeps the name of the new copy on its cluster while the
+// copy waits for its certificate, and tells why Let's Encrypt gives none.
+// Another copy of MyInfra may write the same name meanwhile: Let's Encrypt
+// would then check a machine that is not the cluster. Once the name is put
+// back, Traefik is asked again, since it does not retry by itself.
+func (a *API) watchTransferName(ctx context.Context, host deploy.Host, provider string, creds dns.Creds, zone, name, address string) func() {
+	watch, stop := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		repaired := false
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-watch.Done():
+				return
+			case <-ticker.C:
+			}
+			note := ""
+			drift := false
+			if found, err := dns.Announced(watch, zone, name); err == nil && (len(found) != 1 || found[0] != address) {
+				drift = true
+				note = "Le nom " + name + " pointe vers " + strings.Join(found, ", ") + " au lieu de " + address + " seulement : une autre copie de MyInfra l'a sans doute modifié. Il est republié."
+				if err := a.dnsClient().EnsureAddress(watch, provider, creds, zone, name, address); err == nil {
+					repaired = true
+				}
+			}
+			if !drift {
+				if out, err := deploy.SSH(watch, host, readCertificateErrors); err == nil {
+					trouble, ok := parseCertificateErrors(out, []string{name})[name]
+					if ok {
+						note = trouble.Detail
+					}
+					// Asking again before Let's Encrypt allows it would only
+					// push the date further.
+					if ok && repaired && (trouble.Retry.IsZero() || time.Now().After(trouble.Retry)) {
+						if _, err := deploy.SSH(watch, host, "k3s kubectl -n kube-system rollout restart deploy/traefik"); err == nil {
+							repaired = false
+						}
+					}
+				}
+			}
+			a.setTransferNote(drift, note)
+		}
+	}()
+	return func() {
+		stop()
+		<-done
+		a.setTransferNote(false, "")
+	}
+}
+
+// podProxy gives Traefik the resolver of the zone of MyInfra, beside those of
+// the applications of the cluster.
+func (a *API) podProxy(ctx context.Context, host deploy.Host, owner, clusterID, zone string) error {
+	apps, err := a.Store.ClusterApps(ctx, clusterID)
+	if err != nil {
+		return err
+	}
+	zones := append(a.clusterZones(ctx, clusterID, apps), zone)
+	return a.applyProxy(ctx, host, store.ClusterLeader{ClusterID: clusterID, OwnerID: owner}, zones)
 }
 
 func pushSnapshot(ctx context.Context, base, token string, snap store.Snapshot) error {

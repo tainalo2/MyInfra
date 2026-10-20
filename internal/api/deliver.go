@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -134,31 +135,12 @@ func (a *API) deliverCluster(ctx context.Context, leader store.ClusterLeader) {
 	if err != nil {
 		return
 	}
-	var zones []string
-	for _, app := range apps {
-		for _, name := range app.Hosts {
-			zone := cert.Zone(name, app.Zones[name])
-			if zone != "" {
-				zones = append(zones, zone)
-			}
-		}
-	}
+	zones := a.clusterZones(ctx, leader.ClusterID, apps)
 	changed := false
-	if len(zones) > 0 {
-		a.keepCertificates(ctx, host, leader, zones)
-		raw := manifest.Proxy(zones)
-		if !strings.HasSuffix(raw, "\n") {
-			raw += "\n"
-		}
-		proxyKey := "proxy:" + leader.ClusterID
-		if !a.appliedRecently(proxyKey, digest(raw)) {
-			if _, err := deploy.SSH(ctx, host, deploy.KubectlApply(raw)); err != nil {
-				slog.Info("proxy", "err", err)
-				pauseDeliver(leader.Address)
-				return
-			}
-			_, _ = a.rememberApplied(proxyKey, digest(raw))
-		}
+	if err := a.applyProxy(ctx, host, leader, zones); err != nil {
+		slog.Info("proxy", "err", err)
+		pauseDeliver(leader.Address)
+		return
 	}
 	// The images MyInfra keeps are on every node before the pods ask for them.
 	unloaded := a.loadClusterImages(ctx, leader, apps)
@@ -518,4 +500,57 @@ func (a *API) pruneRoutes(ctx context.Context, host deploy.Host, namespace, raw 
 		}
 		_, _ = deploy.SSH(ctx, host, "k3s kubectl -n "+namespace+" delete ingressroute "+name+" --wait=false")
 	}
+}
+
+// clusterZones are the DNS zones Traefik asks certificates for on a cluster:
+// those of its applications, and that of MyInfra when MyInfra runs there —
+// a cluster may hold MyInfra alone.
+func (a *API) clusterZones(ctx context.Context, clusterID string, apps []store.ClusterApp) []string {
+	var zones []string
+	for _, app := range apps {
+		for _, name := range app.Hosts {
+			if zone := cert.Zone(name, app.Zones[name]); zone != "" {
+				zones = append(zones, zone)
+			}
+		}
+	}
+	if inst, err := a.Store.Installation(ctx); err == nil && inst.Method == "pod" && inst.ClusterID == clusterID {
+		if zone := zoneOfURL(inst.PublicURL); zone != "" {
+			zones = append(zones, zone)
+		}
+	}
+	if zone := a.transferZone(clusterID); zone != "" {
+		zones = append(zones, zone)
+	}
+	return zones
+}
+
+func zoneOfURL(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Hostname() == "" {
+		return ""
+	}
+	return cert.Zone(parsed.Hostname(), "")
+}
+
+// applyProxy gives Traefik a certificate resolver for each zone, with the
+// certificates MyInfra kept for them.
+func (a *API) applyProxy(ctx context.Context, host deploy.Host, leader store.ClusterLeader, zones []string) error {
+	if len(zones) == 0 {
+		return nil
+	}
+	a.keepCertificates(ctx, host, leader, zones)
+	raw := manifest.Proxy(zones)
+	if !strings.HasSuffix(raw, "\n") {
+		raw += "\n"
+	}
+	proxyKey := "proxy:" + leader.ClusterID
+	if a.appliedRecently(proxyKey, digest(raw)) {
+		return nil
+	}
+	if _, err := deploy.SSH(ctx, host, deploy.KubectlApply(raw)); err != nil {
+		return err
+	}
+	_, _ = a.rememberApplied(proxyKey, digest(raw))
+	return nil
 }

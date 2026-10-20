@@ -110,13 +110,13 @@ func serve() bool {
 		PublicURL:    strings.TrimRight(publicURL, "/"),
 		AppsDomain:   os.Getenv("MYINFRA_APPS_DOMAIN"),
 		SecureCookie: strings.HasPrefix(publicURL, "https://"),
-		Image:        image,
+		Image:        imageOf(),
 		Version:      version,
 		Postgres:     postgres,
 		Local:        rt.Local,
 		Master:       master,
 		Bootstrap:    strings.TrimSpace(os.Getenv("MYINFRA_BOOTSTRAP_TOKEN")),
-		Replica:      os.Getenv("MYINFRA_REPLICA") == "1",
+		Replica:      replicaOf(ctx, db),
 	}
 	// The versions of private images are read with the logins kept for their registries.
 	registry.Credentials = app.RegistryLogin
@@ -157,6 +157,30 @@ func serve() bool {
 		os.Exit(1)
 	}
 	return restarting.Load()
+}
+
+// replicaOf says whether this copy drives no machine: MYINFRA_REPLICA=1, or
+// a copy a transfer kept beside the new one. MYINFRA_REPLICA=0 makes a kept
+// copy drive again.
+func replicaOf(ctx context.Context, db *store.Store) bool {
+	switch os.Getenv("MYINFRA_REPLICA") {
+	case "1":
+		return true
+	case "0":
+		return false
+	}
+	role, err := db.CopyRole(ctx)
+	return err == nil && role.Replica
+}
+
+// imageOf is the published image of this copy, the one a transfer starts on
+// a server. A release carries it; a copy built from source takes
+// MYINFRA_IMAGE, to try a transfer with a published image.
+func imageOf() string {
+	if image != "" {
+		return image
+	}
+	return strings.TrimSpace(os.Getenv("MYINFRA_IMAGE"))
 }
 
 func localURL(addr string) string {

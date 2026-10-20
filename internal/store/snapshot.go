@@ -28,6 +28,9 @@ type Snapshot struct {
 	Domains      []snapDomain      `json:"domains"`
 	AppSecrets   []snapAppSecret   `json:"appSecrets,omitempty"`
 	Installation Installation      `json:"installation"`
+	// Peers are copies the new copy keeps in sync with: the one that moved
+	// it, when that one stays and can be reached.
+	Peers []string `json:"peers,omitempty"`
 }
 
 type snapAppSecret struct {

@@ -663,7 +663,7 @@
           <div class="layer"><h3>Data</h3><strong>Garage · Litestream · CloudNativePG</strong><p>Replicated object storage, continuous SQLite backups, replicated PostgreSQL.</p></div>
           <div class="layer"><h3>Provisioning</h3><strong>Ansible · cloud-init · OpenTofu</strong><p>Installing nodes; describing machines and DNS records at Hetzner and Scaleway.</p></div>
           <div class="layer"><h3>Images</h3><strong>OCI &amp; Docker registries</strong><p>Public images, private registries with logins, and <code>docker save</code> archives.</p></div>
-          <div class="layer"><h3>Packaging</h3><strong>Static binary · distroless image</strong><p>Linux, macOS, Windows; image for linux/amd64 and linux/arm64.</p></div>
+          <div class="layer"><h3>Packaging</h3><strong>Static binary · self-contained image</strong><p>Linux, macOS, Windows; image for linux/amd64 and linux/arm64.</p></div>
           <div class="layer"><h3>Quality</h3><strong>Go tests · Playwright · GitHub Actions</strong><p>Checks on every push; releases built, checked and published by CI.</p></div>
         </div>
       </div>
@@ -696,7 +696,7 @@ cd MyInfra
             <header>Build the Docker image <button class="copy" type="button">Copy</button></header>
             <pre><code>docker build -t myinfra --build-arg VERSION=dev .
 docker compose -f deploy/compose.yaml up -d</code></pre>
-            <p>A static binary on a distroless base, with an external PostgreSQL. The compose file expects <code>POSTGRES_PASSWORD</code>, <code>MYINFRA_MASTER_KEY</code> and <code>MYINFRA_IMAGE</code>.</p>
+            <p>The binary on a Debian base with Ansible, Python, the SSH client and OpenTofu, and an external PostgreSQL. The compose file expects <code>POSTGRES_PASSWORD</code>, <code>MYINFRA_MASTER_KEY</code> and <code>MYINFRA_IMAGE</code>.</p>
           </div>
           <div class="block">
             <header>Test <button class="copy" type="button">Copy</button></header>

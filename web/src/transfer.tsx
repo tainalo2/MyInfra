@@ -3,12 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { ArrowRightLeft } from "lucide-react";
 import { api, type Catalog, type Cluster, type DnsZone, type Project, type Secret } from "./api";
 import { CancelDeployment } from "./deployments";
-import { text } from "./i18n";
+import { knownMessage, text } from "./i18n";
 import { OfferFields, OfferStorage, cheapestOffer, chosenStorage, formatPrice } from "./offers";
 import { ProviderSelect } from "./provider-select";
 import { Spinner } from "./kit";
 import { usePoll } from "./poll";
-import { Button, EmptyList, ErrorText, Field, Icon, LoadingLines, PageTitle, Select } from "./ui";
+import { Button, EmptyList, ErrorText, Field, Icon, Input, LoadingLines, PageTitle, Select } from "./ui";
 
 type Preview = {
   accountId: string;
@@ -25,6 +25,11 @@ type Transfer = {
   url?: string;
   method?: string;
   error?: string;
+  // What the waiting step waits for: the new copy, or its HTTPS certificate.
+  wait?: "starting" | "certificate" | "dns";
+  // Why the waiting lasts: the reason Let's Encrypt gave, or a name put back.
+  note?: string;
+  keep?: boolean;
 };
 
 const running = ["creating", "waiting", "copying", "destroying"];
@@ -49,6 +54,10 @@ export function Transfer() {
   const [clusterId, setClusterId] = useState("");
   const [zones, setZones] = useState<DnsZone[]>([]);
   const [zone, setZone] = useState("");
+  // The name of the new copy in the zone: another copy may already hold myinfra.
+  const [subdomain, setSubdomain] = useState("myinfra");
+  // This copy stays, synced with the new one, and stops driving the machines.
+  const [keep, setKeep] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
 
@@ -161,7 +170,7 @@ export function Transfer() {
     setStarting(true);
     try {
       if (method === "pod") {
-        await api<Transfer>(`/api/clusters/${clusterId}/transfer`, { method: "POST", body: JSON.stringify({ zone }) });
+        await api<Transfer>(`/api/clusters/${clusterId}/transfer`, { method: "POST", body: JSON.stringify({ zone, subdomain: subdomain.trim(), keep }) });
       } else {
         const storage = chosenStorage(offer, storageId, storageGb);
         await api<Transfer>("/api/transfer", {
@@ -174,6 +183,7 @@ export function Transfer() {
             period,
             storageId: storage.id,
             storageGb: storage.gb,
+            keep,
           }),
         });
       }
@@ -238,9 +248,25 @@ export function Transfer() {
                     </Select>
                   </Field>
                 ) : null}
-                {zone ? <p className="text-muted">{text("server.address")} : myinfra.{zone}</p> : null}
+                {zone ? (
+                  <Field label={text("transfer.name")} hint={text("transfer.nameHint")}>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <Input
+                        value={subdomain}
+                        onChange={(e) => setSubdomain(e.target.value.toLowerCase())}
+                        autoCapitalize="off"
+                        autoComplete="off"
+                        spellCheck={false}
+                        pattern="[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?"
+                        required
+                      />
+                      <span className="shrink-0 text-muted">.{zone}</span>
+                    </span>
+                  </Field>
+                ) : null}
+                <KeepCopy keep={keep} onChange={setKeep} />
                 <div>
-                  <Button type="button" onClick={start} disabled={!createdCluster || !zone || starting}>
+                  <Button type="button" onClick={start} disabled={!createdCluster || !zone || !subdomain.trim() || starting}>
                     {starting ? <Spinner /> : <Icon icon={ArrowRightLeft} />}
                     {text("ui.transferer")}
                   </Button>
@@ -353,12 +379,15 @@ export function Transfer() {
             </>
           ) : null}
           {preview?.canHost && offer ? (
-            <div>
-              <Button type="button" onClick={start} disabled={starting}>
-                {starting ? <Spinner /> : <Icon icon={ArrowRightLeft} />}
-                {text("ui.transferer")}
-              </Button>
-            </div>
+            <>
+              <KeepCopy keep={keep} onChange={setKeep} />
+              <div>
+                <Button type="button" onClick={start} disabled={starting}>
+                  {starting ? <Spinner /> : <Icon icon={ArrowRightLeft} />}
+                  {text("ui.transferer")}
+                </Button>
+              </div>
+            </>
           ) : null}
             </>
           )}
@@ -399,7 +428,15 @@ export function TransferFollow() {
             const state = transfer.status === "failed" && step === index ? text("status.failed") : step < index || transfer.status === "done" ? text("status.done") : step === index ? text("ui.enCours") : text("status.pending");
             return (
               <li key={label} className="flex items-baseline justify-between gap-4 border-b border-line py-3">
-                <span>{label}</span>
+                <span>
+                  {label}
+                  {transfer.status === "waiting" && step === index && transfer.wait ? (
+                    <span className="mt-1 block text-[13px] text-muted">
+                      {transfer.wait === "dns" ? text("transfer.waitDns") : transfer.wait === "certificate" ? text("transfer.waitCertificate") : text("transfer.waitStarting")}
+                      {transfer.note ? <span className="mt-1 block text-warn">{transfer.note}</span> : null}
+                    </span>
+                  ) : null}
+                </span>
                 <span className="text-muted">{state}</span>
               </li>
             );
@@ -409,7 +446,7 @@ export function TransferFollow() {
       <CancelDeployment kind="transfer" id="transfer" active={transfer.status === "creating" || transfer.status === "waiting" || transfer.status === "copying"} />
       {transfer.error ? (
         <div className="mt-6">
-          <ErrorText>{transfer.error}</ErrorText>
+          <ErrorText>{knownMessage(transfer.error)}</ErrorText>
         </div>
       ) : null}
       {transfer.status === "done" && transfer.url ? (
@@ -418,7 +455,7 @@ export function TransferFollow() {
           <a className="font-semibold underline" href={transfer.url}>
             {transfer.url}
           </a>
-          {text("transfer.thisStops")}
+          {transfer.keep ? text("transfer.thisStays") : text("transfer.thisStops")}
         </p>
       ) : null}
     </>
@@ -432,5 +469,16 @@ function failedStep(step: string) {
   return 0;
 }
 
-
-
+// KeepCopy asks whether this copy stays once the new one runs: synced with
+// it, it no longer drives the machines. Useful to keep MyInfra on a laptop.
+function KeepCopy({ keep, onChange }: { keep: boolean; onChange: (keep: boolean) => void }) {
+  return (
+    <label className="flex items-start gap-3">
+      <input type="checkbox" checked={keep} onChange={(event) => onChange(event.target.checked)} className="mt-1" />
+      <span>
+        {text("transfer.keep")}
+        <span className="block text-[13px] text-muted">{text("transfer.keepHint")}</span>
+      </span>
+    </label>
+  );
+}

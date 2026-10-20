@@ -357,3 +357,14 @@ CREATE TABLE IF NOT EXISTS update_jobs (
 -- The variables an application had before a change of its variables: put
 -- back when the copies do not start with the new ones. NULL: they did not change.
 ALTER TABLE image_rollbacks ADD COLUMN IF NOT EXISTS variables jsonb;
+
+-- What this copy is, when a transfer kept it: a replica that drives no
+-- machine, and where the copy that drives them runs. It stays on this copy:
+-- copies exchange rows, never this one.
+CREATE TABLE IF NOT EXISTS copy_role (
+    singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+    replica boolean NOT NULL DEFAULT false,
+    main_method text NOT NULL DEFAULT '',
+    main_cluster_id text NOT NULL DEFAULT '',
+    main_url text NOT NULL DEFAULT ''
+);

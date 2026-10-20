@@ -82,4 +82,14 @@ func TestUpdatesAndJobs(t *testing.T) {
 	if err != nil || done.FinishedAt == nil {
 		t.Fatalf("%+v %v", done, err)
 	}
+
+	if role, err := db.CopyRole(ctx); err != nil || role.Replica {
+		t.Fatalf("une copie neuve pilote : %+v %v", role, err)
+	}
+	if err := db.SetCopyRole(ctx, CopyRole{Replica: true, MainMethod: "pod", MainClusterID: "c1", MainURL: "https://myinfra2.example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	if role, _ := db.CopyRole(ctx); !role.Replica || role.MainClusterID != "c1" || role.MainURL != "https://myinfra2.example.com" {
+		t.Fatalf("%+v", role)
+	}
 }

@@ -45,18 +45,25 @@ func phraseFor(r *http.Request) string {
 	return selfDestroyPhrase
 }
 
+// selfRecord is MyInfra shown as an application of the cluster it runs in:
+// on the copy in the pods, and on a copy a transfer kept elsewhere.
 func (a *API) selfRecord(ctx context.Context) (store.Application, bool) {
-	inst, err := a.Store.Installation(ctx)
-	if err != nil || inst.Method != "pod" || inst.ClusterID == "" {
+	clusterID, publicURL := "", ""
+	if inst, err := a.Store.Installation(ctx); err == nil && inst.Method == "pod" && inst.ClusterID != "" {
+		clusterID, publicURL = inst.ClusterID, inst.PublicURL
+	} else if role, err := a.Store.CopyRole(ctx); err == nil && role.MainMethod == "pod" && role.MainClusterID != "" {
+		clusterID, publicURL = role.MainClusterID, role.MainURL
+	}
+	if clusterID == "" {
 		return store.Application{}, false
 	}
 	host := ""
-	if parsed, err := url.Parse(inst.PublicURL); err == nil {
+	if parsed, err := url.Parse(publicURL); err == nil {
 		host = parsed.Hostname()
 	}
 	return store.Application{
 		ID: selfAppID, Name: "MyInfra", SourceKind: "image", Source: strings.TrimSpace(a.Image),
-		DestinationKind: "cluster", ClusterID: inst.ClusterID, Hostname: host, Replicas: 2,
+		DestinationKind: "cluster", ClusterID: clusterID, Hostname: host, Replicas: 2,
 	}, true
 }
 

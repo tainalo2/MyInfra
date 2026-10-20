@@ -575,3 +575,9 @@ func (c Client) ovhTime(ctx context.Context, base string) (string, error) {
 	}
 	return strconv.FormatInt(stamp, 10), nil
 }
+
+// Announced is what the name servers of a zone answer for a name now, without
+// any cache in between.
+func Announced(ctx context.Context, zone, host string) ([]string, error) {
+	return lookupVia(ctx, strings.ToLower(strings.Trim(strings.TrimSpace(zone), ".")), host)
+}

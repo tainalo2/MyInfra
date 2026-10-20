@@ -121,6 +121,7 @@ The image is `ghcr.io/tainalo2/myinfra`, for `linux/amd64` and `linux/arm64`.
 | `MYINFRA_ACME_EMAIL` | The Let's Encrypt account address. |
 | `MYINFRA_NO_BROWSER=1` | Do not open the browser at startup. |
 | `MYINFRA_UPDATE_CHECK=0` | Do not ask GitHub for new releases of MyInfra. |
+| `MYINFRA_IMAGE` | For a copy built from source: the published image a transfer starts, such as `ghcr.io/tainalo2/myinfra:0.1.0-rc.4`. A release carries its own. |
 
 ## Technologies
 
@@ -142,7 +143,7 @@ The image is `ghcr.io/tainalo2/myinfra`, for `linux/amd64` and `linux/arm64`.
 | Images | **OCI** and **Docker** registries, `docker save` archives | Public images, private registries with logins, and images imported into MyInfra. |
 | Providers | Hetzner, Scaleway, OVH, DigitalOcean, Infomaniak, UpCloud, Akamai, Vultr, Exoscale, Gcore, Kamatera, IONOS APIs | Buying, listing and destroying machines. |
 | DNS | OVH, Cloudflare, Scaleway, Hetzner DNS APIs | Writing and removing the records of each address. |
-| Packaging | One static binary; **distroless** image for `linux/amd64` and `linux/arm64` | The release artifacts. |
+| Packaging | One static binary; a Debian image for `linux/amd64` and `linux/arm64` with Ansible, Python, the SSH client and OpenTofu | The release artifacts. |
 | Quality | `go test`, **Playwright** browser tests, **GitHub Actions** | Checks on every push; releases built and published by CI. |
 
 ## Architecture
@@ -231,7 +232,7 @@ docker build -t myinfra --build-arg VERSION=dev .
 docker run -p 8080:8080 -e DATABASE_URL=… -e MYINFRA_MASTER_KEY=… myinfra
 ```
 
-The image holds the static binary on a distroless base; it uses an external PostgreSQL (see `deploy/compose.yaml`).
+The image holds the binary on a Debian base with every tool MyInfra drives — Ansible and its Python, the SSH client, OpenTofu — so that a copy moved to a server installs machines on its own; it uses an external PostgreSQL (see `deploy/compose.yaml`).
 
 ### Test
 
@@ -247,7 +248,7 @@ Push a tag such as `v1.4.0`, or run the **Publication** workflow from the Action
 
 ## How it works
 
-**Startup.** With no variables, the binary creates `~/.myinfra`, writes a master key there, and starts the PostgreSQL it carries. The data stays when the process stops. Then you choose a password; one account per installation. On the pages that install a machine, a button installs Ansible into `~/.myinfra` when it is missing, and OpenTofu for Hetzner and Scaleway when `MYINFRA_TOFU_DIR` is set. Neither needs an administrator password.
+**Startup.** With no variables, the binary creates `~/.myinfra`, writes a master key there, and starts the PostgreSQL it carries. The data stays when the process stops. Then you choose a password; one account per installation. On the pages that install a machine, a button installs Ansible into `~/.myinfra` when it is missing — with its own Python when the machine has none, and OpenTofu for Hetzner and Scaleway when `MYINFRA_TOFU_DIR` is set. Neither needs an administrator password.
 
 **Create an application.** The catalogue fills in the image, the port, the disk and the variables. For any other image, MyInfra reads the port and the folders to keep that the image declares (`EXPOSE`, `VOLUME`). The control plane stores the application, then delivers it.
 
@@ -267,7 +268,7 @@ Push a tag such as `v1.4.0`, or run the **Publication** workflow from the Action
 
 **Copies.** Two MyInfra instances of the same owner exchange database rows; the newer version wins. Sessions and imported images do not travel. A replica deploys nothing.
 
-**Transfer.** MyInfra can move itself: to a machine with cloud-init, or into the cluster as two pods with Postgres. The data is copied, then the old copy stops.
+**Transfer.** MyInfra can move itself: to a machine with cloud-init, or into the cluster as two pods with Postgres, under a name you choose in your zone. The data is copied; then the old copy either stops, or stays as a synced copy that no longer drives the machines — handy to keep MyInfra on a laptop. Each copy lists the other when it can reach it. In the cluster, MyInfra shows as an application that cannot be removed or changed.
 
 ## Updates
 

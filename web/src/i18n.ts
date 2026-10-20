@@ -940,6 +940,18 @@ const fr = {
   "err.update_step_settle": "Des copies ne sont pas revenues après la mise à jour du nœud : la suite attend.",
   "err.update_step_storage": "Le stockage du cluster n'a pas toutes ses copies : la mise à jour attend qu'il soit complet.",
   "err.update_step_ssh": "Le serveur ne répond pas en SSH.",
+  "transfer.waitStarting": "Attente du démarrage de la nouvelle copie : l'image est téléchargée puis lancée sur le cluster.",
+  "transfer.waitCertificate": "La nouvelle copie répond. Attente de son certificat HTTPS Let's Encrypt, en général moins de deux minutes.",
+  "err.transfer_no_certificate": "La nouvelle copie répond, mais son certificat HTTPS n'a pas été délivré.",
+  "err.transfer_proxy": "Le proxy du cluster n'a pas pu être préparé.",
+  "transfer.waitDns": "Le nom de la nouvelle copie pointait ailleurs que vers le cluster : MyInfra le republie, puis redemande le certificat.",
+  "transfer.name": "Adresse de la nouvelle copie",
+  "transfer.nameHint": "Un nom libre : si une autre copie de MyInfra utilise déjà celui-ci, choisissez-en un autre.",
+  "err.transfer_name_elsewhere": "Le nom {name} pointe déjà vers {addresses}. Choisissez un autre nom.",
+  "transfer.keep": "Garder cette copie, synchronisée avec la nouvelle",
+  "transfer.keepHint": "Elle reste ouverte et suit les changements, mais ne pilote plus les machines : la nouvelle copie le fait. Chacune apparaît dans les copies de l'autre.",
+  "transfer.thisStays": ". Cette copie redémarre en copie synchronisée : elle ne pilote plus les machines.",
+  "err.transfer_kept_peer": "La copie est en ligne, mais elle n'a pas pu être ajoutée aux copies.",
 } as const;
 
 export type MsgKey = keyof typeof fr;
@@ -1811,6 +1823,18 @@ const en: Record<MsgKey, string> = {
   "err.update_step_settle": "Some copies did not come back after the node update: the next steps wait.",
   "err.update_step_storage": "The cluster storage lacks some copies: the update waits for it to be complete.",
   "err.update_step_ssh": "The server does not answer over SSH.",
+  "transfer.waitStarting": "Waiting for the new copy to start: its image is downloaded, then started on the cluster.",
+  "transfer.waitCertificate": "The new copy answers. Waiting for its Let's Encrypt HTTPS certificate, usually under two minutes.",
+  "err.transfer_no_certificate": "The new copy answers, but its HTTPS certificate was not issued.",
+  "err.transfer_proxy": "The cluster proxy could not be prepared.",
+  "transfer.waitDns": "The name of the new copy pointed somewhere other than the cluster: MyInfra publishes it again, then asks for the certificate again.",
+  "transfer.name": "Address of the new copy",
+  "transfer.nameHint": "A free name: if another copy of MyInfra already uses this one, choose another.",
+  "err.transfer_name_elsewhere": "The name {name} already points to {addresses}. Choose another name.",
+  "transfer.keep": "Keep this copy, synced with the new one",
+  "transfer.keepHint": "It stays open and follows the changes, but no longer drives the machines: the new copy does. Each one appears in the other's copies.",
+  "transfer.thisStays": ". This copy restarts as a synced copy: it no longer drives the machines.",
+  "err.transfer_kept_peer": "The copy is online, but it could not be added to the copies.",
 };
 
 const pt: Record<MsgKey, string> = {
@@ -2672,6 +2696,18 @@ const pt: Record<MsgKey, string> = {
   "err.update_step_settle": "Algumas cópias não voltaram após a atualização do nó: o resto espera.",
   "err.update_step_storage": "O armazenamento do cluster não tem todas as cópias: a atualização espera que fique completo.",
   "err.update_step_ssh": "O servidor não responde por SSH.",
+  "transfer.waitStarting": "À espera que a nova cópia arranque: a imagem é descarregada e depois iniciada no cluster.",
+  "transfer.waitCertificate": "A nova cópia responde. À espera do certificado HTTPS Let's Encrypt, normalmente menos de dois minutos.",
+  "err.transfer_no_certificate": "A nova cópia responde, mas o certificado HTTPS não foi emitido.",
+  "err.transfer_proxy": "Não foi possível preparar o proxy do cluster.",
+  "transfer.waitDns": "O nome da nova cópia apontava para outro sítio que não o cluster: o MyInfra volta a publicá-lo e depois pede de novo o certificado.",
+  "transfer.name": "Endereço da nova cópia",
+  "transfer.nameHint": "Um nome livre: se outra cópia do MyInfra já usar este, escolha outro.",
+  "err.transfer_name_elsewhere": "O nome {name} já aponta para {addresses}. Escolha outro nome.",
+  "transfer.keep": "Manter esta cópia, sincronizada com a nova",
+  "transfer.keepHint": "Fica aberta e acompanha as alterações, mas deixa de pilotar as máquinas: a nova cópia faz isso. Cada uma aparece nas cópias da outra.",
+  "transfer.thisStays": ". Esta cópia reinicia como cópia sincronizada: deixa de pilotar as máquinas.",
+  "err.transfer_kept_peer": "A cópia está online, mas não pôde ser adicionada às cópias.",
 };
 
 const it: Record<MsgKey, string> = {
@@ -3532,6 +3568,18 @@ const it: Record<MsgKey, string> = {
   "err.update_step_settle": "Alcune copie non sono tornate dopo l'aggiornamento del nodo: il resto attende.",
   "err.update_step_storage": "Lo storage del cluster non ha tutte le copie: l'aggiornamento attende che sia completo.",
   "err.update_step_ssh": "Il server non risponde via SSH.",
+  "transfer.waitStarting": "In attesa dell'avvio della nuova copia: l'immagine viene scaricata e poi avviata sul cluster.",
+  "transfer.waitCertificate": "La nuova copia risponde. In attesa del certificato HTTPS Let's Encrypt, di solito meno di due minuti.",
+  "err.transfer_no_certificate": "La nuova copia risponde, ma il suo certificato HTTPS non è stato rilasciato.",
+  "err.transfer_proxy": "Non è stato possibile preparare il proxy del cluster.",
+  "transfer.waitDns": "Il nome della nuova copia puntava altrove rispetto al cluster: MyInfra lo ripubblica, poi richiede il certificato.",
+  "transfer.name": "Indirizzo della nuova copia",
+  "transfer.nameHint": "Un nome libero: se un'altra copia di MyInfra usa già questo, scegline un altro.",
+  "err.transfer_name_elsewhere": "Il nome {name} punta già a {addresses}. Scegli un altro nome.",
+  "transfer.keep": "Mantieni questa copia, sincronizzata con la nuova",
+  "transfer.keepHint": "Resta aperta e segue le modifiche, ma non pilota più le macchine: lo fa la nuova copia. Ognuna compare nelle copie dell'altra.",
+  "transfer.thisStays": ". Questa copia si riavvia come copia sincronizzata: non pilota più le macchine.",
+  "err.transfer_kept_peer": "La copia è online, ma non è stato possibile aggiungerla alle copie.",
 };
 
 const de: Record<MsgKey, string> = {
@@ -4394,6 +4442,18 @@ const de: Record<MsgKey, string> = {
   "err.update_step_settle": "Einige Kopien sind nach dem Knoten-Update nicht zurückgekommen: Der Rest wartet.",
   "err.update_step_storage": "Dem Cluster-Speicher fehlen Kopien: Das Update wartet, bis er vollständig ist.",
   "err.update_step_ssh": "Der Server antwortet nicht per SSH.",
+  "transfer.waitStarting": "Warten auf den Start der neuen Kopie: Ihr Image wird geladen und dann im Cluster gestartet.",
+  "transfer.waitCertificate": "Die neue Kopie antwortet. Warten auf ihr Let's-Encrypt-HTTPS-Zertifikat, meist unter zwei Minuten.",
+  "err.transfer_no_certificate": "Die neue Kopie antwortet, aber ihr HTTPS-Zertifikat wurde nicht ausgestellt.",
+  "err.transfer_proxy": "Der Proxy des Clusters konnte nicht vorbereitet werden.",
+  "transfer.waitDns": "Der Name der neuen Kopie zeigte nicht auf den Cluster: MyInfra veröffentlicht ihn erneut und fordert dann das Zertifikat neu an.",
+  "transfer.name": "Adresse der neuen Kopie",
+  "transfer.nameHint": "Ein freier Name: Nutzt eine andere MyInfra-Kopie schon diesen, wählen Sie einen anderen.",
+  "err.transfer_name_elsewhere": "Der Name {name} zeigt bereits auf {addresses}. Wählen Sie einen anderen Namen.",
+  "transfer.keep": "Diese Kopie behalten, mit der neuen synchronisiert",
+  "transfer.keepHint": "Sie bleibt offen und folgt den Änderungen, steuert die Maschinen aber nicht mehr: Das übernimmt die neue Kopie. Jede erscheint in den Kopien der anderen.",
+  "transfer.thisStays": ". Diese Kopie startet als synchronisierte Kopie neu: Sie steuert die Maschinen nicht mehr.",
+  "err.transfer_kept_peer": "Die Kopie ist online, konnte aber nicht zu den Kopien hinzugefügt werden.",
 };
 
 const tables: Record<Lang, Record<MsgKey, string>> = { fr, en, pt, it, de };

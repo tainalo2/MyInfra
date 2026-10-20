@@ -125,7 +125,6 @@ window.MYINFRA_PAGE_I18N = {
   "OCI &amp; Docker registries": "Registres OCI &amp; Docker",
   "Public images, private registries with logins, and <code>docker save</code> archives.": "Images publiques, registres privés avec identifiants, et archives <code>docker save</code>.",
   "Packaging": "Empaquetage",
-  "Static binary · distroless image": "Binaire statique · image distroless",
   "Linux, macOS, Windows; image for linux/amd64 and linux/arm64.": "Linux, macOS, Windows ; image pour linux/amd64 et linux/arm64.",
   "Quality": "Qualité",
   "Checks on every push; releases built, checked and published by CI.": "Vérifications à chaque push ; versions construites, vérifiées et publiées par la CI.",
@@ -138,7 +137,6 @@ window.MYINFRA_PAGE_I18N = {
   "Build one executable": "Construire un exécutable",
   "Builds the interface, embeds it, packs PostgreSQL for the target, then compiles a static binary. <code>VERSION</code> sets what <code>myinfra --version</code> reports.": "Construit l'interface, l'embarque, empaquette PostgreSQL pour la cible, puis compile un binaire statique. <code>VERSION</code> fixe ce qu'affiche <code>myinfra --version</code>.",
   "Build the Docker image": "Construire l'image Docker",
-  "A static binary on a distroless base, with an external PostgreSQL. The compose file expects <code>POSTGRES_PASSWORD</code>, <code>MYINFRA_MASTER_KEY</code> and <code>MYINFRA_IMAGE</code>.": "Un binaire statique sur une base distroless, avec un PostgreSQL externe. Le fichier compose attend <code>POSTGRES_PASSWORD</code>, <code>MYINFRA_MASTER_KEY</code> et <code>MYINFRA_IMAGE</code>.",
   "Test": "Tester",
   "Releases: push a <code>v1.2.3</code> tag or run the <em>Publication</em> workflow; CI builds, checks and publishes everything.": "Versions : poussez un tag <code>v1.2.3</code> ou lancez le workflow <em>Publication</em> ; la CI construit, vérifie et publie tout.",
   "One plan. Every feature.": "Une seule offre. Toutes les fonctionnalités.",
@@ -206,7 +204,9 @@ window.MYINFRA_PAGE_I18N = {
   "A terminal on any server or inside any pod, in the browser — and on your phone, with an Esc/Tab/Ctrl key bar.": "Un terminal sur n'importe quel serveur ou dans n'importe quel pod, dans le navigateur — et sur votre téléphone, avec une barre de touches Esc/Tab/Ctrl.",
   "Copied": "Copié",
   "Select and copy": "Sélectionnez et copiez",
-  "Copy": "Copier"
+  "Copy": "Copier",
+  "Static binary · self-contained image": "Binaire statique · image autonome",
+  "The binary on a Debian base with Ansible, Python, the SSH client and OpenTofu, and an external PostgreSQL. The compose file expects <code>POSTGRES_PASSWORD</code>, <code>MYINFRA_MASTER_KEY</code> and <code>MYINFRA_IMAGE</code>.": "Le binaire sur une base Debian avec Ansible, Python, le client SSH et OpenTofu, et un PostgreSQL externe. Le fichier compose attend <code>POSTGRES_PASSWORD</code>, <code>MYINFRA_MASTER_KEY</code> et <code>MYINFRA_IMAGE</code>."
  },
  "de": {
   "Features": "Funktionen",
@@ -333,7 +333,6 @@ window.MYINFRA_PAGE_I18N = {
   "OCI &amp; Docker registries": "OCI- &amp; Docker-Registries",
   "Public images, private registries with logins, and <code>docker save</code> archives.": "Öffentliche Images, private Registries mit Zugangsdaten und <code>docker save</code>-Archive.",
   "Packaging": "Paketierung",
-  "Static binary · distroless image": "Statische Binärdatei · Distroless-Image",
   "Linux, macOS, Windows; image for linux/amd64 and linux/arm64.": "Linux, macOS, Windows; Image für linux/amd64 und linux/arm64.",
   "Quality": "Qualität",
   "Checks on every push; releases built, checked and published by CI.": "Prüfungen bei jedem Push; Releases von der CI gebaut, geprüft und veröffentlicht.",
@@ -346,7 +345,6 @@ window.MYINFRA_PAGE_I18N = {
   "Build one executable": "Eine ausführbare Datei bauen",
   "Builds the interface, embeds it, packs PostgreSQL for the target, then compiles a static binary. <code>VERSION</code> sets what <code>myinfra --version</code> reports.": "Baut die Oberfläche, bettet sie ein, packt PostgreSQL für das Ziel und kompiliert dann eine statische Binärdatei. <code>VERSION</code> legt fest, was <code>myinfra --version</code> anzeigt.",
   "Build the Docker image": "Das Docker-Image bauen",
-  "A static binary on a distroless base, with an external PostgreSQL. The compose file expects <code>POSTGRES_PASSWORD</code>, <code>MYINFRA_MASTER_KEY</code> and <code>MYINFRA_IMAGE</code>.": "Eine statische Binärdatei auf Distroless-Basis, mit externem PostgreSQL. Die Compose-Datei erwartet <code>POSTGRES_PASSWORD</code>, <code>MYINFRA_MASTER_KEY</code> und <code>MYINFRA_IMAGE</code>.",
   "Test": "Testen",
   "Releases: push a <code>v1.2.3</code> tag or run the <em>Publication</em> workflow; CI builds, checks and publishes everything.": "Releases: Pushen Sie ein Tag <code>v1.2.3</code> oder starten Sie den Workflow <em>Publication</em>; die CI baut, prüft und veröffentlicht alles.",
   "One plan. Every feature.": "Ein Plan. Alle Funktionen.",
@@ -414,7 +412,9 @@ window.MYINFRA_PAGE_I18N = {
   "A terminal on any server or inside any pod, in the browser — and on your phone, with an Esc/Tab/Ctrl key bar.": "Ein Terminal auf jedem Server oder in jedem Pod, im Browser – und auf dem Handy, mit einer Esc/Tab/Strg-Tastenleiste.",
   "Copied": "Kopiert",
   "Select and copy": "Markieren und kopieren",
-  "Copy": "Kopieren"
+  "Copy": "Kopieren",
+  "Static binary · self-contained image": "Statische Binärdatei · eigenständiges Image",
+  "The binary on a Debian base with Ansible, Python, the SSH client and OpenTofu, and an external PostgreSQL. The compose file expects <code>POSTGRES_PASSWORD</code>, <code>MYINFRA_MASTER_KEY</code> and <code>MYINFRA_IMAGE</code>.": "Die Binärdatei auf Debian-Basis mit Ansible, Python, dem SSH-Client und OpenTofu, und ein externes PostgreSQL. Die Compose-Datei erwartet <code>POSTGRES_PASSWORD</code>, <code>MYINFRA_MASTER_KEY</code> und <code>MYINFRA_IMAGE</code>."
  },
  "it": {
   "Features": "Funzionalità",
@@ -541,7 +541,6 @@ window.MYINFRA_PAGE_I18N = {
   "OCI &amp; Docker registries": "Registri OCI &amp; Docker",
   "Public images, private registries with logins, and <code>docker save</code> archives.": "Immagini pubbliche, registri privati con credenziali e archivi <code>docker save</code>.",
   "Packaging": "Pacchettizzazione",
-  "Static binary · distroless image": "Binario statico · immagine distroless",
   "Linux, macOS, Windows; image for linux/amd64 and linux/arm64.": "Linux, macOS, Windows; immagine per linux/amd64 e linux/arm64.",
   "Quality": "Qualità",
   "Checks on every push; releases built, checked and published by CI.": "Controlli a ogni push; release compilate, verificate e pubblicate dalla CI.",
@@ -554,7 +553,6 @@ window.MYINFRA_PAGE_I18N = {
   "Build one executable": "Compila un eseguibile",
   "Builds the interface, embeds it, packs PostgreSQL for the target, then compiles a static binary. <code>VERSION</code> sets what <code>myinfra --version</code> reports.": "Compila l'interfaccia, la incorpora, impacchetta PostgreSQL per la destinazione, poi compila un binario statico. <code>VERSION</code> imposta ciò che mostra <code>myinfra --version</code>.",
   "Build the Docker image": "Compila l'immagine Docker",
-  "A static binary on a distroless base, with an external PostgreSQL. The compose file expects <code>POSTGRES_PASSWORD</code>, <code>MYINFRA_MASTER_KEY</code> and <code>MYINFRA_IMAGE</code>.": "Un binario statico su base distroless, con un PostgreSQL esterno. Il file compose richiede <code>POSTGRES_PASSWORD</code>, <code>MYINFRA_MASTER_KEY</code> e <code>MYINFRA_IMAGE</code>.",
   "Test": "Test",
   "Releases: push a <code>v1.2.3</code> tag or run the <em>Publication</em> workflow; CI builds, checks and publishes everything.": "Release: fai push di un tag <code>v1.2.3</code> o avvia il workflow <em>Publication</em>; la CI compila, verifica e pubblica tutto.",
   "One plan. Every feature.": "Un solo piano. Tutte le funzionalità.",
@@ -622,7 +620,9 @@ window.MYINFRA_PAGE_I18N = {
   "A terminal on any server or inside any pod, in the browser — and on your phone, with an Esc/Tab/Ctrl key bar.": "Un terminale su qualsiasi server o in qualsiasi pod, nel browser — e sul telefono, con una barra di tasti Esc/Tab/Ctrl.",
   "Copied": "Copiato",
   "Select and copy": "Seleziona e copia",
-  "Copy": "Copia"
+  "Copy": "Copia",
+  "Static binary · self-contained image": "Binario statico · immagine autonoma",
+  "The binary on a Debian base with Ansible, Python, the SSH client and OpenTofu, and an external PostgreSQL. The compose file expects <code>POSTGRES_PASSWORD</code>, <code>MYINFRA_MASTER_KEY</code> and <code>MYINFRA_IMAGE</code>.": "Il binario su base Debian con Ansible, Python, il client SSH e OpenTofu, e un PostgreSQL esterno. Il file compose richiede <code>POSTGRES_PASSWORD</code>, <code>MYINFRA_MASTER_KEY</code> e <code>MYINFRA_IMAGE</code>."
  },
  "pt": {
   "Features": "Funcionalidades",
@@ -749,7 +749,6 @@ window.MYINFRA_PAGE_I18N = {
   "OCI &amp; Docker registries": "Registos OCI &amp; Docker",
   "Public images, private registries with logins, and <code>docker save</code> archives.": "Imagens públicas, registos privados com credenciais e arquivos <code>docker save</code>.",
   "Packaging": "Empacotamento",
-  "Static binary · distroless image": "Binário estático · imagem distroless",
   "Linux, macOS, Windows; image for linux/amd64 and linux/arm64.": "Linux, macOS, Windows; imagem para linux/amd64 e linux/arm64.",
   "Quality": "Qualidade",
   "Checks on every push; releases built, checked and published by CI.": "Verificações em cada push; versões compiladas, verificadas e publicadas pela CI.",
@@ -762,7 +761,6 @@ window.MYINFRA_PAGE_I18N = {
   "Build one executable": "Compilar um executável",
   "Builds the interface, embeds it, packs PostgreSQL for the target, then compiles a static binary. <code>VERSION</code> sets what <code>myinfra --version</code> reports.": "Compila a interface, embute-a, empacota o PostgreSQL para o destino e depois compila um binário estático. <code>VERSION</code> define o que <code>myinfra --version</code> mostra.",
   "Build the Docker image": "Compilar a imagem Docker",
-  "A static binary on a distroless base, with an external PostgreSQL. The compose file expects <code>POSTGRES_PASSWORD</code>, <code>MYINFRA_MASTER_KEY</code> and <code>MYINFRA_IMAGE</code>.": "Um binário estático numa base distroless, com um PostgreSQL externo. O ficheiro compose espera <code>POSTGRES_PASSWORD</code>, <code>MYINFRA_MASTER_KEY</code> e <code>MYINFRA_IMAGE</code>.",
   "Test": "Testar",
   "Releases: push a <code>v1.2.3</code> tag or run the <em>Publication</em> workflow; CI builds, checks and publishes everything.": "Versões: faça push de uma tag <code>v1.2.3</code> ou execute o workflow <em>Publication</em>; a CI compila, verifica e publica tudo.",
   "One plan. Every feature.": "Um só plano. Todas as funcionalidades.",
@@ -830,6 +828,8 @@ window.MYINFRA_PAGE_I18N = {
   "A terminal on any server or inside any pod, in the browser — and on your phone, with an Esc/Tab/Ctrl key bar.": "Um terminal em qualquer servidor ou dentro de qualquer pod, no navegador — e no telemóvel, com uma barra de teclas Esc/Tab/Ctrl.",
   "Copied": "Copiado",
   "Select and copy": "Selecione e copie",
-  "Copy": "Copiar"
+  "Copy": "Copiar",
+  "Static binary · self-contained image": "Binário estático · imagem autónoma",
+  "The binary on a Debian base with Ansible, Python, the SSH client and OpenTofu, and an external PostgreSQL. The compose file expects <code>POSTGRES_PASSWORD</code>, <code>MYINFRA_MASTER_KEY</code> and <code>MYINFRA_IMAGE</code>.": "O binário numa base Debian com Ansible, Python, o cliente SSH e OpenTofu, e um PostgreSQL externo. O ficheiro compose espera <code>POSTGRES_PASSWORD</code>, <code>MYINFRA_MASTER_KEY</code> e <code>MYINFRA_IMAGE</code>."
  }
 };

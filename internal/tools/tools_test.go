@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -40,4 +41,15 @@ func containsPath(path, dir string) bool {
 		}
 	}
 	return false
+}
+
+// The image carries the OpenTofu MyInfra would install itself.
+func TestDockerfileCarriesTheSameTofu(t *testing.T) {
+	raw, err := os.ReadFile("../../Dockerfile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "ARG TOFU_VERSION="+tofuVersion+"\n") {
+		t.Fatalf("le Dockerfile n'installe pas OpenTofu %s", tofuVersion)
+	}
 }
