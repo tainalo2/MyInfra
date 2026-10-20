@@ -119,6 +119,8 @@ test.describe.serial("MyInfra", () => {
   test("the search goes to a page from anywhere", async ({ page }) => {
     await signIn(page);
     await page.goto("/clusters");
+    // The shortcut is heard once the interface is up: a slow runner gets there later.
+    await expect(page.getByRole("button", { name: "Rechercher une app, un serveur ou une page" })).toBeVisible();
     await page.keyboard.press("ControlOrMeta+k");
     const dialog = page.getByRole("dialog", { name: "Recherche" });
     await expect(dialog).toBeVisible();
