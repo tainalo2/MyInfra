@@ -12,6 +12,7 @@
     wireguard_address: 10.66.0.1/24
     wireguard_peers: []
     k3s_extra: ""
+    k3s_version: ""
   tasks:
     - name: Attendre la fin de cloud-init
       ansible.builtin.command: cloud-init status --wait
@@ -40,7 +41,7 @@
       tags: [keys]
 
     - name: Installer le serveur k3s
-      ansible.builtin.shell: curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server --cluster-init --node-name {{ node_name }} {{ k3s_extra }}" sh -
+      ansible.builtin.shell: curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" INSTALL_K3S_EXEC="server --cluster-init --node-name {{ node_name }} {{ k3s_extra }}" sh -
       args:
         creates: /usr/local/bin/k3s
       when: kubernetes_engine == "k3s" and node_role == "server" and k3s_server_url | length == 0
@@ -51,7 +52,7 @@
         systemctl disable --now k3s >/dev/null 2>&1 || true
         systemctl stop k3s-agent >/dev/null 2>&1 || true
         sleep 2
-        if ! curl -sfL https://get.k3s.io | INSTALL_K3S_FORCE_RESTART=true K3S_TOKEN="{{ k3s_token }}" sh -s - server --server "{{ k3s_server_url }}" --node-name "{{ node_name }}" {{ k3s_extra }}; then
+        if ! curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" INSTALL_K3S_FORCE_RESTART=true K3S_TOKEN="{{ k3s_token }}" sh -s - server --server "{{ k3s_server_url }}" --node-name "{{ node_name }}" {{ k3s_extra }}; then
           echo "L'installation du control plane a échoué."
           journalctl -u k3s -n 15 --no-pager || true
           exit 1
@@ -76,7 +77,7 @@
         systemctl disable --now k3s >/dev/null 2>&1 || true
         systemctl stop k3s-agent >/dev/null 2>&1 || true
         sleep 2
-        if ! curl -sfL https://get.k3s.io | INSTALL_K3S_FORCE_RESTART=true K3S_URL="{{ k3s_server_url }}" K3S_TOKEN="{{ k3s_token }}" INSTALL_K3S_EXEC="agent --node-name {{ node_name }} {{ k3s_extra }}" sh -; then
+        if ! curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" INSTALL_K3S_FORCE_RESTART=true K3S_URL="{{ k3s_server_url }}" K3S_TOKEN="{{ k3s_token }}" INSTALL_K3S_EXEC="agent --node-name {{ node_name }} {{ k3s_extra }}" sh -; then
           echo "L'installation de l'agent a échoué."
           journalctl -u k3s-agent -n 15 --no-pager || true
           exit 1

@@ -199,6 +199,10 @@ func (a *API) runDeploy(owner, id, name, token, providerID, clusterID, clusterNa
 					return
 				}
 				host.Token = strings.TrimSpace(k3sToken)
+				// The new node runs the Kubernetes of its cluster, whatever MyInfra pins.
+				if out, err := deploy.SSH(ctx, deploy.Host{Address: leader.Address, PrivateKey: privateKey}, k3sVersionCommand); err == nil && deploy.ValidK3sVersion(strings.TrimSpace(out)) {
+					host.K3sVersion = strings.TrimSpace(out)
+				}
 			}
 		}
 		if err := deploy.Play(ctx, host, tag); err != nil {

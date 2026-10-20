@@ -31,11 +31,13 @@ import {
   Trash2,
   Waypoints,
   type LucideIcon,
+  ArrowUpCircle,
 } from "lucide-react";
 import { api, type Deployment, type Destruction } from "./api";
 import { Palette, SearchButton } from "./palette";
 import { BottomTabs } from "./mobilenav";
 import { ToastHost } from "./kit";
+import { UpdatesHost, VersionNote, urgent, useUpdates } from "./updates";
 import { useTheme } from "./theme";
 
 export const focus =
@@ -281,6 +283,7 @@ const secretsNav: NavSpec = { to: "/secrets", label: "nav.secrets", icon: Shield
 const transfer: NavSpec = { to: "/transfert", label: "nav.transfer", icon: ArrowRightLeft };
 const copies: NavSpec = { to: "/copies", label: "nav.copies", icon: Waypoints };
 const account: NavSpec = { to: "/compte", label: "nav.account", icon: Lock };
+const updatesNav: NavSpec = { to: "/mises-a-jour", label: "nav.updates", icon: ArrowUpCircle };
 
 type NavSpec = { to: string; label: MsgKey; icon: LucideIcon; end?: boolean; match?: string[] };
 
@@ -288,19 +291,31 @@ function itemClass(active: boolean) {
   return `flex items-center gap-3 rounded-md px-3 py-2 ${focus} ${active ? "bg-status text-ink" : "text-muted"}`;
 }
 
-function NavItem({ to, label, icon, end, match }: NavSpec) {
+function NavItem({ to, label, icon, end, match, count, hot }: NavSpec & { count?: number; hot?: boolean }) {
   useI18n();
   const location = useLocation();
   const covered = match?.some((prefix) => location.pathname.startsWith(prefix)) ?? false;
   const name = text(label);
   return (
-    <NavLink to={to} end={end} aria-label={name} className={({ isActive }) => itemClass(isActive || covered)}>
+    <NavLink to={to} end={end} aria-label={count ? `${name} · ${count}` : name} className={({ isActive }) => itemClass(isActive || covered)}>
       <Icon icon={icon} />
-      <span className="hidden md:inline" aria-hidden>
+      <span className="hidden flex-1 md:inline" aria-hidden>
         {name}
       </span>
+      {count ? (
+        <span className={`hidden min-w-5 rounded-full px-1.5 text-center text-[11px] leading-5 text-canvas md:inline ${hot ? "bg-bad" : "bg-muted"}`} aria-hidden>
+          {count}
+        </span>
+      ) : null}
     </NavLink>
   );
+}
+
+// UpdatesNav shows how many updates wait, red when one fixes security.
+function UpdatesNav() {
+  const { view } = useUpdates();
+  const items = view?.updates ?? [];
+  return <NavItem {...updatesNav} count={items.length} hot={items.some(urgent)} />;
 }
 
 function ConnectMenu() {
@@ -458,6 +473,7 @@ export function Shell() {
   const [override, setOverride] = useState<Crumb[] | null>(null);
   return (
     <ToastHost>
+    <UpdatesHost>
     <TrailContext.Provider value={{ override, setOverride }}>
     <DestructionJobs.Provider value={jobs}>
     <OpenDeployments.Provider value={deploys}>
@@ -475,12 +491,16 @@ export function Shell() {
             <NavItem {...ssh} />
             <NavItem {...secretsNav} />
             <div className="mt-auto flex flex-col gap-1 border-t border-line pt-4">
+              <UpdatesNav />
               <NavItem {...transfer} />
               <NavItem {...copies} />
               <NavItem {...account} />
             </div>
           </nav>
-          <p className="hidden shrink-0 px-4 pb-4 text-[11px] leading-tight text-faint md:block">{text("footer.license")}</p>
+          <div className="hidden shrink-0 flex-col gap-1 px-4 pb-4 md:flex">
+            <VersionNote />
+            <p className="text-[11px] leading-tight text-faint">{text("footer.license")}</p>
+          </div>
         </aside>
         {location.pathname === "/" ? (
           <main className="relative min-w-0 flex-1 overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom))] md:overflow-hidden md:pb-0">
@@ -505,6 +525,7 @@ export function Shell() {
     </OpenDeployments.Provider>
     </DestructionJobs.Provider>
     </TrailContext.Provider>
+    </UpdatesHost>
     </ToastHost>
   );
 }
@@ -786,8 +807,9 @@ export function statusLabel(status: string) {
     case "linked":
       return { text: text("status.linked"), tone: "text-ok" };
     case "deploying":
-    case "updating":
       return { text: text("status.deploying"), tone: "text-warn" };
+    case "updating":
+      return { text: text("status.updating"), tone: "text-warn" };
     case "pending":
       return { text: text("status.pending"), tone: "text-warn" };
     case "pending_dns":

@@ -174,3 +174,48 @@ func TestRenderGivesPrivateRegistryLoginToPods(t *testing.T) {
 		t.Fatal("secret de connexion rendu sans registre privé")
 	}
 }
+
+func TestRenderKeepsCopiesAnsweringDuringAnUpdate(t *testing.T) {
+	raw := Render(App{
+		ID: "7d49736b-58e7-4386-b947-720823531792",
+		Services: []Service{
+			{Name: "front", Image: "nginx:1.27@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", Published: true, Replicas: 2},
+			{Name: "worker", Image: "ghcr.io/acme/worker:1", Replicas: 1},
+			{Name: "postgres", Image: "postgres:16", Listen: 5432, Disk: true, Replicas: 3},
+		},
+	})
+	for _, want := range []string{
+		"maxUnavailable: 0\n      maxSurge: 1",
+		"kind: PodDisruptionBudget\nmetadata:\n  name: front",
+		"kind: PodDisruptionBudget\nmetadata:\n  name: postgres",
+		"tcpSocket:\n              port: 80",
+		"tcpSocket:\n              port: 5432",
+		"tolerationSeconds: 30",
+		"image: nginx:1.27@sha256:",
+	} {
+		if !strings.Contains(raw, want) {
+			t.Fatalf("%q absent :\n%s", want, raw)
+		}
+	}
+	// A worker without a port is not probed, and one copy has no budget.
+	if strings.Contains(raw, "name: worker\n  namespace: myinfra-7d49736b-58e7-4386-b947-720823531792\nspec:\n  maxUnavailable") || strings.Count(raw, "readinessProbe") != 2 {
+		t.Fatal(raw)
+	}
+	if strings.Count(raw, "kind: PodDisruptionBudget") != 2 {
+		t.Fatal(raw)
+	}
+}
+
+func TestRenderRestartsCopiesWhenVariablesChange(t *testing.T) {
+	app := App{ID: "7d49736b-58e7-4386-b947-720823531792", Env: map[string]string{"MODE": "a"},
+		Services: []Service{{Name: "web", Image: "nginx:1.27", Published: true, Replicas: 2}}}
+	first := Render(app)
+	app.Env = map[string]string{"MODE": "b"}
+	second := Render(app)
+	if !strings.Contains(first, "myinfra.io/config:") || first == second {
+		t.Fatal(first)
+	}
+	if Render(app) != second {
+		t.Fatal("le rendu change sans changement de variables")
+	}
+}

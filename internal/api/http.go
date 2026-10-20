@@ -23,6 +23,14 @@ type API struct {
 	AppsDomain   string
 	SecureCookie bool
 	Image        string
+	// Version is the release this copy runs, "dev" when built from source.
+	Version string
+	// Postgres is the major version of the PostgreSQL the executable carries.
+	Postgres string
+	// Local is true for the executable with its own PostgreSQL.
+	Local bool
+	// Restart stops the server and starts the executable again, after an update.
+	Restart      func()
 	Master       []byte
 	Bootstrap    string
 	Replica      bool

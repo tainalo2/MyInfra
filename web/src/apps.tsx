@@ -11,6 +11,7 @@ import { CatalogueBrowser } from "./catalogue";
 import { UsageMeters } from "./meters";
 import { podCpu, size } from "./measure";
 import { ImageEditor } from "./images";
+import { AppUpdateNotice } from "./updates";
 import { AppSecretLinks } from "./secrets";
 import { PodActions } from "./pods";
 import { LocalImagePicker } from "./localimages";
@@ -619,9 +620,10 @@ export function ApplicationPage() {
           </a>
         ) : null}
         <p className="break-all text-muted">
-          {app.source} · {where}
+          {app.source.replace(/@sha256:[a-f0-9]+$/, "")} · {where}
         </p>
       </div>
+      {app.guarded ? null : <AppUpdateNotice app={app} onStarted={() => void appPoll.reload()} />}
       {app.guarded ? null : (
         <div className="mt-6 flex flex-wrap items-center gap-3">
           {address ? (
@@ -725,7 +727,7 @@ export function ApplicationPage() {
           </ul>
         </section>
       ) : null}
-      {app.guarded ? null : <AppVariables app={app} />}
+      {app.guarded ? null : <AppVariables app={app} onSaved={() => void appPoll.reload()} />}
       {app.guarded ? null : <AppSecretLinks appId={app.id} />}
       {app.guarded ? (
         <div className="mt-10">
@@ -774,11 +776,11 @@ const masked = "••••••••";
 
 // AppVariables lists the variables of an application. A sealed value stays
 // hidden until its owner asks for it.
-function AppVariables({ app }: { app: Application }) {
+function AppVariables({ app, onSaved }: { app: Application; onSaved: () => void }) {
   const [shown, setShown] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
+  const [editing, setEditing] = useState(false);
   const entries = Object.entries(app.variables ?? {}).sort(([a], [b]) => a.localeCompare(b));
-  if (entries.length === 0) return null;
 
   async function reveal(name: string) {
     setError("");
@@ -808,10 +810,86 @@ function AppVariables({ app }: { app: Application }) {
             </li>
           ))}
         </ul>
+        {entries.length === 0 ? <p className="text-muted">{text("app.noVariables")}</p> : null}
         {error ? <ErrorText>{error}</ErrorText> : null}
         <p className="mt-3 text-faint">{text("app.variablesHint")}</p>
+        <div className="mt-4">
+          <Button type="button" variant="secondary" onClick={() => setEditing(true)} disabled={app.rollout === "updating"}>
+            {text("app.editVariables")}
+          </Button>
+        </div>
       </Fold>
+      {editing ? (
+        <VariablesSheet
+          app={app}
+          onClose={() => setEditing(false)}
+          onSaved={() => {
+            setEditing(false);
+            onSaved();
+          }}
+        />
+      ) : null}
     </div>
+  );
+}
+
+// VariablesSheet changes the variables of a running application. Its copies
+// restart one after the other; if they do not start, the previous variables
+// come back. A hidden value left as it is keeps its sealed value.
+function VariablesSheet({ app, onClose, onSaved }: { app: Application; onClose: () => void; onSaved: () => void }) {
+  const toast = useToast();
+  const [draft, setDraft] = useState(() =>
+    Object.entries(app.variables ?? {})
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, value]) => `${name}=${value}`)
+      .join("\n"),
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    const variables: Record<string, string> = {};
+    for (const [index, line] of draft.split("\n").entries()) {
+      if (!line.trim()) continue;
+      const at = line.indexOf("=");
+      if (at <= 0) {
+        setError(`${text("ui.uneVariableSEcritCleValeur")} ${text("apps.badLine", { line: index + 1 })}`);
+        return;
+      }
+      variables[line.slice(0, at).trim()] = line.slice(at + 1);
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const out = await api<{ status: string }>(`/api/applications/${app.id}/variables`, { method: "PUT", body: JSON.stringify({ variables }) });
+      toast(out.status === "updating" ? text("app.variablesRolling") : text("app.variablesSame"));
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : text("common.error"));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Sheet title={text("app.editVariables")} onClose={onClose} busy={busy} wide>
+      <form onSubmit={save} className="flex flex-col gap-4">
+        <p className="text-muted">{text("app.variablesRestart")}</p>
+        <Field label={text("app.variables")}>
+          <TextArea value={draft} onChange={(e) => setDraft(e.target.value)} rows={8} placeholder={"NOM=valeur"} spellCheck={false} />
+        </Field>
+        {error ? <ErrorText>{error}</ErrorText> : null}
+        <div className="flex flex-wrap items-center gap-4">
+          <Button type="submit" disabled={busy}>
+            {busy ? <Spinner /> : null}
+            {text("app.saveVariables")}
+          </Button>
+          <TextButton type="button" onClick={onClose} disabled={busy}>
+            {text("common.cancel")}
+          </TextButton>
+        </div>
+      </form>
+    </Sheet>
   );
 }
 

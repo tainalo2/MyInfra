@@ -8,6 +8,7 @@ import { usePoll } from "./poll";
 import { usageText } from "./measure";
 import { RemovalNotice } from "./destructions";
 import { ServerCard, ServerForm, billText } from "./servers";
+import { UpdateBadge, UpdateDialog, urgent, useUpdates } from "./updates";
 import { hourlyRate } from "./measure";
 import { ActionsMenu, Button, EmptyList, ErrorText, Field, Icon, Input, ItemList, ListActions, LoadingCards, LoadingLines, MenuItem, PageTitle, Skeleton, TextArea, TextButton, entryClass, removalOf, useDestructions, useListMode, type ListMode } from "./ui";
 
@@ -224,6 +225,9 @@ function ClusterCard({
   const [confirm, setConfirm] = useState(false);
   const [apps, setApps] = useState<Application[] | null>(null);
   const [dialogError, setDialogError] = useState("");
+  const [updating, setUpdating] = useState(false);
+  const { view: updatesView } = useUpdates();
+  const nodeUpdates = (updatesView?.updates ?? []).filter((item) => item.kind === "server" && servers.some((server) => server.id === item.id));
 
   useEffect(() => {
     if (!confirm) return;
@@ -266,6 +270,9 @@ function ClusterCard({
             </Button>
           )}
           <ActionsMenu label={text("apps.more")}>
+            {cluster.origin === "imported" || nodeUpdates.length === 0 ? null : (
+              <MenuItem onClick={() => setUpdating(true)}>{text("upd.cluster.update")}</MenuItem>
+            )}
             {cluster.origin === "imported" ? null : (
               <MenuItem
                 onClick={() => {
@@ -291,6 +298,19 @@ function ClusterCard({
         </span>
       </div>
       <RemovalNotice job={removal} />
+      {nodeUpdates.length > 0 && cluster.origin !== "imported" ? (
+        <p className="flex flex-wrap items-center gap-2 text-muted">
+          <UpdateBadge item={nodeUpdates.find(urgent) ?? nodeUpdates[0]} />
+          {text("upd.cluster.nodes", { count: nodeUpdates.length })}
+        </p>
+      ) : null}
+      {updating ? (
+        <UpdateDialog
+          target={{ kind: "cluster", id: cluster.id, name: cluster.name, k3s: nodeUpdates.some((item) => item.detail.k3sNext) }}
+          onClose={() => setUpdating(false)}
+          onStarted={() => navigate("/mises-a-jour")}
+        />
+      ) : null}
       {dialogError && !confirm ? <ErrorText>{dialogError}</ErrorText> : null}
       {cluster.origin === "imported" ? null : (
         usage === undefined ? (

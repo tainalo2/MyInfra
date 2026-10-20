@@ -3,6 +3,7 @@ import { useState } from "react";
 import { LayoutGrid } from "lucide-react";
 import { api, type Application } from "./api";
 import { ConfirmDialog, StatusBadge, appHealth, useToast } from "./kit";
+import { UpdateBadge, useUpdate } from "./updates";
 import { usePoll } from "./poll";
 import { text } from "./i18n";
 import { AppLogo } from "./app-logo";
@@ -49,7 +50,10 @@ export function Home() {
                   <AppLogo slug={app.logo ?? ""} name={app.name} size={36} />
                   <span className="flex min-w-0 flex-col">
                     <span className="truncate">{app.name}</span>
-                    <StatusBadge status={appHealth(app)} />
+                    <span className="flex flex-wrap items-center gap-2">
+                      <StatusBadge status={appHealth(app)} />
+                      <AppBadge id={app.id} />
+                    </span>
                   </span>
                 </Link>
                 <RemovalNotice job={removalOf(jobs, "application", app.id)} />
@@ -77,4 +81,10 @@ export function Home() {
       ) : null}
     </>
   );
+}
+
+// AppBadge says that a new version of an application is available.
+function AppBadge({ id }: { id: string }) {
+  const item = useUpdate("app", id);
+  return item ? <UpdateBadge item={item} /> : null;
 }

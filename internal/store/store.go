@@ -47,19 +47,32 @@ func Open(ctx context.Context, databaseURL string) (*Store, error) {
 
 func (s *Store) Close() { s.pool.Close() }
 
+// migrateLock is held while the schema changes: during an update, two copies
+// of MyInfra start at the same time against the same database.
+const migrateLock = 842015
+
 func (s *Store) migrate(ctx context.Context) error {
-	if err := s.execScript(ctx, schema); err != nil {
+	conn, err := s.pool.Acquire(ctx)
+	if err != nil {
 		return err
 	}
-	if err := s.execScript(ctx, syncSchema); err != nil {
+	defer conn.Release()
+	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock($1)`, migrateLock); err != nil {
+		return err
+	}
+	defer conn.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, migrateLock)
+	if err := execScript(ctx, conn, schema); err != nil {
+		return err
+	}
+	if err := execScript(ctx, conn, syncSchema); err != nil {
 		return err
 	}
 	return s.ensureInstance(ctx)
 }
 
-func (s *Store) execScript(ctx context.Context, script string) error {
+func execScript(ctx context.Context, conn *pgxpool.Conn, script string) error {
 	for _, stmt := range splitSQL(script) {
-		if _, err := s.pool.Exec(ctx, stmt); err != nil {
+		if _, err := conn.Exec(ctx, stmt); err != nil {
 			line := stmt
 			if len(line) > 120 {
 				line = line[:120]

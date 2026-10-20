@@ -87,6 +87,19 @@ var errorCodes = map[string]string{
 	"Les versions n'ont pas pu être lues.":                                                  "versions",
 	"Ajoutez un serveur ou une application.":                                                "blueprint_empty",
 	"Un cluster nouveau a au moins un serveur.":                                             "blueprint_server",
+	"Aucune mise à jour n'est disponible pour cette application.":                           "update_none",
+	"L'image a changé depuis la dernière recherche. Relancez la recherche.":                 "update_stale",
+	"Une mise à jour est déjà en cours sur ces serveurs.":                                   "update_busy",
+	"Aucun serveur prêt à mettre à jour.":                                                   "update_no_server",
+	"Ce serveur n'est pas prêt : il ne peut pas être mis à jour maintenant.":                "update_server_not_ready",
+	"Les données de cette application sont en cours de déplacement. Réessayez une fois la redondance en place.": "update_migrating",
+	"Version de développement : construisez la nouvelle version depuis les sources.":                            "update_dev",
+	"MyInfra a été lancé à la main : mettez à jour l'image de son fichier compose.":                             "update_manual",
+	"La mise à jour de MyInfra est déjà en cours.":                                                              "update_myinfra_busy",
+	"MyInfra est à jour.":               "update_current",
+	"Cette mise à jour n'a pas échoué.": "update_not_failed",
+	"Cette mise à jour est terminée.":   "update_finished",
+	"Une variable est illisible : un nom fait de lettres, chiffres et _, une valeur sur une ligne.": "variable_bad",
 }
 
 func writeError(w http.ResponseWriter, status int, message string) {

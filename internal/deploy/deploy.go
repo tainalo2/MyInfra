@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -163,6 +164,21 @@ type Host struct {
 	WGPeers       []WireGuardPeer
 	Peers         []string
 	ControlPlanes []string
+	// K3sVersion is installed on the node: the one of the cluster it joins,
+	// K3sVersion for a new cluster.
+	K3sVersion string
+}
+
+// K3sVersion is the k3s a new cluster starts with. Joining nodes take the
+// version of their cluster: a node may not run a newer Kubernetes than its
+// control planes.
+const K3sVersion = "v1.36.5+k3s1"
+
+var k3sVersionPattern = regexp.MustCompile(`^v1\.[0-9]{1,3}\.[0-9]{1,3}\+k3s[0-9]{1,2}$`)
+
+// ValidK3sVersion is true for a version such as v1.36.5+k3s1.
+func ValidK3sVersion(version string) bool {
+	return k3sVersionPattern.MatchString(version)
 }
 
 type WireGuardPeer struct {
@@ -289,7 +305,12 @@ func playVars(host Host, engine string) map[string]any {
 			extra += " --tls-san " + host.Address
 		}
 	}
+	version := host.K3sVersion
+	if !ValidK3sVersion(version) {
+		version = K3sVersion
+	}
 	return map[string]any{
+		"k3s_version":       version,
 		"k3s_extra":         extra,
 		"ssh_keys":          keys,
 		"cluster_name":      host.Cluster,

@@ -29,7 +29,8 @@ func startPostgres(home string) (string, func(), error) {
 	}
 	root := filepath.Join(home, "pg")
 	data := filepath.Join(home, "pgdata")
-	if err := extractPostgres(archive, root); err != nil {
+	fresh, err := extractPostgres(archive, root)
+	if err != nil {
 		return "", nil, err
 	}
 	bin := filepath.Join(root, "bin", exe("postgres"))
@@ -43,6 +44,12 @@ func startPostgres(home string) (string, func(), error) {
 		if err := run(root, filepath.Join(root, "bin", exe("initdb")), "--username=myinfra", "--auth=trust", "--encoding=UTF8", "--locale=C", "--no-instructions", "-D", data); err != nil {
 			return "", nil, err
 		}
+	}
+	ctl := filepath.Join(root, "bin", exe("pg_ctl"))
+	if _, ok := runningPort(data); ok && fresh {
+		// A server left by the previous programs, after an update: it is
+		// stopped and started again from the new ones.
+		_ = run(root, ctl, "-D", data, "-w", "-t", "60", "-m", "fast", "stop")
 	}
 	if port, ok := runningPort(data); ok {
 		url, err := databaseURL(port)
@@ -63,7 +70,6 @@ func startPostgres(home string) (string, func(), error) {
 	}
 	logPath := filepath.Join(home, "pg.log")
 	opt := "-c listen_addresses=127.0.0.1 -c port=" + strconv.Itoa(port)
-	ctl := filepath.Join(root, "bin", exe("pg_ctl"))
 	if err := run(root, ctl, "-D", data, "-l", logPath, "-w", "-t", "60", "-o", opt, "start"); err != nil {
 		return "", nil, fmt.Errorf("PostgreSQL n'a pas démarré. %s", tail(logPath))
 	}
@@ -112,23 +118,25 @@ func ensureDatabase(url string) error {
 // libraries, for good.
 const extractedMark = ".myinfra-archive"
 
-func extractPostgres(archive []byte, root string) error {
+// extractPostgres unpacks the programs unless they are already there. It
+// returns true when it unpacked them.
+func extractPostgres(archive []byte, root string) (bool, error) {
 	sum := sha256.Sum256(archive)
 	digest := hex.EncodeToString(sum[:])
 	if mark, err := os.ReadFile(filepath.Join(root, extractedMark)); err == nil && strings.TrimSpace(string(mark)) == digest {
-		return nil
+		return false, nil
 	}
 	// The data lives beside, in pgdata: this folder only holds the programs.
 	if err := os.RemoveAll(root); err != nil {
-		return err
+		return false, err
 	}
 	if err := os.MkdirAll(root, 0o755); err != nil {
-		return err
+		return false, err
 	}
 	if err := unpackPostgres(archive, root); err != nil {
-		return err
+		return false, err
 	}
-	return os.WriteFile(filepath.Join(root, extractedMark), []byte(digest+"\n"), 0o644)
+	return true, os.WriteFile(filepath.Join(root, extractedMark), []byte(digest+"\n"), 0o644)
 }
 
 func unpackPostgres(archive []byte, root string) error {

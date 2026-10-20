@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"myinfra/internal/api"
@@ -24,6 +25,8 @@ import (
 var (
 	version = "dev"
 	image   = ""
+	// postgres is the major version of the embedded PostgreSQL, empty without one.
+	postgres = ""
 )
 
 func main() {
@@ -33,6 +36,24 @@ func main() {
 	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	tools.PreparePath()
+	// Read before an update renames the running file: the new one takes this path.
+	exe, exeErr := os.Executable()
+	if serve() {
+		if exeErr != nil {
+			slog.Error("redémarrage", "err", exeErr)
+			os.Exit(1)
+		}
+		// Every deferred step ran: PostgreSQL is stopped, the port is free.
+		if err := restart(exe); err != nil {
+			slog.Error("redémarrage", "err", err)
+			os.Exit(1)
+		}
+	}
+}
+
+// serve runs MyInfra until it is stopped. It returns true when an update
+// asked for the new executable to start in its place.
+func serve() bool {
 	rt, err := boot.Start()
 	if err != nil {
 		slog.Error("démarrage", "err", err)
@@ -90,6 +111,9 @@ func main() {
 		AppsDomain:   os.Getenv("MYINFRA_APPS_DOMAIN"),
 		SecureCookie: strings.HasPrefix(publicURL, "https://"),
 		Image:        image,
+		Version:      version,
+		Postgres:     postgres,
+		Local:        rt.Local,
 		Master:       master,
 		Bootstrap:    strings.TrimSpace(os.Getenv("MYINFRA_BOOTSTRAP_TOKEN")),
 		Replica:      os.Getenv("MYINFRA_REPLICA") == "1",
@@ -104,11 +128,17 @@ func main() {
 		go app.Publish(ctx)
 		go app.Destructions(ctx)
 		go app.Templates(ctx)
+		go app.Updates(ctx)
 	}
 	go app.Sync(ctx)
 	go app.WarmSamples(ctx)
 	server := &http.Server{Addr: addr, Handler: app.Handler(), ReadHeaderTimeout: 5 * time.Second}
 	app.Shutdown = server.Shutdown
+	var restarting atomic.Bool
+	app.Restart = func() {
+		restarting.Store(true)
+		stop()
+	}
 	go func() {
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -126,6 +156,7 @@ func main() {
 		slog.Error("serveur", "err", err)
 		os.Exit(1)
 	}
+	return restarting.Load()
 }
 
 func localURL(addr string) string {

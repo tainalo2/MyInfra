@@ -428,3 +428,78 @@ export type Destruction = {
   steps?: DestructionStep[];
   createdAt: string;
 };
+
+export type UpdateKind = "app" | "server" | "myinfra";
+
+export type UpdateLevel = "patch" | "minor" | "major" | "build" | "security" | "reboot" | "packages";
+
+export type ServiceUpdate = { name: string; image: string; next: string; level: UpdateLevel };
+
+export type ServerUpdateDetail = {
+  packages: number;
+  security: number;
+  reboot: boolean;
+  system?: string;
+  kernel?: string;
+  k3s?: string;
+  k3sNext?: string;
+};
+
+export type MyInfraUpdateDetail = { url: string; notes: string; published: string; prerelease: boolean };
+
+export type UpdateItem = {
+  kind: UpdateKind;
+  id: string;
+  name: string;
+  current: string;
+  available: string;
+  level: UpdateLevel;
+  detail: { services?: ServiceUpdate[] } & Partial<ServerUpdateDetail> & Partial<MyInfraUpdateDetail>;
+  checkedAt: string;
+};
+
+export type VersionView = {
+  current: string;
+  latest?: string;
+  url?: string;
+  method: "local" | "compose" | "pod" | "manual";
+  canUpdate: boolean;
+  reason?: string;
+  updating?: string;
+  image?: string;
+};
+
+export type UpdatesView = {
+  updates: UpdateItem[];
+  checking: boolean;
+  checkedAt?: string;
+  version: VersionView;
+};
+
+export type ImpactEffect = "none" | "short" | "down";
+
+export type Impact = {
+  effect: ImpactEffect;
+  apps: { id: string; name: string; effect: ImpactEffect; reason: string }[];
+  notes: string[];
+};
+
+export type UpdateJobStep = {
+  action: "check" | "drain" | "packages" | "k3s" | "reboot" | "ready" | "uncordon" | "settle";
+  serverId: string;
+  name: string;
+  k3s?: string;
+  status: "pending" | "running" | "done" | "failed" | "skipped";
+  detail?: string;
+};
+
+export type UpdateJob = {
+  id: string;
+  clusterId?: string;
+  serverId?: string;
+  name: string;
+  status: "running" | "failed" | "done" | "cancelled";
+  steps: UpdateJobStep[];
+  createdAt: string;
+  finishedAt?: string;
+};

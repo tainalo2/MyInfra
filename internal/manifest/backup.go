@@ -64,7 +64,7 @@ spec:
         myinfra.io/service: %s
       annotations:
         myinfra.io/backup: %s
-    spec:
+%s    spec:
       tolerations:
         - key: node.kubernetes.io/unreachable
           operator: Exists
@@ -74,7 +74,7 @@ spec:
           operator: Exists
           effect: NoExecute
           tolerationSeconds: %d
-`, svc.Name, ns, appID, replicas, svc.Name, svc.Name, state, failover, failover)
+`, svc.Name, ns, appID, replicas, svc.Name, svc.Name, state, configAnnotation(svc, false), failover, failover)
 	mounts := fmt.Sprintf("          volumeMounts:\n            - name: data\n              mountPath: %s\n            - name: backup\n              mountPath: /etc/litestream.yml\n              subPath: litestream.yml\n", diskPathOf(svc))
 	if !svc.Backup.Copying {
 		b.WriteString("      initContainers:\n")

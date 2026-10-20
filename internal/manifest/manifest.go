@@ -1,7 +1,9 @@
 package manifest
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"sort"
@@ -133,6 +135,9 @@ type Service struct {
 	SecretEnv map[string]SecretKey
 	// Stopped runs no copy while its data moves elsewhere.
 	Stopped bool
+	// configSum changes with the variables and secrets the copies read: a
+	// change of the Secrets alone restarts them, one after the other.
+	configSum string
 }
 
 // SecretKey names one key of a Secret.
@@ -356,7 +361,9 @@ func Render(app App) string {
 		writeDatabase(&b, ns, db)
 	}
 	refs := envRefs(app)
+	sum := configSum(app)
 	for _, svc := range app.Services {
+		svc.configSum = sum
 		replicas := svc.Replicas
 		if replicas < 1 {
 			replicas = 1
@@ -393,24 +400,28 @@ spec:
   replicas: %d
   strategy:
     type: %s
-  selector:
+%s  selector:
     matchLabels:
       myinfra.io/service: %s
   template:
     metadata:
       labels:
         myinfra.io/service: %s
-    spec:
-`, svc.Name, ns, app.ID, replicas, strategy, svc.Name, svc.Name)
+%s    spec:
+`, svc.Name, ns, app.ID, replicas, strategy, rolling(strategy), svc.Name, svc.Name, configAnnotation(svc, true))
 			if replicas > 1 {
 				b.WriteString(spread(svc.Name))
 			}
+			b.WriteString(moveAway())
 			fmt.Fprintf(&b, `      containers:
         - name: %s
           image: %s
           ports:
             - containerPort: %d
-`, svc.Name, svc.Image, listenOf(svc))
+%s`, svc.Name, svc.Image, listenOf(svc), readiness(svc))
+		}
+		if replicas > 1 {
+			writeBudget(&b, ns, svc.Name)
 		}
 		if svc.Backup == nil && !(svc.Disk && replicas > 1) {
 			writeContainerTail(&b, refs, svc)
@@ -566,13 +577,13 @@ spec:
     metadata:
       labels:
         myinfra.io/service: %s
-    spec:
-%s      containers:
+%s    spec:
+%s%s      containers:
         - name: %s
           image: %s
           ports:
             - containerPort: %d
-`, svc.Name, ns, svc.Name, listenOf(svc), listenOf(svc), svc.Name, ns, appID, svc.Name, replicas, svc.Name, svc.Name, spread(svc.Name), svc.Name, svc.Image, listenOf(svc))
+%s`, svc.Name, ns, svc.Name, listenOf(svc), listenOf(svc), svc.Name, ns, appID, svc.Name, replicas, svc.Name, svc.Name, configAnnotation(svc, true), spread(svc.Name), moveAway(), svc.Name, svc.Image, listenOf(svc), readiness(svc))
 	writeContainerTail(b, refs, svc)
 	fmt.Fprintf(b, `  volumeClaimTemplates:
     - metadata:
@@ -660,6 +671,87 @@ func diskGiOf(svc Service) int {
 		return 1
 	}
 	return svc.DiskGi
+}
+
+func configSum(app App) string {
+	h := sha256.New()
+	write := func(kind, name string, data map[string]string) {
+		for _, key := range sortedKeys(data) {
+			fmt.Fprintf(h, "%s\x00%s\x00%s\x00%s\n", kind, name, key, data[key])
+		}
+	}
+	write("env", "", app.Env)
+	for _, shared := range app.Shared {
+		write("shared", shared.Name, shared.Data)
+	}
+	for _, secret := range app.Secrets {
+		write("secret", secret.Name, secret.Data)
+	}
+	return hex.EncodeToString(h.Sum(nil))[:16]
+}
+
+// configAnnotation marks the copies with the variables they started with.
+// alone is true when the template has no other annotation.
+func configAnnotation(svc Service, alone bool) string {
+	if svc.configSum == "" {
+		return ""
+	}
+	line := fmt.Sprintf("        myinfra.io/config: %q\n", svc.configSum)
+	if alone {
+		return "      annotations:\n" + line
+	}
+	return line
+}
+
+// rolling starts a new copy before an old one stops: an update never lowers
+// the number of copies answering.
+func rolling(strategy string) string {
+	if strategy != "RollingUpdate" {
+		return ""
+	}
+	return "    rollingUpdate:\n      maxUnavailable: 0\n      maxSurge: 1\n"
+}
+
+// readiness sends visitors to a copy only once it accepts connections on its
+// port: a new version that does not start never replaces the old one. Only
+// for a service known to listen: a published one, or one with its port set.
+func readiness(svc Service) string {
+	if !svc.Published && svc.Listen < 1 {
+		return ""
+	}
+	return fmt.Sprintf("          readinessProbe:\n            tcpSocket:\n              port: %d\n            periodSeconds: 5\n            failureThreshold: 3\n", listenOf(svc))
+}
+
+// moveAway starts the copies of a lost node elsewhere after 30 seconds,
+// instead of the 5 minutes Kubernetes waits by default.
+func moveAway() string {
+	return fmt.Sprintf(`      tolerations:
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: %d
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: %d
+`, failover, failover)
+}
+
+// writeBudget keeps all but one copy of a service running while a server is
+// emptied for maintenance.
+func writeBudget(b *strings.Builder, ns, service string) {
+	fmt.Fprintf(b, `---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      myinfra.io/service: %s
+`, service, ns, service)
 }
 
 func spread(service string) string {

@@ -240,7 +240,11 @@ jobs:
           # Le compose publié démarre l'image de cette version, sauf si MYINFRA_IMAGE en désigne une autre.
           sed "s|image: \${MYINFRA_IMAGE}|image: \${MYINFRA_IMAGE:-$IMAGE}|" deploy/compose.yaml > dist/compose.yaml
           grep -q "$IMAGE" dist/compose.yaml
-          cd dist && sha256sum myinfra_* compose.yaml > SHA256SUMS && cat SHA256SUMS
+          # Une mise à jour en place refuse un autre PostgreSQL majeur que celui de ses données.
+          pg=$(sed -n 's/^PG_VERSION=\([0-9]*\)\..*/\1/p' build)
+          test -n "$pg"
+          printf '{"version":"%s","postgres":"%s"}\n' "$VERSION" "$pg" > dist/release.json
+          cd dist && sha256sum myinfra_* compose.yaml release.json > SHA256SUMS && cat SHA256SUMS
       - name: Notes
         run: |
           cat > notes.md <<EOF

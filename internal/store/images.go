@@ -241,3 +241,47 @@ func (s *Store) SetServiceDatabase(ctx context.Context, applicationID, name, sta
 	}
 	return nil
 }
+
+// SetVariables replaces the variables of an application, sealed values included.
+func (s *Store) SetVariables(ctx context.Context, applicationID string, vars map[string]string) error {
+	raw, err := json.Marshal(vars)
+	if err != nil {
+		return err
+	}
+	tag, err := s.pool.Exec(ctx, `UPDATE applications SET variables = $2 WHERE id = $1`, applicationID, raw)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// KeepRollbackVariables keeps the variables to put back if a rollout fails.
+func (s *Store) KeepRollbackVariables(ctx context.Context, applicationID string, vars map[string]string) error {
+	raw, err := json.Marshal(vars)
+	if err != nil {
+		return err
+	}
+	_, err = s.pool.Exec(ctx, `UPDATE image_rollbacks SET variables = $2 WHERE application_id = $1`, applicationID, raw)
+	return err
+}
+
+// RollbackVariables are the variables kept by KeepRollbackVariables, nil when
+// the rollout did not change them.
+func (s *Store) RollbackVariables(ctx context.Context, applicationID string) (map[string]string, error) {
+	var raw []byte
+	err := s.pool.QueryRow(ctx, `SELECT variables FROM image_rollbacks WHERE application_id = $1`, applicationID).Scan(&raw)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil || raw == nil {
+		return nil, err
+	}
+	vars := map[string]string{}
+	if err := json.Unmarshal(raw, &vars); err != nil {
+		return nil, err
+	}
+	return vars, nil
+}

@@ -21,7 +21,7 @@ const proxyImage = "traefik:v3.6.2"
 const ContainerPort = 80
 
 var (
-	imagePattern    = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,200}$`)
+	imagePattern    = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,200}(@sha256:[a-f0-9]{64})?$`)
 	idPattern       = regexp.MustCompile(`^[a-zA-Z0-9-]{8,80}$`)
 	servicePattern  = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
 	hostPattern     = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$`)
@@ -117,6 +117,7 @@ func Sync(baseURL, token string, apps []Workload) (string, error) {
 	// report prints the state for a delivery over SSH, and sends it to the
 	// control plane when the machine can reach it.
 	fmt.Fprintf(&b, "report() {\n  echo \"myinfra-status $1 $2\"\n  curl -fsS -m 10 -X POST '%s' -H 'content-type: application/json' -d \"{\\\"id\\\":\\\"$1\\\",\\\"status\\\":\\\"$2\\\"}\" >/dev/null 2>&1 || true\n}\n", report)
+	b.WriteString(readyFunc)
 	b.WriteString(ensureProxy(proxyZones(apps)))
 	wanted := " "
 	for _, app := range apps {
@@ -169,8 +170,7 @@ func Sync(baseURL, token string, apps []Workload) (string, error) {
 			fmt.Fprintf(&b, " '%s'", arg)
 		}
 		b.WriteString("\n")
-		fmt.Fprintf(&b, "  docker rm -f '%s' >/dev/null 2>&1 || true\n", name)
-		fmt.Fprintf(&b, "  docker rename '%s-next' '%s'\n", name, name)
+		writeSwap(&b, name+"-next", name, probePort(app))
 		b.WriteString("fi\n")
 		fmt.Fprintf(&b, "docker start '%s' >/dev/null 2>&1 || true\n", name)
 		fmt.Fprintf(&b, "running=$(docker inspect -f '{{.State.Running}}' '%s')\n", name)
@@ -258,8 +258,7 @@ func writeService(b *strings.Builder, report string, app Workload) error {
 		}
 		b.WriteString("\n")
 		if !app.Disk {
-			fmt.Fprintf(b, "  docker rm -f '%s' >/dev/null 2>&1 || true\n", name)
-			fmt.Fprintf(b, "  docker rename '%s' '%s'\n", runName, name)
+			writeSwap(b, runName, name, probePort(app))
 		}
 		b.WriteString("fi\n")
 		// A container stopped by a pause starts again when the pause ends.
@@ -273,6 +272,54 @@ func writeService(b *strings.Builder, report string, app Workload) error {
 	fmt.Fprintf(b, "if [ \"$failed\" = 0 ]; then status=running; else status=failed; fi\n")
 	fmt.Fprintf(b, "report '%s' \"$status\"\n", app.ID)
 	return nil
+}
+
+// readyFunc waits for a new container to keep running and, when its port is
+// known, to accept connections on it: up to a minute.
+const readyFunc = `ready() {
+  i=0
+  while [ "$i" -lt 30 ]; do
+    state=$(docker inspect -f '{{.State.Running}} {{.RestartCount}}' "$1" 2>/dev/null || echo 'false 0')
+    case "$state" in
+      'true 0') ;;
+      true*) return 1 ;;
+      *) [ "$i" -ge 3 ] && return 1 ;;
+    esac
+    if [ "$state" = 'true 0' ]; then
+      if [ "$2" = 0 ] || ! command -v bash >/dev/null 2>&1; then
+        [ "$i" -ge 5 ] && return 0
+      else
+        for ip in $(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "$1"); do
+          if timeout 2 bash -c "</dev/tcp/$ip/$2" 2>/dev/null; then return 0; fi
+        done
+      fi
+    fi
+    i=$((i + 1))
+    sleep 2
+  done
+  return 1
+}
+`
+
+// writeSwap puts a new container in the place of the current one only once
+// it answers: an update that does not start leaves the old version running.
+// A first start has nothing to keep.
+func writeSwap(b *strings.Builder, next, name string, port int) {
+	fmt.Fprintf(b, "  if ! docker inspect '%s' >/dev/null 2>&1 || ready '%s' %d; then\n", name, next, port)
+	fmt.Fprintf(b, "    docker rm -f '%s' >/dev/null 2>&1 || true\n", name)
+	fmt.Fprintf(b, "    docker rename '%s' '%s'\n", next, name)
+	b.WriteString("  else\n")
+	fmt.Fprintf(b, "    docker rm -f '%s' >/dev/null 2>&1 || true\n", next)
+	fmt.Fprintf(b, "    echo 'myinfra-kept %s'\n", name)
+	b.WriteString("  fi\n")
+}
+
+// probePort is the port a new container must answer on, 0 when unknown.
+func probePort(app Workload) int {
+	if !app.Published && app.Listen < 1 {
+		return 0
+	}
+	return listenOf(app)
 }
 
 // pausedName is the container of the pause page of a published application.

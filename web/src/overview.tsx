@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ChevronDown, ChevronUp, ExternalLink, Map as MapIcon, Search, X } from "lucide-react";
-import { api, peek, type Application, type Overview as OverviewData, type OverviewPod, type OverviewServer } from "./api";
+import { api, peek, type Application, type Overview as OverviewData, type OverviewPod, type OverviewServer, type UpdateItem } from "./api";
 import { AppLogo } from "./app-logo";
 import { text } from "./i18n";
 import { useI18n } from "./lang";
@@ -11,6 +11,7 @@ import { placeOf } from "./places";
 import { Button, ErrorText, Field, HealthDot, Icon, IconButton, LoadingLines, Select, TextButton, focus, podFailed, podHealth, statusLabel, useDeployments, useDestructions } from "./ui";
 import { EventList } from "./world";
 import { appHealth } from "./kit";
+import { urgent, useUpdates } from "./updates";
 import { WorldMap, healthOf, worst, type Inset, type MapSite, type Tone } from "./worldmap";
 
 type Mode = "serveurs" | "apps" | "pods";
@@ -110,6 +111,7 @@ function useOverview() {
 }
 
 export function Overview() {
+  const { view: updatesView } = useUpdates();
   useI18n();
   const wide = useWide();
   const navigate = useNavigate();
@@ -242,7 +244,7 @@ export function Overview() {
     );
   }
 
-  const attention = attentionOf(model, deployments, jobs, select);
+  const attention = attentionOf(model, deployments, jobs, select, updatesView?.updates ?? []);
   const empty = data !== null && model.servers.length === 0 && model.apps.length === 0;
   const mapLabel = text("overview.map", { sites: sites.length, servers: model.servers.length });
 
@@ -400,6 +402,7 @@ function attentionOf(
   deployments: { id: string; name: string; to: string }[],
   jobs: { id: string; name: string; status: string }[],
   select: (sel: string) => void,
+  updates: UpdateItem[],
 ): Item[] {
   const items: Item[] = [];
   for (const app of model.apps) {
@@ -422,6 +425,10 @@ function attentionOf(
         onClick: () => select(`app:${app.id}`),
       });
     }
+  }
+  // One line for every update: red when one fixes security or waits for a restart.
+  if (updates.length > 0) {
+    items.push({ key: "updates", tone: updates.some(urgent) ? "bad" : "warn", label: text("upd.waiting", { count: updates.length }), to: "/mises-a-jour" });
   }
   return items;
 }

@@ -41,6 +41,7 @@ import {
 import { RemovalNotice } from "./destructions";
 import { PodActions } from "./pods";
 import { ToolInstall } from "./tools";
+import { ServerFacts, ServerUpdateNotice, UpdateBadge, UpdateJobs, useUpdate } from "./updates";
 
 export function ServerForm({ clusterId }: { clusterId: string }) {
   const navigate = useNavigate();
@@ -488,6 +489,7 @@ export function ServerCard({
 }) {
   const label = statusLabel(server.status);
   const removal = removalOf(useDestructions(), "server", server.id);
+  const update = useUpdate("server", server.id);
   if (compact) {
     return (
       <div className="card-link flex h-full flex-col rounded-md border border-line bg-canvas">
@@ -500,6 +502,7 @@ export function ServerCard({
           <span className={`shrink-0 ${label.tone}`}>{label.text}</span>
         </div>
         {controlPlane ? <p className="mt-1 text-faint">{text("server.controlPlaneShort")}</p> : null}
+        {update ? <p className="mt-2"><UpdateBadge item={update} /></p> : null}
         {server.address ? <p className="mt-2 truncate text-muted">{server.address}</p> : null}
         {placeLabel(server.plan?.location) ? <p className="mt-1 truncate text-muted">{placeLabel(server.plan?.location)}</p> : null}
         {server.plan ? (
@@ -524,6 +527,7 @@ export function ServerCard({
         </span>
         <span className={label.tone}>{label.text}</span>
       </div>
+      {update ? <p className="-mt-1 mb-3"><UpdateBadge item={update} /></p> : null}
       <p className="mb-3 flex items-center gap-2 text-muted">
         {server.provider ? <ProviderLogo id={server.provider} /> : <Icon icon={ServerIcon} />}
         {server.providerName || text("server.manual")}
@@ -641,6 +645,7 @@ export function ServerPage() {
           </div>
         ))}
       </dl>
+      <ServerFacts serverId={server.id} />
       {!server.plan && server.joinCommand ? (
         <div className="mt-6 flex max-w-[720px] items-start gap-4">
           <code className="min-w-0 flex-1 break-all font-mono text-[13px] text-muted">{server.joinCommand}</code>
@@ -675,6 +680,12 @@ export function ServerPage() {
             {text("common.delete")}
           </MenuItem>
         </ActionsMenu>
+      </div>
+      <div className="max-w-[720px]">
+        <ServerUpdateNotice server={server} onStarted={() => void serverPoll.reload()} />
+      </div>
+      <div className="mt-6 max-w-[720px]">
+        <UpdateJobs filter={(job) => job.status === "running" && job.steps.some((step) => step.serverId === server.id)} />
       </div>
       {failed || deploying ? <div className="mt-4"><ToolInstall ansible tofu={server.tofu} /></div> : null}
       {server.deploy && server.deploy.length > 0 ? (

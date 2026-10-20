@@ -124,19 +124,13 @@ func (a *API) replaceImages(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "Cette application ne part pas d'une image.")
 		return
 	}
-	if app.Rollout == "updating" {
-		writeError(w, http.StatusConflict, "Une mise à jour est déjà en cours.")
-		return
-	}
 	if len(app.Services) == 0 || len(body.Services) != len(app.Services) {
 		writeError(w, http.StatusBadRequest, "Indiquez chaque image.")
 		return
 	}
 	current := map[string]string{}
-	previous := make([]store.ImageSnap, 0, len(app.Services))
 	for _, svc := range app.Services {
 		current[svc.Name] = svc.Image
-		previous = append(previous, store.ImageSnap{Name: svc.Name, Image: svc.Image})
 	}
 	images := map[string]string{}
 	for _, item := range body.Services {
@@ -145,11 +139,33 @@ func (a *API) replaceImages(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "Indiquez chaque image.")
 			return
 		}
+		if registry.Unpinned(current[item.Name]) == image {
+			image = current[item.Name]
+		}
 		if !acceptableImage(image) {
 			writeError(w, http.StatusBadRequest, "Indiquez le chemin de l'image, par exemple ghostfolio/ghostfolio:2.168.0.")
 			return
 		}
 		images[item.Name] = image
+	}
+	a.rollImages(w, r, app, images)
+}
+
+// rollImages delivers new images to an application, copy after copy, and
+// puts the previous ones back when the new ones do not start.
+func (a *API) rollImages(w http.ResponseWriter, r *http.Request, app store.Application, images map[string]string) {
+	if blocked := rolloutBlocked(app); blocked != "" {
+		writeError(w, http.StatusConflict, blocked)
+		return
+	}
+	previous := make([]store.ImageSnap, 0, len(app.Services))
+	current := map[string]string{}
+	for _, svc := range app.Services {
+		current[svc.Name] = svc.Image
+		previous = append(previous, store.ImageSnap{Name: svc.Name, Image: svc.Image})
+		if images[svc.Name] == "" {
+			images[svc.Name] = svc.Image
+		}
 	}
 	wanted := make([]string, 0, len(images))
 	for _, image := range images {
@@ -178,8 +194,22 @@ func (a *API) replaceImages(w http.ResponseWriter, r *http.Request) {
 		a.mapErr(w, err)
 		return
 	}
+	a.note(r.Context(), userID(r.Context()), newID(), "app.update", "info", "Mise à jour de "+app.Name+" lancée.", "", app.ClusterID)
 	a.startRollout(app.ID)
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "updating"})
+}
+
+// rolloutBlocked says why the images of an application cannot change now.
+func rolloutBlocked(app store.Application) string {
+	if app.Rollout == "updating" {
+		return "Une mise à jour est déjà en cours."
+	}
+	for _, svc := range app.Services {
+		if svc.Backup == "migrating" || svc.Database == "migrating" {
+			return "Les données de cette application sont en cours de déplacement. Réessayez une fois la redondance en place."
+		}
+	}
+	return ""
 }
 
 func (a *API) startRollout(id string) {
@@ -231,6 +261,15 @@ func (a *API) watchRollout(id string) {
 		return
 	}
 	_ = a.Store.FinishRollout(context.Background(), id, "", "", "running")
+	_ = a.Store.ForgetUpdate(context.Background(), "app", id)
+	a.note(context.Background(), app.OwnerID, newID(), "app.update", "ok", "Mise à jour de "+a.appName(app.OwnerID, id)+" terminée.", "", app.ClusterID)
+}
+
+func (a *API) appName(owner, id string) string {
+	if app, err := a.Store.Application(context.Background(), owner, id); err == nil {
+		return app.Name
+	}
+	return "l'application"
 }
 
 func (a *API) restoreRollout(id string) {
@@ -249,6 +288,10 @@ func (a *API) restoreRollout(id string) {
 	for _, item := range images {
 		back[item.Name] = item.Image
 	}
+	if vars, varsErr := a.Store.RollbackVariables(ctx, id); varsErr == nil && vars != nil {
+		_ = a.Store.SetVariables(ctx, id, vars)
+		detail = "Les copies n'ont pas démarré avec les nouvelles variables. Les précédentes ont été rétablies."
+	}
 	if err := a.Store.SetServiceImages(ctx, id, back); err == nil {
 		if app, loadErr := a.Store.RolloutApp(ctx, id); loadErr == nil {
 			_ = a.applyRollout(ctx, app)
@@ -258,6 +301,9 @@ func (a *API) restoreRollout(id string) {
 		status = "failed"
 	}
 	_ = a.Store.FinishRollout(ctx, id, "rolled_back", detail, status)
+	if app, loadErr := a.Store.RolloutApp(ctx, id); loadErr == nil {
+		a.note(ctx, app.OwnerID, newID(), "app.update", "bad", "Mise à jour de "+a.appName(app.OwnerID, id)+" annulée. "+detail, "", app.ClusterID)
+	}
 }
 
 func (a *API) applyRollout(ctx context.Context, app store.RolloutApp) error {
@@ -352,7 +398,8 @@ func (a *API) clusterRollout(ctx context.Context, host deploy.Host, namespace st
 		Items []struct {
 			Kind     string `json:"kind"`
 			Metadata struct {
-				Name string `json:"name"`
+				Name       string `json:"name"`
+				Generation int64  `json:"generation"`
 			} `json:"metadata"`
 			Spec struct {
 				Replicas *int `json:"replicas"`
@@ -365,11 +412,12 @@ func (a *API) clusterRollout(ctx context.Context, host deploy.Host, namespace st
 				} `json:"template"`
 			} `json:"spec"`
 			Status struct {
-				Phase             string `json:"phase"`
-				UpdatedReplicas   int    `json:"updatedReplicas"`
-				AvailableReplicas int    `json:"availableReplicas"`
-				ReadyReplicas     int    `json:"readyReplicas"`
-				ContainerStatuses []struct {
+				Phase              string `json:"phase"`
+				ObservedGeneration int64  `json:"observedGeneration"`
+				UpdatedReplicas    int    `json:"updatedReplicas"`
+				AvailableReplicas  int    `json:"availableReplicas"`
+				ReadyReplicas      int    `json:"readyReplicas"`
+				ContainerStatuses  []struct {
 					Image string `json:"image"`
 					State struct {
 						Waiting struct {
@@ -413,6 +461,10 @@ func (a *API) clusterRollout(ctx context.Context, host deploy.Host, namespace st
 		readyCopies := item.Status.AvailableReplicas
 		if item.Kind == "StatefulSet" {
 			readyCopies = item.Status.ReadyReplicas
+		}
+		// Until the controller saw the new version, its counts are the old ones.
+		if item.Status.ObservedGeneration < item.Metadata.Generation {
+			continue
 		}
 		if item.Status.UpdatedReplicas >= copies && readyCopies >= copies {
 			settled++
@@ -556,5 +608,12 @@ func rolloutContainers(appID string, svc store.Service) []string {
 func sameImage(have, want string) bool {
 	have = strings.TrimPrefix(strings.TrimPrefix(have, "docker.io/"), "index.docker.io/")
 	want = strings.TrimPrefix(strings.TrimPrefix(want, "docker.io/"), "index.docker.io/")
-	return have == want
+	if have == want {
+		return true
+	}
+	// A node may report a pinned image by its build alone.
+	if digest := registry.DigestOf(want); digest != "" {
+		return strings.HasSuffix(have, "@"+digest)
+	}
+	return false
 }

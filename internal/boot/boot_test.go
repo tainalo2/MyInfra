@@ -73,7 +73,7 @@ func TestExtractSkipsArchiveRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
-	if err := extractPostgres(raw.Bytes(), root); err != nil {
+	if _, err := extractPostgres(raw.Bytes(), root); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(filepath.Join(root, "bin", "marker"))
@@ -135,7 +135,7 @@ func TestExtractKeepsLibraryLinks(t *testing.T) {
 		&tar.Header{Name: "lib/libicuuc.so.60", Typeflag: tar.TypeSymlink, Linkname: "libicuuc.so.60.2"},
 	)
 	root := filepath.Join(t.TempDir(), "pg")
-	if err := extractPostgres(archive, root); err != nil {
+	if _, err := extractPostgres(archive, root); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(filepath.Join(root, "lib", "libicuuc.so.60"))
@@ -146,7 +146,7 @@ func TestExtractKeepsLibraryLinks(t *testing.T) {
 
 func TestExtractRefusesLinkOutside(t *testing.T) {
 	archive := archiveOf(t, &tar.Header{Name: "lib/evil", Typeflag: tar.TypeSymlink, Linkname: "../../outside"})
-	if err := extractPostgres(archive, filepath.Join(t.TempDir(), "pg")); err == nil {
+	if _, err := extractPostgres(archive, filepath.Join(t.TempDir(), "pg")); err == nil {
 		t.Fatal("un lien sortant du dossier a été accepté")
 	}
 }
@@ -164,8 +164,8 @@ func TestExtractRedoesIncompleteInstall(t *testing.T) {
 		&tar.Header{Name: "bin/postgres", Typeflag: tar.TypeReg, Mode: 0o755},
 		&tar.Header{Name: "lib/libz.so.1", Typeflag: tar.TypeReg, Mode: 0o644},
 	)
-	if err := extractPostgres(archive, root); err != nil {
-		t.Fatal(err)
+	if fresh, err := extractPostgres(archive, root); err != nil || !fresh {
+		t.Fatal(fresh, err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "lib", "libz.so.1")); err != nil {
 		t.Fatalf("installation incomplète gardée : %v", err)
@@ -174,8 +174,8 @@ func TestExtractRedoesIncompleteInstall(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "bin", "kept"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := extractPostgres(archive, root); err != nil {
-		t.Fatal(err)
+	if fresh, err := extractPostgres(archive, root); err != nil || fresh {
+		t.Fatal(fresh, err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "bin", "kept")); err != nil {
 		t.Fatal("la même archive a été extraite une seconde fois")

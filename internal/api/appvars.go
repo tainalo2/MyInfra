@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"myinfra/internal/box"
+	"myinfra/internal/manifest"
+	"myinfra/internal/store"
 )
 
 // A variable whose name looks like a password or a key is sealed with the
@@ -131,4 +133,82 @@ func (a *API) revealVariable(w http.ResponseWriter, r *http.Request) {
 	}
 	a.note(context.Background(), userID(r.Context()), newID(), "variable.revealed", "info", "Variable affichée : "+r.PathValue("name")+".", "", "")
 	writeJSON(w, http.StatusOK, map[string]string{"value": plain["v"]})
+}
+
+// setVariables changes the variables of a running application. The copies
+// restart one after the other with them; when they do not start, the
+// previous variables are put back.
+func (a *API) setVariables(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Variables map[string]string `json:"variables"`
+	}
+	if err := readJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "Requête illisible.")
+		return
+	}
+	owner := userID(r.Context())
+	app, err := a.Store.Application(r.Context(), owner, r.PathValue("id"))
+	if err != nil {
+		a.mapErr(w, err)
+		return
+	}
+	if blocked := rolloutBlocked(app); blocked != "" {
+		writeError(w, http.StatusConflict, blocked)
+		return
+	}
+	next := map[string]string{}
+	for key, value := range body.Variables {
+		key = strings.TrimSpace(key)
+		// A masked value is the sealed one, unchanged.
+		if old, ok := app.Variables[key]; ok && value == maskedValue {
+			value = old
+		}
+		next[key] = value
+	}
+	if !manifest.EnvOK(next) {
+		writeError(w, http.StatusBadRequest, "Une variable est illisible : un nom fait de lettres, chiffres et _, une valeur sur une ligne.")
+		return
+	}
+	sealed, err := a.sealVars(next)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if sameVars(sealed, app.Variables) {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+		return
+	}
+	images := make([]store.ImageSnap, 0, len(app.Services))
+	for _, svc := range app.Services {
+		images = append(images, store.ImageSnap{Name: svc.Name, Image: svc.Image})
+	}
+	if err := a.Store.BeginRollout(r.Context(), app.ID, app.RunStatus, images); err != nil {
+		a.mapErr(w, err)
+		return
+	}
+	if err := a.Store.KeepRollbackVariables(r.Context(), app.ID, app.Variables); err != nil {
+		_ = a.Store.FinishRollout(r.Context(), app.ID, "", "", "")
+		a.mapErr(w, err)
+		return
+	}
+	if err := a.Store.SetVariables(r.Context(), app.ID, sealed); err != nil {
+		_ = a.Store.FinishRollout(r.Context(), app.ID, "", "", "")
+		a.mapErr(w, err)
+		return
+	}
+	a.note(r.Context(), owner, newID(), "app.update", "info", "Variables de "+app.Name+" modifiées.", "", app.ClusterID)
+	a.startRollout(app.ID)
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "updating"})
+}
+
+func sameVars(a, b map[string]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for key, value := range a {
+		if other, ok := b[key]; !ok || other != value {
+			return false
+		}
+	}
+	return true
 }

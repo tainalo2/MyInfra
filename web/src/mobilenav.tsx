@@ -2,6 +2,7 @@ import { useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowRightLeft,
+  ArrowUpCircle,
   Cloud,
   Container,
   GitBranch,
@@ -28,6 +29,7 @@ import { Sheet } from "./kit";
 import { useI18n } from "./lang";
 import { useTheme } from "./theme";
 import { Icon, focus } from "./ui";
+import { urgent, useUpdates } from "./updates";
 
 type Tab = { to: string; label: MsgKey; icon: LucideIcon; end?: boolean; match?: string[] };
 
@@ -47,6 +49,7 @@ const more: Tab[] = [
   { to: "/images", label: "nav.images", icon: HardDrive },
   { to: "/cles", label: "nav.ssh", icon: KeyRound },
   { to: "/secrets", label: "nav.secrets", icon: Shield },
+  { to: "/mises-a-jour", label: "nav.updates", icon: ArrowUpCircle },
   { to: "/transfert", label: "nav.transfer", icon: ArrowRightLeft },
   { to: "/copies", label: "nav.copies", icon: Waypoints },
   { to: "/compte", label: "nav.account", icon: Lock },
@@ -59,6 +62,9 @@ export function BottomTabs({ deployments, removals }: { deployments: number; rem
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const busy = deployments + removals;
+  const { view } = useUpdates();
+  const updates = view?.updates.length ?? 0;
+  const hot = view?.updates.some(urgent) ?? false;
   const inMore = more.some((item) => location.pathname.startsWith(item.to));
   return (
     <>
@@ -93,7 +99,10 @@ export function BottomTabs({ deployments, removals }: { deployments: number; rem
           aria-haspopup="dialog"
           className={`flex min-h-14 flex-col items-center justify-center gap-1 text-[11px] ${focus} ${inMore ? "text-ink" : "text-muted"}`}
         >
-          <Icon icon={Menu} />
+          <span className="relative">
+            <Icon icon={Menu} />
+            {updates > 0 ? <span className={`absolute -right-1.5 -top-1 size-2.5 rounded-full ${hot ? "bg-bad" : "bg-link"}`} aria-label={text("upd.waiting", { count: updates })} /> : null}
+          </span>
           {text("nav.more")}
         </button>
       </nav>
@@ -106,6 +115,9 @@ function MoreSheet({ deployments, removals, onClose }: { deployments: number; re
   const { lang, setLang } = useI18n();
   const { theme, toggle } = useTheme();
   const navigate = useNavigate();
+  const { view } = useUpdates();
+  const updates = view?.updates.length ?? 0;
+  const hot = view?.updates.some(urgent) ?? false;
   const items: Tab[] = [
     ...(deployments > 0 ? [{ to: "/deploiements", label: "nav.deployments" as MsgKey, icon: Rocket }] : []),
     ...(removals > 0 ? [{ to: "/suppressions", label: "nav.destructions" as MsgKey, icon: Trash2 }] : []),
@@ -125,7 +137,10 @@ function MoreSheet({ deployments, removals, onClose }: { deployments: number; re
               className={`flex min-h-12 w-full items-center gap-3 rounded-md px-2 text-left ${focus}`}
             >
               <Icon icon={item.icon} className="text-muted" />
-              {text(item.label)}
+              <span className="flex-1">{text(item.label)}</span>
+              {item.to === "/mises-a-jour" && updates > 0 ? (
+                <span className={`min-w-5 rounded-full px-1.5 text-center text-[11px] leading-5 text-canvas ${hot ? "bg-bad" : "bg-muted"}`}>{updates}</span>
+              ) : null}
             </button>
           </li>
         ))}

@@ -110,7 +110,8 @@ WHERE chosen.cluster_id IS NOT NULL
 
 ALTER TABLE servers DROP CONSTRAINT IF EXISTS servers_status_check;
 
-ALTER TABLE servers ADD CONSTRAINT servers_status_check CHECK (status IN ('pending', 'deploying', 'linked', 'failed'));
+-- updating: the server is emptied and restarted for its updates, it leads nothing meanwhile.
+ALTER TABLE servers ADD CONSTRAINT servers_status_check CHECK (status IN ('pending', 'deploying', 'linked', 'failed', 'updating'));
 
 ALTER TABLE secrets ADD COLUMN IF NOT EXISTS key_id text NOT NULL DEFAULT '';
 
@@ -316,3 +317,43 @@ CREATE TABLE IF NOT EXISTS image_chunks (
     data bytea NOT NULL,
     PRIMARY KEY (image_id, seq)
 );
+
+-- What can be updated: an application with a newer image, a server with
+-- packages or a reboot waiting, MyInfra itself. Filled by a periodic check:
+-- nothing is applied until a person asks.
+CREATE TABLE IF NOT EXISTS updates (
+    kind text NOT NULL CHECK (kind IN ('app', 'server', 'myinfra')),
+    target_id text NOT NULL,
+    owner_id text NOT NULL DEFAULT '',
+    current text NOT NULL DEFAULT '',
+    available text NOT NULL DEFAULT '',
+    level text NOT NULL CHECK (level IN ('patch', 'minor', 'major', 'build', 'security', 'reboot', 'packages')),
+    detail jsonb NOT NULL DEFAULT '{}'::jsonb,
+    checked_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (kind, target_id)
+);
+
+-- The build a tag pointed at when MyInfra first saw it: a later build of the
+-- same tag (postgres:16, latest) is offered as an update.
+CREATE TABLE IF NOT EXISTS image_digests (
+    image text PRIMARY KEY,
+    digest text NOT NULL,
+    seen_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- A server or a whole cluster being updated, node after node. The steps are
+-- saved as they run, so that an update resumes after MyInfra restarts.
+CREATE TABLE IF NOT EXISTS update_jobs (
+    id text PRIMARY KEY,
+    owner_id text NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    cluster_id text NOT NULL DEFAULT '',
+    server_id text NOT NULL DEFAULT '',
+    status text NOT NULL CHECK (status IN ('running', 'failed', 'done', 'cancelled')),
+    steps jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    finished_at timestamptz
+);
+
+-- The variables an application had before a change of its variables: put
+-- back when the copies do not start with the new ones. NULL: they did not change.
+ALTER TABLE image_rollbacks ADD COLUMN IF NOT EXISTS variables jsonb;

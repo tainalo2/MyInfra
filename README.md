@@ -23,6 +23,7 @@ Project page: **https://tainalo2.github.io/MyInfra/** — in English, French, Ge
 - [Architecture](#architecture)
 - [Build it yourself](#build-it-yourself)
 - [How it works](#how-it-works)
+- [Updates](#updates)
 - [Validated integrations](#validated-integrations)
 - [Transparency](#transparency)
 
@@ -119,6 +120,7 @@ The image is `ghcr.io/tainalo2/myinfra`, for `linux/amd64` and `linux/arm64`.
 | `MYINFRA_PUBLIC_URL` | The address machines and browsers use to reach MyInfra. |
 | `MYINFRA_ACME_EMAIL` | The Let's Encrypt account address. |
 | `MYINFRA_NO_BROWSER=1` | Do not open the browser at startup. |
+| `MYINFRA_UPDATE_CHECK=0` | Do not ask GitHub for new releases of MyInfra. |
 
 ## Technologies
 
@@ -266,6 +268,18 @@ Push a tag such as `v1.4.0`, or run the **Publication** workflow from the Action
 **Copies.** Two MyInfra instances of the same owner exchange database rows; the newer version wins. Sessions and imported images do not travel. A replica deploys nothing.
 
 **Transfer.** MyInfra can move itself: to a machine with cloud-init, or into the cluster as two pods with Postgres. The data is copied, then the old copy stops.
+
+## Updates
+
+MyInfra looks for updates by itself — applications every six hours, servers every twelve, MyInfra every six — and applies none of them on its own. The **Updates** page, a badge on each application, server and cluster, and a line in *Needs attention* show what is waiting; a security fix or a pending restart shows in red. Before anything starts, a dialog lists every application with what the update does to it: no interruption, about thirty seconds while one copy starts elsewhere, or stopped until its server is back.
+
+**Applications.** A newer version of the same flavour (`2.2.6` → `2.2.7`, never `-alpine` to `-debian`) comes from the registry, with the logins of private registries. A tag that does not change, such as `postgres:16` or `latest`, is compared by digest: a new build is offered, and once applied the image is pinned to that digest so that every node pulls exactly it. On a cluster, a new copy must accept connections before an old one stops (`maxUnavailable: 0`, a TCP readiness probe), and a copy that keeps its files on a node disk is replaced in place. On a machine, the new container must keep running and answer on its port before the old one is removed. If the new version does not start within a few minutes, the previous image — or the previous variables, which can now be changed on a running application — comes back by itself. A major version asks you to confirm that you read its notes.
+
+**Servers.** Each server reports its upgradable packages, the security ones, whether it waits for a restart, and its k3s version. A cluster is updated one node at a time: MyInfra checks that every node is ready, that the object store has all its copies and every replicated database all its instances, hands the primary of a database to another node, then empties the node without `--force`, so that Pod Disruption Budgets keep all but one copy of every service running. It upgrades the packages, optionally k3s — one minor version at a time, control planes first, the binary checked against the release sums — restarts the node if needed, waits for it to be ready, gives it back to the cluster, and waits for every copy to answer before the next node. A failed step gives the node back and can be resumed; a stop request waits for the current node to be back. New clusters start on a pinned k3s, and a node joining a cluster takes the version of that cluster.
+
+**MyInfra.** The release check reads the GitHub releases of this repository. The executable downloads the release for its system, checks it against `SHA256SUMS`, refuses a release whose embedded PostgreSQL major version differs from its data (`release.json`), keeps the previous file as `.old`, and starts again in place. A copy moved to a machine changes the image of its compose file and puts the old one back if the new one does not answer. A copy in a cluster rolls its two pods one after the other and rolls back if they do not become ready. A copy started by hand with Docker Compose shows the command to run.
+
+**Schema.** Every copy migrates the database when it starts, under a lock. During an update an old and a new copy can run side by side, so the schema only grows: new columns come with a default, nothing is renamed or dropped.
 
 ## Validated integrations
 
