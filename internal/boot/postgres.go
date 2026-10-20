@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -104,14 +106,32 @@ func ensureDatabase(url string) error {
 	return err
 }
 
+// extractedMark holds the digest of the archive last unpacked in full. A
+// folder without it, or from another archive, is unpacked again: a binary
+// only checking for bin/postgres kept a half extraction, or one without its
+// libraries, for good.
+const extractedMark = ".myinfra-archive"
+
 func extractPostgres(archive []byte, root string) error {
-	bin := filepath.Join(root, "bin", exe("postgres"))
-	if _, err := os.Stat(bin); err == nil {
+	sum := sha256.Sum256(archive)
+	digest := hex.EncodeToString(sum[:])
+	if mark, err := os.ReadFile(filepath.Join(root, extractedMark)); err == nil && strings.TrimSpace(string(mark)) == digest {
 		return nil
+	}
+	// The data lives beside, in pgdata: this folder only holds the programs.
+	if err := os.RemoveAll(root); err != nil {
+		return err
 	}
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return err
 	}
+	if err := unpackPostgres(archive, root); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(root, extractedMark), []byte(digest+"\n"), 0o644)
+}
+
+func unpackPostgres(archive []byte, root string) error {
 	gz, err := gzip.NewReader(bytes.NewReader(archive))
 	if err != nil {
 		return err
@@ -159,8 +179,34 @@ func extractPostgres(archive []byte, root string) error {
 			if closeErr != nil {
 				return closeErr
 			}
+		case tar.TypeSymlink:
+			// The Linux libraries are reached through links such as
+			// libicuuc.so.60 -> libicuuc.so.60.2: without them initdb stops.
+			if err := safeLink(root, dest, header.Linkname); err != nil {
+				return err
+			}
+			if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+				return err
+			}
+			_ = os.Remove(dest)
+			if err := os.Symlink(header.Linkname, dest); err != nil {
+				return err
+			}
 		}
 	}
+}
+
+// safeLink refuses a link that leads out of the PostgreSQL folder.
+func safeLink(root, dest, target string) error {
+	if target == "" || filepath.IsAbs(target) || strings.HasPrefix(target, "/") {
+		return errString("Archive PostgreSQL refusée.")
+	}
+	resolved := filepath.Join(filepath.Dir(dest), filepath.FromSlash(target))
+	rel, err := filepath.Rel(root, resolved)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return errString("Archive PostgreSQL refusée.")
+	}
+	return nil
 }
 
 func safeJoin(root, name string) (string, error) {
