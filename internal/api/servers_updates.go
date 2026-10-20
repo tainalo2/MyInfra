@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"myinfra/internal/deploy"
+	"myinfra/internal/join"
 	"myinfra/internal/manifest"
 	"myinfra/internal/store"
 )
@@ -239,8 +241,11 @@ type updateStep struct {
 	Name     string `json:"name"`
 	K3s      string `json:"k3s,omitempty"`
 	BootID   string `json:"bootId,omitempty"`
-	Status   string `json:"status"`
-	Detail   string `json:"detail,omitempty"`
+	// Waiting are the services not ready before the node was emptied, on its
+	// check step: the update does not wait for them afterwards.
+	Waiting []string `json:"waiting,omitempty"`
+	Status  string   `json:"status"`
+	Detail  string   `json:"detail,omitempty"`
 }
 
 // planUpdate orders the servers of a job and lists their steps. With k3s,
@@ -284,6 +289,7 @@ var (
 	updateJobMu     sync.Mutex
 	updateJobBusy   = map[string]bool{}
 	updateJobCancel = map[string]bool{}
+	updateJobStop   = map[string]context.CancelFunc{}
 )
 
 type updateJobView struct {
@@ -546,8 +552,10 @@ func rewind(steps []updateStep) {
 		if step.Status != "failed" {
 			continue
 		}
+		// Once given back, the node needs no new emptying: only the wait goes on.
+		from := step.Action == "settle"
 		for j := range steps {
-			if steps[j].ServerID == step.ServerID || j > i {
+			if (steps[j].ServerID == step.ServerID && (!from || j >= i)) || j > i {
 				steps[j].Status, steps[j].Detail = "pending", ""
 			}
 		}
@@ -600,17 +608,21 @@ func (a *API) resumeUpdateJobs() {
 
 // runUpdateJob runs the steps of a job one after the other, saving each.
 func (a *API) runUpdateJob(id, owner string) {
+	jobCtx, stop := context.WithCancel(context.Background())
+	defer stop()
 	updateJobMu.Lock()
 	if updateJobBusy[id] {
 		updateJobMu.Unlock()
 		return
 	}
 	updateJobBusy[id] = true
+	updateJobStop[id] = stop
 	updateJobMu.Unlock()
 	defer func() {
 		updateJobMu.Lock()
 		delete(updateJobBusy, id)
 		delete(updateJobCancel, id)
+		delete(updateJobStop, id)
 		updateJobMu.Unlock()
 	}()
 	ctx := context.Background()
@@ -622,12 +634,25 @@ func (a *API) runUpdateJob(id, owner string) {
 	if err := json.Unmarshal(job.Steps, &steps); err != nil {
 		return
 	}
-	save := func(status string) {
+	// save returns false once the job was closed elsewhere: its server or
+	// its cluster is being removed. The job then stops where it is.
+	save := func(status string) bool {
 		raw, _ := json.Marshal(steps)
-		_ = a.Store.SaveUpdateJob(ctx, id, status, raw)
+		return !errors.Is(a.Store.SaveUpdateJob(ctx, id, status, raw), store.ErrUpdateStopped)
 	}
 	for i := range steps {
 		if steps[i].Status == "done" || steps[i].Status == "skipped" {
+			continue
+		}
+		if jobCtx.Err() != nil {
+			return
+		}
+		// A server removed since the job began has nothing left to update.
+		if _, err := a.Store.Server(ctx, owner, steps[i].ServerID); errors.Is(err, store.ErrNotFound) {
+			skipServer(steps, i, "Serveur supprimé.")
+			if !save("running") {
+				return
+			}
 			continue
 		}
 		updateJobMu.Lock()
@@ -641,11 +666,23 @@ func (a *API) runUpdateJob(id, owner string) {
 			return
 		}
 		steps[i].Status = "running"
-		save("running")
-		stepCtx, cancel := context.WithTimeout(ctx, stepTimeout(steps[i].Action))
-		err := a.runUpdateStep(stepCtx, owner, &steps[i])
+		if !save("running") {
+			return
+		}
+		stepCtx, cancel := context.WithTimeout(jobCtx, stepTimeout(steps[i].Action))
+		err := a.runUpdateStep(stepCtx, owner, steps, i, func() { save("running") })
 		cancel()
+		if jobCtx.Err() != nil {
+			return
+		}
 		if err != nil {
+			if _, gone := a.Store.Server(ctx, owner, steps[i].ServerID); errors.Is(gone, store.ErrNotFound) {
+				skipServer(steps, i, "Serveur supprimé.")
+				if !save("running") {
+					return
+				}
+				continue
+			}
 			steps[i].Status = "failed"
 			steps[i].Detail = clip(err.Error(), 300)
 			a.handBack(ctx, owner, steps[i])
@@ -656,7 +693,9 @@ func (a *API) runUpdateJob(id, owner string) {
 		if steps[i].Status == "running" {
 			steps[i].Status = "done"
 		}
-		save("running")
+		if !save("running") {
+			return
+		}
 		if last := i == len(steps)-1 || steps[i+1].ServerID != steps[i].ServerID; last {
 			_ = a.Store.ForgetUpdate(ctx, "server", steps[i].ServerID)
 		}
@@ -666,9 +705,35 @@ func (a *API) runUpdateJob(id, owner string) {
 	go a.checkDue(context.Background(), false)
 }
 
+// skipServer passes the remaining steps of the server of step from.
+func skipServer(steps []updateStep, from int, detail string) {
+	for j := from; j < len(steps) && steps[j].ServerID == steps[from].ServerID; j++ {
+		if steps[j].Status != "done" {
+			steps[j].Status, steps[j].Detail = "skipped", ""
+		}
+	}
+	steps[from].Detail = detail
+}
+
+// stopUpdateJobs ends the updates of a server or a cluster about to be
+// removed, the running step included.
+func (a *API) stopUpdateJobs(ctx context.Context, owner, serverID, clusterID string) {
+	ids, err := a.Store.CloseUpdateJobs(ctx, owner, serverID, clusterID)
+	if err != nil {
+		return
+	}
+	updateJobMu.Lock()
+	defer updateJobMu.Unlock()
+	for _, id := range ids {
+		if stop := updateJobStop[id]; stop != nil {
+			stop()
+		}
+	}
+}
+
 func stepTimeout(action string) time.Duration {
 	switch action {
-	case "drain":
+	case "drain", "reboot", "k3s":
 		return 12 * time.Minute
 	case "packages":
 		return 30 * time.Minute
@@ -706,7 +771,8 @@ func (a *API) kubeHost(ctx context.Context, owner string, server store.Server) (
 	return a.clusterHost(ctx, owner, server.ClusterID)
 }
 
-func (a *API) runUpdateStep(ctx context.Context, owner string, step *updateStep) error {
+func (a *API) runUpdateStep(ctx context.Context, owner string, steps []updateStep, index int, report func()) error {
+	step := &steps[index]
 	server, err := a.Store.Server(ctx, owner, step.ServerID)
 	if err != nil {
 		return errString("Ce serveur n'existe plus.")
@@ -714,7 +780,15 @@ func (a *API) runUpdateStep(ctx context.Context, owner string, step *updateStep)
 	node := deploy.NodeName(server.Name)
 	switch step.Action {
 	case "check":
-		return a.clusterReady(ctx, owner, server)
+		if err := a.clusterReady(ctx, owner, server); err != nil {
+			return err
+		}
+		if host, err := a.kubeHost(ctx, owner, server); err == nil {
+			if waiting, err := notReadyServices(ctx, host); err == nil {
+				step.Waiting = waiting
+			}
+		}
+		return nil
 	case "drain":
 		if err := a.Store.SetServerStatus(ctx, server.ID, "linked", "updating"); err != nil {
 			return err
@@ -742,7 +816,11 @@ func (a *API) runUpdateStep(ctx context.Context, owner string, step *updateStep)
 		if err != nil {
 			return err
 		}
-		if _, err := deploy.SSH(ctx, host, packagesScript); err != nil {
+		keys, err := a.serverKeysScript(ctx, owner, server.ID)
+		if err != nil {
+			return err
+		}
+		if _, err := a.nodeSSH(ctx, owner, server, host, packagesScript(keys)); err != nil {
 			return errString("La mise à jour des paquets a échoué : " + commandTail(err))
 		}
 		return nil
@@ -754,7 +832,7 @@ func (a *API) runUpdateStep(ctx context.Context, owner string, step *updateStep)
 		if !deploy.ValidK3sVersion(step.K3s) {
 			return errString("Version de k3s illisible.")
 		}
-		if _, err := deploy.SSH(ctx, host, k3sUpgradeScript(step.K3s)); err != nil {
+		if _, err := a.nodeSSH(ctx, owner, server, host, k3sUpgradeScript(step.K3s)); err != nil {
 			return errString("La nouvelle version de k3s n'a pas pu être installée : " + commandTail(err))
 		}
 		return nil
@@ -763,9 +841,9 @@ func (a *API) runUpdateStep(ctx context.Context, owner string, step *updateStep)
 		if err != nil {
 			return err
 		}
-		out, err := deploy.SSH(ctx, host, "if [ -f /var/run/reboot-required ]; then cat /proc/sys/kernel/random/boot_id; fi")
+		out, err := a.nodeSSH(ctx, owner, server, host, "if [ -f /var/run/reboot-required ]; then cat /proc/sys/kernel/random/boot_id; fi")
 		if err != nil {
-			return errString("Le serveur ne répond pas en SSH.")
+			return err
 		}
 		if step.BootID = strings.TrimSpace(out); step.BootID == "" {
 			step.Status = "skipped"
@@ -785,18 +863,39 @@ func (a *API) runUpdateStep(ctx context.Context, owner string, step *updateStep)
 		}
 		return a.Store.SetServerStatus(ctx, server.ID, "updating", "linked")
 	case "settle":
-		return a.waitSettled(ctx, owner, server)
+		var before []string
+		for j := index; j >= 0 && steps[j].ServerID == step.ServerID; j-- {
+			if steps[j].Action == "check" {
+				before = steps[j].Waiting
+			}
+		}
+		return a.waitSettled(ctx, owner, server, before, func(detail string) {
+			if detail != step.Detail {
+				step.Detail = detail
+				report()
+			}
+		})
 	}
 	return errString("Étape inconnue.")
 }
 
 // packagesScript upgrades the packages without asking anything: the files a
 // person changed stay theirs, new dependencies such as a new kernel are added.
-const packagesScript = `set -e
+// OpenSSH may be upgraded on the way: its penalties are softened before and
+// after, and the service restarted at once, so that the old daemon does not
+// start the new session program — a mismatch OpenSSH counts as a crash.
+// Open sessions, this one included, survive the restart. MyInfra's keys are
+// put back after: an agent of the provider may write authorized_keys again
+// when its package is upgraded.
+func packagesScript(keys string) string {
+	return join.SSHPenalties + keys + `set -e
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq -o DPkg::Lock::Timeout=300
 apt-get -y -qq -o DPkg::Lock::Timeout=300 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold upgrade --with-new-pkgs >/dev/null
-`
+systemctl try-restart ssh >/dev/null 2>&1 || systemctl try-restart sshd >/dev/null 2>&1 || true
+set +e
+` + join.SSHPenalties + keys
+}
 
 // k3sUpgradeScript replaces the k3s program of a node by the given version,
 // checked against the sums of its release, then restarts it.
@@ -819,6 +918,132 @@ mv "$tmp/$file" /usr/local/bin/k3s
 rm -rf "$tmp"
 if systemctl is-enabled --quiet k3s 2>/dev/null; then systemctl restart k3s; else systemctl restart k3s-agent; fi
 `, version)
+}
+
+// patientSSH runs a command on a server, waiting through a refusal that
+// lasts: a restart, or OpenSSH shutting an address out for a while.
+func patientSSH(ctx context.Context, host deploy.Host, command string) (string, error) {
+	for {
+		out, err := deploy.SSH(ctx, host, command)
+		if err == nil {
+			return out, nil
+		}
+		var cmd *deploy.CommandError
+		if errors.As(err, &cmd) {
+			return "", err
+		}
+		// Asking again with a refused key only gets the address shut out.
+		if keyRefused(err) {
+			return "", errKeyRefused
+		}
+		select {
+		case <-ctx.Done():
+			if strings.Contains(strings.ToLower(err.Error()), "not allowed at this time") {
+				return "", errString("Le serveur refuse pour l'instant les connexions SSH de cette adresse : OpenSSH la bloque après des connexions interrompues. Reprenez dans une dizaine de minutes.")
+			}
+			return "", errString("Le serveur ne répond pas en SSH.")
+		case <-time.After(20 * time.Second):
+		}
+	}
+}
+
+var errKeyRefused = errString("Le serveur refuse la clé SSH de MyInfra.")
+
+func keyRefused(err error) bool {
+	text := strings.ToLower(err.Error())
+	return strings.Contains(text, "unable to authenticate") || strings.Contains(text, "no supported methods remain")
+}
+
+// serverKeysScript puts back the public keys MyInfra opens a server with.
+func (a *API) serverKeysScript(ctx context.Context, owner, serverID string) (string, error) {
+	keyIDs, err := a.Store.ServerKeyIDs(ctx, serverID)
+	if err != nil {
+		return "", err
+	}
+	keys, err := a.Store.SSHPublicKeys(ctx, owner, keyIDs)
+	if err != nil {
+		return "", err
+	}
+	return join.KeysFile(keys)
+}
+
+// nodeSSH runs a command on a server like patientSSH, and when a cluster
+// node keeps refusing, repairs its SSH service through Kubernetes first.
+func (a *API) nodeSSH(ctx context.Context, owner string, server store.Server, host deploy.Host, command string) (string, error) {
+	first, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	out, err := patientSSH(first, host, command)
+	cancel()
+	if errors.Is(err, errKeyRefused) && server.ClusterID == "" {
+		return "", errString("Le serveur refuse la clé SSH de MyInfra : elle a été retirée de /root/.ssh/authorized_keys. Remettez-la depuis la console de l'hébergeur.")
+	}
+	if err == nil || server.ClusterID == "" || ctx.Err() != nil {
+		return out, err
+	}
+	var cmd *deploy.CommandError
+	if errors.As(err, &cmd) {
+		return "", err
+	}
+	if repairErr := a.repairSSH(ctx, owner, server); repairErr != nil {
+		return "", err
+	}
+	return patientSSH(ctx, host, command)
+}
+
+// sshRepairPod is a pod that runs script in the namespaces of the node's
+// first process, as root: on the node itself. JSON keeps the script intact.
+func sshRepairPod(name, node, script string) (string, error) {
+	raw, err := json.Marshal(map[string]any{
+		"apiVersion": "v1",
+		"kind":       "Pod",
+		"metadata":   map[string]any{"name": name, "namespace": "kube-system"},
+		"spec": map[string]any{
+			"nodeName":      node,
+			"hostPID":       true,
+			"restartPolicy": "Never",
+			"tolerations":   []any{map[string]any{"operator": "Exists"}},
+			"containers": []any{map[string]any{
+				"name":            "repair",
+				"image":           "rancher/mirrored-library-busybox:1.37.0",
+				"securityContext": map[string]any{"privileged": true},
+				"command":         []string{"nsenter", "-t", "1", "-m", "-u", "-i", "-n", "-p", "--", "sh", "-c", script},
+			}},
+		},
+	})
+	return string(raw), err
+}
+
+// repairSSH puts MyInfra's keys back on a cluster node and restarts its SSH
+// service, from another node, through a privileged pod on it. After an upgrade of OpenSSH, a daemon left
+// running starts a session program of another version: every connection
+// dies, and OpenSSH shuts the address out on top of it.
+func (a *API) repairSSH(ctx context.Context, owner string, server store.Server) error {
+	host, ok := a.otherPlane(ctx, owner, server)
+	if !ok {
+		return errString("Aucun autre pilote du cluster ne peut réparer ce serveur.")
+	}
+	keys, err := a.serverKeysScript(ctx, owner, server.ID)
+	if err != nil {
+		return err
+	}
+	name := "myinfra-ssh-repair-" + randomHex(4)
+	script := join.SSHPenalties + keys + "systemctl restart ssh 2>/dev/null || systemctl restart sshd\nsystemctl is-active ssh 2>/dev/null || systemctl is-active sshd\n"
+	manifest, err := sshRepairPod(name, deploy.NodeName(server.Name), script)
+	if err != nil {
+		return err
+	}
+	if _, err := deploy.SSH(ctx, host, deploy.KubectlApply(manifest)); err != nil {
+		return err
+	}
+	defer func() {
+		clean, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_, _ = deploy.SSH(clean, host, "k3s kubectl -n kube-system delete pod "+name+" --wait=false --ignore-not-found")
+	}()
+	if _, err := deploy.SSH(ctx, host, "k3s kubectl -n kube-system wait --for=jsonpath='{.status.phase}'=Succeeded pod/"+name+" --timeout=120s"); err != nil {
+		logs, _ := deploy.SSH(ctx, host, "k3s kubectl -n kube-system logs "+name+" --tail=20")
+		return errString("Le service SSH n'a pas pu être redémarré : " + clip(logs, 200))
+	}
+	return nil
 }
 
 func commandTail(err error) string {
@@ -922,23 +1147,37 @@ func (a *API) clusterReady(ctx context.Context, owner string, server store.Serve
 // storageComplete is true when every node of the object store answers, or
 // when the cluster has no object store.
 func (a *API) storageComplete(ctx context.Context, host deploy.Host) (bool, error) {
-	out, err := deploy.SSH(ctx, host, "k3s kubectl get ns "+manifest.StorageNamespace+" -o name 2>/dev/null || true")
+	missing, err := a.storageMissing(ctx, host)
+	return missing == "", err
+}
+
+// storageMissing names a node of the object store that does not answer,
+// empty when the store is complete or the cluster has none. A node whose
+// server left the cluster does not count: the store drops it after an hour.
+func (a *API) storageMissing(ctx context.Context, host deploy.Host) (string, error) {
+	out, err := deploy.SSH(ctx, host, "k3s kubectl get ns "+manifest.StorageNamespace+" -o name --ignore-not-found; echo ---; k3s kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{\"\\n\"}{end}'")
 	if err != nil {
-		return false, err
+		return "", err
 	}
-	if strings.TrimSpace(out) == "" {
-		return true, nil
+	storage, nodeList, _ := strings.Cut(out, "---")
+	if strings.TrimSpace(storage) == "" {
+		return "", nil
+	}
+	nodes := map[string]bool{}
+	for _, name := range strings.Fields(nodeList) {
+		nodes[name] = true
 	}
 	var status garageStatus
 	if err := a.garage(ctx, host, "GetClusterStatus", nil, &status); err != nil {
-		return false, nil
+		return "?", nil
 	}
 	for _, node := range status.Nodes {
-		if node.Role != nil && !node.IsUp {
-			return false, nil
+		if node.Role == nil || node.IsUp || !nodes[node.Role.Zone] {
+			continue
 		}
+		return node.Role.Zone, nil
 	}
-	return true, nil
+	return "", nil
 }
 
 // databasesMissing names a replicated database that lacks an instance.
@@ -1044,34 +1283,70 @@ func (a *API) movePrimaries(ctx context.Context, host deploy.Host, node string) 
 	}
 }
 
-// waitSettled waits, before the next node, for the copies of the cluster to
-// be ready again and its object store complete.
-func (a *API) waitSettled(ctx context.Context, owner string, server store.Server) error {
+// notReadyServices lists the services of the cluster with a copy that is not
+// ready, as namespace/service.
+func notReadyServices(ctx context.Context, host deploy.Host) ([]string, error) {
+	out, err := deploy.SSH(ctx, host, "k3s kubectl get pods -A -l myinfra.io/service -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.labels.myinfra\\.io/service} {.status.phase} {.status.containerStatuses[*].ready}{\"\\n\"}{end}'")
+	if err != nil {
+		return nil, err
+	}
+	return parseNotReady(out), nil
+}
+
+func parseNotReady(out string) []string {
+	seen := map[string]bool{}
+	var waiting []string
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || fields[1] == "Succeeded" {
+			continue
+		}
+		ready := fields[1] == "Running" && len(fields) > 2 && !strings.Contains(line, "false")
+		if !ready && !seen[fields[0]] {
+			seen[fields[0]] = true
+			waiting = append(waiting, fields[0])
+		}
+	}
+	sort.Strings(waiting)
+	return waiting
+}
+
+// waitSettled waits, before the next node, for the services that were ready
+// before the node was emptied to be ready again, and for the object store to
+// be complete. It reports what it still waits for.
+func (a *API) waitSettled(ctx context.Context, owner string, server store.Server, before []string, report func(string)) error {
 	host, err := a.kubeHost(ctx, owner, server)
 	if err != nil {
 		return err
 	}
+	last := ""
 	for {
-		out, err := deploy.SSH(ctx, host, "k3s kubectl get pods -A -l myinfra.io/service -o jsonpath='{range .items[*]}{.status.phase} {.status.containerStatuses[*].ready}{\"\\n\"}{end}'")
+		waiting, err := notReadyServices(ctx, host)
 		if err == nil {
-			waiting := 0
-			for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-				fields := strings.Fields(line)
-				if len(fields) == 0 || fields[0] == "Succeeded" {
-					continue
-				}
-				if fields[0] != "Running" || strings.Contains(line, "false") || len(fields) < 2 {
-					waiting++
+			var still []string
+			for _, name := range waiting {
+				if !slices.Contains(before, name) {
+					still = append(still, name)
 				}
 			}
-			complete, _ := a.storageComplete(ctx, host)
-			if waiting == 0 && complete {
+			missing, _ := a.storageMissing(ctx, host)
+			switch {
+			case len(still) == 0 && missing == "":
+				report("")
 				return nil
+			case len(still) > 0:
+				last = "Copies pas encore prêtes : " + strings.Join(still, ", ") + "."
+			default:
+				last = "Le stockage attend le nœud " + missing + "."
 			}
+			report(last)
 		}
 		select {
 		case <-ctx.Done():
-			return errString("Des copies ne sont pas revenues après la mise à jour du nœud : la suite attend.")
+			if last == "" {
+				last = "Le cluster ne répond pas."
+			}
+			return errString("Les copies ne sont pas revenues après la mise à jour du nœud : la suite attend. " + last)
 		case <-time.After(10 * time.Second):
 		}
 	}

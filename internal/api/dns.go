@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -249,6 +250,7 @@ func (a *API) publishPending(ctx context.Context) {
 		}
 	}
 	a.resyncNames(ctx)
+	a.publishSelfName(ctx)
 	if deliver {
 		go a.deliverClusters(context.Background())
 	}
@@ -302,4 +304,56 @@ func (a *API) publishedAs(id string) string {
 	a.namesMu.Lock()
 	defer a.namesMu.Unlock()
 	return a.published[id]
+}
+
+// selfNameKey remembers the addresses MyInfra's own name was published with.
+const selfNameKey = "self"
+
+// publishSelfName keeps the name of MyInfra, when it runs in a cluster, on
+// every node of that cluster: a node that joins is added, a node removed is
+// taken away, as for the names of applications.
+func (a *API) publishSelfName(ctx context.Context) {
+	inst, err := a.Store.Installation(ctx)
+	if err != nil || inst.Method != "pod" || inst.ClusterID == "" {
+		return
+	}
+	host := hostOfURL(inst.PublicURL)
+	zone := zoneOfURL(inst.PublicURL)
+	if host == "" || zone == "" {
+		return
+	}
+	addresses, err := a.Store.DestinationAddresses(ctx, "cluster", "", inst.ClusterID)
+	if err != nil || len(addresses) == 0 {
+		return
+	}
+	sorted := append([]string(nil), addresses...)
+	sort.Strings(sorted)
+	if a.publishedAs(selfNameKey) == strings.Join(sorted, ",") {
+		return
+	}
+	owner, _, err := a.Store.User(ctx)
+	if err != nil {
+		return
+	}
+	account, err := a.accountForZone(ctx, owner, zone)
+	if err != nil {
+		return
+	}
+	sec, tok, err := a.dnsToken(ctx, owner, account)
+	if err != nil {
+		return
+	}
+	if err := a.dnsClient().EnsureAddresses(ctx, sec.Provider, credsOf(tok), zone, host, addresses); err != nil {
+		slog.Info("nom de MyInfra", "err", err)
+		return
+	}
+	a.rememberPublished(selfNameKey, addresses)
+}
+
+func hostOfURL(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return parsed.Hostname()
 }

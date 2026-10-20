@@ -373,8 +373,10 @@ func (a *API) runPodTransfer(owner, clusterID, hostName, publicURL string) {
 		a.setTransfer(false, "failed", "Publication du nom", publicURL, err.Error())
 		return
 	}
-	address, err := a.Store.DestinationAddress(ctx, "cluster", "", clusterID)
-	if err != nil || address == "" {
+	// The name answers on every node, as the names of applications do: the
+	// loss of one node keeps MyInfra reachable.
+	addresses, err := a.Store.DestinationAddresses(ctx, "cluster", "", clusterID)
+	if err != nil || len(addresses) == 0 {
 		a.setTransfer(false, "failed", "Publication du nom", publicURL, "La machine n'a pas encore d'adresse.")
 		return
 	}
@@ -383,16 +385,25 @@ func (a *API) runPodTransfer(owner, clusterID, hostName, publicURL string) {
 		a.setTransfer(false, "failed", "Publication du nom", publicURL, err.Error())
 		return
 	}
-	if err := a.dnsClient().EnsureAddress(ctx, sec.Provider, credsOf(tok), zone, hostName, address); err != nil {
+	if err := a.dnsClient().EnsureAddresses(ctx, sec.Provider, credsOf(tok), zone, hostName, addresses); err != nil {
 		a.setTransfer(false, "failed", "Publication du nom", publicURL, err.Error())
 		return
 	}
-	password := randomHex(18)
+	// The database of MyInfra is replicated by CloudNativePG, as those of the
+	// applications: two instances on two nodes, one on a cluster of one.
+	if err := a.ensureDatabaseOperator(ctx, host, clusterID); err != nil {
+		a.setTransfer(false, "failed", "Préparation du pod", publicURL, "La base répliquée n'a pas pu être préparée.")
+		return
+	}
+	instances := 2
+	if len(addresses) < 2 {
+		instances = 1
+	}
 	token := randomToken()
 	registryHost, registryUser, registryPassword := a.imageRegistry(ctx, owner)
 	manifest, err := transfer.PodManifest(transfer.PodSpec{
-		Image: a.Image, MasterKey: base64.StdEncoding.EncodeToString(a.Master), DatabasePassword: password,
-		BootstrapToken: token, PublicURL: publicURL, Host: hostName,
+		Image: a.Image, MasterKey: base64.StdEncoding.EncodeToString(a.Master),
+		BootstrapToken: token, PublicURL: publicURL, Host: hostName, Instances: instances,
 		RegistryHost: registryHost, RegistryUser: registryUser, RegistryPassword: registryPassword,
 	})
 	if err != nil {
@@ -426,7 +437,7 @@ func (a *API) runPodTransfer(owner, clusterID, hostName, publicURL string) {
 	if _, err := deploy.SSH(ctx, host, deploy.KubectlApply(manifest)); a.transferFailed(err, "Démarrage du pod", publicURL, "Le pod n'a pas été créé.") {
 		return
 	}
-	stopWatch := a.watchTransferName(ctx, host, sec.Provider, credsOf(tok), zone, hostName, address)
+	stopWatch := a.watchTransferName(ctx, host, sec.Provider, credsOf(tok), zone, hostName, addresses)
 	err = waitHealth(ctx, publicURL, a.setTransferWait)
 	stopWatch()
 	if a.transferFailed(err, "Démarrage du pod", publicURL, errText(err)) {
@@ -926,7 +937,7 @@ func (a *API) setTransferNote(drift bool, note string) {
 // Another copy of MyInfra may write the same name meanwhile: Let's Encrypt
 // would then check a machine that is not the cluster. Once the name is put
 // back, Traefik is asked again, since it does not retry by itself.
-func (a *API) watchTransferName(ctx context.Context, host deploy.Host, provider string, creds dns.Creds, zone, name, address string) func() {
+func (a *API) watchTransferName(ctx context.Context, host deploy.Host, provider string, creds dns.Creds, zone, name string, addresses []string) func() {
 	watch, stop := context.WithCancel(ctx)
 	done := make(chan struct{})
 	go func() {
@@ -942,10 +953,10 @@ func (a *API) watchTransferName(ctx context.Context, host deploy.Host, provider 
 			}
 			note := ""
 			drift := false
-			if found, err := dns.Announced(watch, zone, name); err == nil && (len(found) != 1 || found[0] != address) {
+			if found, err := dns.Announced(watch, zone, name); err == nil && !sameAddresses(found, addresses) {
 				drift = true
-				note = "Le nom " + name + " pointe vers " + strings.Join(found, ", ") + " au lieu de " + address + " seulement : une autre copie de MyInfra l'a sans doute modifié. Il est republié."
-				if err := a.dnsClient().EnsureAddress(watch, provider, creds, zone, name, address); err == nil {
+				note = "Le nom " + name + " pointe vers " + strings.Join(found, ", ") + " au lieu de " + strings.Join(addresses, ", ") + " : une autre copie de MyInfra l'a sans doute modifié. Il est republié."
+				if err := a.dnsClient().EnsureAddresses(watch, provider, creds, zone, name, addresses); err == nil {
 					repaired = true
 				}
 			}

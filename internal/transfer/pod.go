@@ -12,30 +12,41 @@ import (
 const PodNamespace = "myinfra"
 
 type PodSpec struct {
-	Image            string
-	MasterKey        string
-	DatabasePassword string
-	BootstrapToken   string
-	PublicURL        string
-	Host             string
+	Image          string
+	MasterKey      string
+	BootstrapToken string
+	PublicURL      string
+	Host           string
+	// Instances of the database: two on two nodes, one on a cluster of one.
+	Instances        int
 	RegistryHost     string
 	RegistryUser     string
 	RegistryPassword string
 }
 
+// DatabaseName is the replicated PostgreSQL of MyInfra in its namespace.
+// CloudNativePG creates the Secret database-app with the address to reach
+// it, and the Service database-rw that always leads to its primary.
+const DatabaseName = "database"
+
+// PodManifest is MyInfra in a cluster: two copies of the program, and its
+// database replicated by CloudNativePG on two nodes. Losing a node loses no
+// data and stops nothing: a replica becomes the primary.
 func PodManifest(spec PodSpec) (string, error) {
-	if !safeImage(spec.Image) || !safe(spec.MasterKey) || !safe(spec.DatabasePassword) || !safe(spec.BootstrapToken) || !safe(spec.PublicURL) || !safe(spec.Host) || strings.ContainsAny(spec.Host, "`'\\") {
+	if !safeImage(spec.Image) || !safe(spec.MasterKey) || !safe(spec.BootstrapToken) || !safe(spec.PublicURL) || !safe(spec.Host) || strings.ContainsAny(spec.Host, "`'\\") {
 		return "", fmt.Errorf("paramètre de démarrage refusé")
 	}
 	zone := cert.Zone(spec.Host, "")
 	if zone == "" {
 		return "", fmt.Errorf("paramètre de démarrage refusé")
 	}
+	instances := spec.Instances
+	if instances < 1 {
+		instances = 2
+	}
 	resolver := cert.Resolver(zone)
 	httpMatch := "(Host(`" + spec.Host + "`) && !PathPrefix(`/.well-known/acme-challenge/`))"
 	tlsMatch := "Host(`" + spec.Host + "`)"
-	password := spec.DatabasePassword
-	databaseURL := "postgres://myinfra:" + password + "@postgres:5432/myinfra?sslmode=disable"
 	registryDoc := ""
 	pull := ""
 	if spec.RegistryHost != "" || spec.RegistryUser != "" || spec.RegistryPassword != "" {
@@ -49,104 +60,54 @@ func PodManifest(spec PodSpec) (string, error) {
 	return fmt.Sprintf(`apiVersion: v1
 kind: Namespace
 metadata:
-  name: %s
+  name: %[1]s
 ---
-%s
-apiVersion: v1
+%[2]sapiVersion: v1
 kind: Secret
 metadata:
   name: config
-  namespace: %s
+  namespace: %[1]s
 type: Opaque
 stringData:
-  POSTGRES_PASSWORD: %s
-  DATABASE_URL: %s
-  MYINFRA_MASTER_KEY: %s
-  MYINFRA_PUBLIC_URL: %s
-  MYINFRA_BOOTSTRAP_TOKEN: %s
+  MYINFRA_MASTER_KEY: %[3]s
+  MYINFRA_PUBLIC_URL: %[4]s
+  MYINFRA_BOOTSTRAP_TOKEN: %[5]s
 ---
-apiVersion: v1
-kind: PersistentVolumeClaim
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
 metadata:
-  name: postgres
-  namespace: %s
+  name: %[6]s
+  namespace: %[1]s
 spec:
-  accessModes: [ReadWriteOnce]
+  instances: %[7]d
+  storage:
+    size: 8Gi
+  bootstrap:
+    initdb:
+      database: myinfra
+      owner: myinfra
+  affinity:
+    enablePodAntiAffinity: true
+    topologyKey: kubernetes.io/hostname
+    podAntiAffinityType: required
+    tolerations:
+      - key: node.kubernetes.io/unreachable
+        operator: Exists
+        effect: NoExecute
+        tolerationSeconds: 30
+      - key: node.kubernetes.io/not-ready
+        operator: Exists
+        effect: NoExecute
+        tolerationSeconds: 30
   resources:
     requests:
-      storage: 8Gi
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: postgres
-  namespace: %s
-spec:
-  replicas: 1
-  strategy:
-    type: Recreate
-  selector:
-    matchLabels:
-      myinfra.io/service: postgres
-  template:
-    metadata:
-      labels:
-        myinfra.io/service: postgres
-    spec:
-      affinity:
-        nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              preference:
-                matchExpressions:
-                  - key: node-role.kubernetes.io/control-plane
-                    operator: DoesNotExist
-      containers:
-        - name: postgres
-          image: postgres:16
-          ports:
-            - containerPort: 5432
-          env:
-            - name: POSTGRES_USER
-              value: myinfra
-            - name: POSTGRES_DB
-              value: myinfra
-            - name: POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: config
-                  key: POSTGRES_PASSWORD
-            - name: PGDATA
-              value: /var/lib/postgresql/data/pgdata
-          resources:
-            requests:
-              cpu: 100m
-              memory: 256Mi
-          volumeMounts:
-            - name: data
-              mountPath: /var/lib/postgresql/data
-      volumes:
-        - name: data
-          persistentVolumeClaim:
-            claimName: postgres
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: postgres
-  namespace: %s
-spec:
-  selector:
-    myinfra.io/service: postgres
-  ports:
-    - port: 5432
-      targetPort: 5432
+      memory: 256Mi
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: myinfra
-  namespace: %s
+  namespace: %[1]s
 spec:
   replicas: 2
   strategy:
@@ -162,7 +123,7 @@ spec:
       labels:
         myinfra.io/service: myinfra
     spec:
-%s      affinity:
+%[8]s      affinity:
         nodeAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
             - weight: 100
@@ -185,18 +146,37 @@ spec:
           labelSelector:
             matchLabels:
               myinfra.io/service: myinfra
+      tolerations:
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 30
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 30
+      # MyInfra starts once its database answers, instead of failing until then.
+      initContainers:
+        - name: database
+          image: rancher/mirrored-library-busybox:1.37.0
+          command: [sh, -c, "until nc -z -w 2 %[6]s-rw 5432; do sleep 2; done"]
       containers:
         - name: myinfra
-          image: %s
+          image: %[9]s
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            periodSeconds: 5
           env:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: config
-                  key: DATABASE_URL
+                  name: %[6]s-app
+                  key: uri
             - name: MYINFRA_MASTER_KEY
               valueFrom:
                 secretKeyRef:
@@ -223,7 +203,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: myinfra
-  namespace: %s
+  namespace: %[1]s
 spec:
   minAvailable: 1
   selector:
@@ -234,7 +214,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: myinfra
-  namespace: %s
+  namespace: %[1]s
 spec:
   selector:
     myinfra.io/service: myinfra
@@ -246,7 +226,7 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: https
-  namespace: %s
+  namespace: %[1]s
 spec:
   redirectScheme:
     scheme: https
@@ -256,11 +236,11 @@ apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: myinfra-http
-  namespace: %s
+  namespace: %[1]s
 spec:
   entryPoints: [web]
   routes:
-    - match: %s
+    - match: %[10]s
       middlewares:
         - name: https
       services:
@@ -271,20 +251,20 @@ apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: myinfra
-  namespace: %s
+  namespace: %[1]s
 spec:
   entryPoints: [websecure]
   routes:
-    - match: %s
+    - match: %[11]s
       services:
         - name: myinfra
           port: 8080
   tls:
-    certResolver: %s
-`, PodNamespace, registryDoc, PodNamespace,
-		strconv.Quote(password), strconv.Quote(databaseURL), strconv.Quote(spec.MasterKey), strconv.Quote(spec.PublicURL), strconv.Quote(spec.BootstrapToken),
-		PodNamespace, PodNamespace, PodNamespace, PodNamespace, pull, spec.Image, PodNamespace, PodNamespace, PodNamespace, PodNamespace,
-		strconv.Quote(httpMatch), PodNamespace, strconv.Quote(tlsMatch), resolver), nil
+    certResolver: %[12]s
+`, PodNamespace, registryDoc,
+		strconv.Quote(spec.MasterKey), strconv.Quote(spec.PublicURL), strconv.Quote(spec.BootstrapToken),
+		DatabaseName, instances, pull, spec.Image,
+		strconv.Quote(httpMatch), strconv.Quote(tlsMatch), resolver), nil
 }
 
 func PodHost(domain string) string {

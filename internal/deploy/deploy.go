@@ -355,6 +355,10 @@ func SSH(ctx context.Context, host Host, command string) (string, error) {
 
 func sshTransient(err error) bool {
 	text := strings.ToLower(err.Error())
+	// A refused key stays refused: asking again gets the address shut out.
+	if strings.Contains(text, "unable to authenticate") || strings.Contains(text, "no supported methods remain") {
+		return false
+	}
 	for _, hint := range []string{"connection reset", "kex_exchange", "connection timed out", "i/o timeout", "handshake", "banner exchange", "connection refused", "connection closed", "not allowed at this time"} {
 		if strings.Contains(text, hint) {
 			return true

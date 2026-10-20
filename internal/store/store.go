@@ -591,6 +591,10 @@ func (s *Store) DeleteServer(ctx context.Context, ownerID, id string) error {
 	if _, err := tx.Exec(ctx, `DELETE FROM applications WHERE server_id = $1 AND owner_id = $2`, id, ownerID); err != nil {
 		return err
 	}
+	// An update of the server ends with it: it would hold the next ones.
+	if _, err := tx.Exec(ctx, `UPDATE update_jobs SET status = 'cancelled', finished_at = now() WHERE owner_id = $2 AND server_id = $1 AND status IN ('running', 'failed')`, id, ownerID); err != nil {
+		return err
+	}
 	tag, err := tx.Exec(ctx, `DELETE FROM servers WHERE id = $1 AND owner_id = $2`, id, ownerID)
 	if err != nil {
 		return err
@@ -1134,6 +1138,9 @@ func (s *Store) DeleteCluster(ctx context.Context, ownerID, id string) error {
 		return err
 	}
 	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `UPDATE update_jobs SET status = 'cancelled', finished_at = now() WHERE owner_id = $1 AND cluster_id = $2 AND status IN ('running', 'failed')`, ownerID, id); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(ctx, `
 		DELETE FROM applications
 		WHERE owner_id = $1 AND (
@@ -1744,4 +1751,36 @@ func freeHostname(ctx context.Context, tx pgx.Tx, host, id string) (string, erro
 		suffix = suffix[:4]
 	}
 	return host + "-" + suffix, nil
+}
+
+// OwnedName is an address of an application MyInfra writes in a DNS zone.
+type OwnedName struct {
+	PendingName
+	Status  string
+	AppID   string
+	AppName string
+}
+
+// OwnedNames lists the addresses MyInfra writes for an owner's applications.
+func (s *Store) OwnedNames(ctx context.Context, owner string) ([]OwnedName, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT d.id, d.hostname, d.zone, d.secret_id, a.owner_id, a.destination_kind,
+		       COALESCE(a.server_id, ''), COALESCE(a.cluster_id, ''), d.status, a.id, a.name
+		FROM domains d
+		JOIN applications a ON a.id = d.application_id
+		WHERE d.kind = 'custom' AND d.zone <> '' AND a.owner_id = $1
+		ORDER BY d.hostname`, owner)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []OwnedName
+	for rows.Next() {
+		var row OwnedName
+		if err := rows.Scan(&row.ID, &row.Hostname, &row.Zone, &row.SecretID, &row.OwnerID, &row.DestinationKind, &row.ServerID, &row.ClusterID, &row.Status, &row.AppID, &row.AppName); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
 }

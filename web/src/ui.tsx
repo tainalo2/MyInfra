@@ -32,6 +32,7 @@ import {
   Waypoints,
   type LucideIcon,
   ArrowUpCircle,
+  ListTree,
 } from "lucide-react";
 import { api, type Deployment, type Destruction } from "./api";
 import { Palette, SearchButton } from "./palette";
@@ -272,7 +273,8 @@ const nav: NavSpec[] = [
 
 const connect: NavSpec[] = [
   { to: "/providers", label: "nav.providers", icon: Cloud },
-  { to: "/dns", label: "nav.dns", icon: Globe },
+  { to: "/dns", label: "nav.dns", icon: Globe, end: true },
+  { to: "/dns/enregistrements", label: "nav.dnsRecords", icon: ListTree },
   { to: "/git", label: "nav.git", icon: GitBranch },
   { to: "/registres", label: "nav.registries", icon: Container },
   { to: "/images", label: "nav.images", icon: HardDrive },

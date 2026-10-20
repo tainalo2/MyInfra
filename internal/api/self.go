@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"myinfra/internal/deploy"
 	"myinfra/internal/store"
@@ -88,7 +89,7 @@ func (a *API) selfView(ctx context.Context, owner string) (appView, bool) {
 		Domains: []domainView{},
 		Services: []serviceView{
 			{Name: "myinfra", Image: app.Source, Published: true, Replicas: 2},
-			{Name: "postgres", Image: "postgres:16", Disk: true, Replicas: 1},
+			{Name: transfer.DatabaseName, Image: "PostgreSQL · CloudNativePG", Replicas: 2},
 		},
 	}
 	if view.Source == "" {
@@ -211,6 +212,32 @@ func (a *API) deleteSelf(w http.ResponseWriter, r *http.Request) {
 	if _, err := deploy.SSH(r.Context(), host, "k3s kubectl delete ns "+transfer.PodNamespace+" --wait=false"); err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
+	}
+	// Removed from a copy that followed it, the copy drives again: there is
+	// no other one left. Its name and its peer go with it.
+	if role, err := a.Store.CopyRole(r.Context()); err == nil && role.MainMethod == "pod" && role.MainClusterID == app.ClusterID {
+		owner := userID(r.Context())
+		if zone := zoneOfURL(role.MainURL); zone != "" {
+			if sec, creds, err := a.dnsAccountOf(r.Context(), owner, zone); err == nil {
+				_ = a.dnsClient().DropAddress(r.Context(), sec.Provider, creds, zone, hostOfURL(role.MainURL))
+			}
+		}
+		_ = a.Store.DeletePeer(r.Context(), role.MainURL)
+		if err := a.Store.SetCopyRole(r.Context(), store.CopyRole{}); err == nil {
+			a.note(r.Context(), owner, newID(), "myinfra.removed", "warn", "MyInfra a été retiré du cluster : cette copie pilote de nouveau les machines.", "", app.ClusterID)
+			writeJSON(w, http.StatusAccepted, map[string]string{"status": "stopping", "restart": "true"})
+			go func() {
+				time.Sleep(3 * time.Second)
+				if a.Restart != nil {
+					a.Restart()
+				} else if a.Shutdown != nil {
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer cancel()
+					_ = a.Shutdown(ctx)
+				}
+			}()
+			return
+		}
 	}
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "stopping"})
 }

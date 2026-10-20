@@ -53,13 +53,47 @@ func (s *Store) StartUpdateJob(ctx context.Context, job UpdateJob) error {
 	return tx.Commit(ctx)
 }
 
-// SaveUpdateJob keeps the progress of a job, and its end once it is not running.
+// ErrUpdateStopped is returned when a job was closed meanwhile: its server
+// or its cluster was removed.
+var ErrUpdateStopped = errors.New("update stopped")
+
+// SaveUpdateJob keeps the progress of a job, and its end once it is not
+// running. A job closed meanwhile stays closed: only a failed one is resumed.
 func (s *Store) SaveUpdateJob(ctx context.Context, id, status string, steps []byte) error {
-	_, err := s.pool.Exec(ctx, `
+	tag, err := s.pool.Exec(ctx, `
 		UPDATE update_jobs SET status = $2, steps = $3,
 			finished_at = CASE WHEN $2 = 'running' THEN NULL ELSE now() END
-		WHERE id = $1`, id, status, steps)
-	return err
+		WHERE id = $1 AND (status = 'running' OR ($2 = 'running' AND status = 'failed'))`, id, status, steps)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrUpdateStopped
+	}
+	return nil
+}
+
+// CloseUpdateJobs ends the running jobs of a server or of a cluster being
+// removed, and returns them.
+func (s *Store) CloseUpdateJobs(ctx context.Context, owner, serverID, clusterID string) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `
+		UPDATE update_jobs SET status = 'cancelled', finished_at = now()
+		WHERE owner_id = $1 AND status IN ('running', 'failed')
+			AND (($2 <> '' AND server_id = $2) OR ($3 <> '' AND cluster_id = $3))
+		RETURNING id`, owner, serverID, clusterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 const updateJobColumns = `id, owner_id, cluster_id, server_id, status, steps, created_at, finished_at`

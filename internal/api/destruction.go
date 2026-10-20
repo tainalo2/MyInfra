@@ -189,8 +189,10 @@ func (a *API) startDestruction(ctx context.Context, owner, kind, target, name st
 		return store.Destruction{}, err
 	}
 	if kind == "server" {
+		a.stopUpdateJobs(ctx, owner, target, "")
 		a.noteServer(ctx, owner, target, "server.delete", "warn", "Suppression demandée.")
 	} else if kind == "cluster" {
+		a.stopUpdateJobs(ctx, owner, "", target)
 		a.note(ctx, owner, newID(), "cluster.delete", "warn", "Suppression demandée.", "", target)
 	}
 	go a.kickDestruction(id, owner)

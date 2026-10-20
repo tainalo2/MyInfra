@@ -33,6 +33,7 @@ const Transfer = page(() => import("./transfer"), "Transfer");
 const TransferFollow = page(() => import("./transfer"), "TransferFollow");
 const Copies = page(() => import("./copies"), "Copies");
 const UpdatesPage = page(() => import("./updates"), "UpdatesPage");
+const DnsRecords = page(() => import("./dnsrecords"), "DnsRecords");
 const Templates = page(() => import("./templates"), "Templates");
 const TemplateEditor = page(() => import("./templates"), "TemplateEditor");
 const TemplateLaunch = page(() => import("./templates"), "TemplateLaunch");
@@ -213,6 +214,7 @@ export function App() {
         <Route path="/secrets/:id" element={<SecretPage />} />
         <Route path="/providers" element={<Providers />} />
         <Route path="/dns" element={<Dns />} />
+        <Route path="/dns/enregistrements" element={<DnsRecords />} />
         <Route path="/git" element={<Git />} />
         <Route path="/registres" element={<Registries />} />
         <Route path="/images" element={<Images />} />

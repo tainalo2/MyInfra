@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"strconv"
 	"strings"
 	"testing"
@@ -157,5 +158,50 @@ func TestNodeImpactLooksWhereCopiesRun(t *testing.T) {
 	}
 	if view := impactOf(nodeImpact(server, apps, sample, true), "reboot"); view.Effect != effectDown || view.Notes[0] != "reboot" {
 		t.Fatalf("%+v", view)
+	}
+}
+
+func TestSSHRepairPodKeepsTheScript(t *testing.T) {
+	script := "printf '%s\\n' \"a\" > \"$conf\"\nsystemctl restart ssh\n"
+	raw, err := sshRepairPod("myinfra-ssh-repair-1", "sw1", script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pod struct {
+		Spec struct {
+			NodeName   string `json:"nodeName"`
+			HostPID    bool   `json:"hostPID"`
+			Containers []struct {
+				Command []string `json:"command"`
+			} `json:"containers"`
+		} `json:"spec"`
+	}
+	if err := json.Unmarshal([]byte(raw), &pod); err != nil {
+		t.Fatal(err)
+	}
+	command := pod.Spec.Containers[0].Command
+	if pod.Spec.NodeName != "sw1" || !pod.Spec.HostPID || command[len(command)-1] != script {
+		t.Fatalf("%s", raw)
+	}
+}
+
+func TestParseNotReady(t *testing.T) {
+	out := "app1/web Running true\napp1/web Running false\napp2/db Pending \napp3/job Succeeded false\napp4/kuma Running true true\n"
+	got := parseNotReady(out)
+	if strings.Join(got, ",") != "app1/web,app2/db" {
+		t.Fatalf("%v", got)
+	}
+}
+
+func TestRewindAfterTheWaitKeepsTheNode(t *testing.T) {
+	steps := []updateStep{
+		{ServerID: "b", Action: "check", Status: "done"},
+		{ServerID: "b", Action: "uncordon", Status: "done"},
+		{ServerID: "b", Action: "settle", Status: "failed", Detail: "copies"},
+		{ServerID: "c", Action: "check", Status: "pending"},
+	}
+	rewind(steps)
+	if steps[0].Status != "done" || steps[1].Status != "done" || steps[2].Status != "pending" || steps[3].Status != "pending" {
+		t.Fatalf("%+v", steps)
 	}
 }

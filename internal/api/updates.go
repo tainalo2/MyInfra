@@ -46,6 +46,8 @@ func (a *API) Updates(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			// A job whose runner stopped, after an error of MyInfra itself, goes on.
+			a.resumeUpdateJobs()
 			a.checkDue(ctx, false)
 		}
 	}
