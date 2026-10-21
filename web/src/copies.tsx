@@ -59,9 +59,10 @@ export function Copies() {
   return (
     <>
       <PageTitle title={text("copy.title")} icon={Waypoints} />
-      <p className="mb-8 max-w-xl text-muted">
+      <p className="mb-4 max-w-xl text-muted">
         {text("ui.lesCopiesQuiPartagentLaMeme")}
       </p>
+      <p className="mb-8 max-w-xl text-[13px] text-faint">{text("copy.peersLocal")}</p>
       <LeadSection status={status} />
       <form onSubmit={add} className="mb-12 flex flex-col gap-6">
         <Field label={text("copy.address")}>
@@ -144,6 +145,7 @@ function LeadSection({ status }: { status: Status }) {
         </p>
       ) : null}
       {!status.replica && other && !other.drives ? <p className="mt-2 text-muted">{text("lead.standby", { url: other.url })}</p> : null}
+      <p className="mt-4 text-[13px] text-faint">{text("lead.destructionResume")}</p>
       {status.fixed ? (
         <p className="mt-4 text-[13px] text-faint">{text("lead.fixed")}</p>
       ) : status.replica ? (

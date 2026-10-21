@@ -1233,18 +1233,19 @@ func (s *Store) ClusterLeaders(ctx context.Context) ([]ClusterLeader, error) {
 }
 
 type ClusterApp struct {
-	ID        string
-	Paused    bool
-	RunStatus string
-	Services  []Service
-	Hosts     []string
-	Zones     map[string]string
-	Env       map[string]string
+	ID             string
+	Paused         bool
+	RunStatus      string
+	PreparingSince *time.Time
+	Services       []Service
+	Hosts          []string
+	Zones          map[string]string
+	Env            map[string]string
 }
 
 func (s *Store) ClusterApps(ctx context.Context, clusterID string) ([]ClusterApp, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT a.id, a.paused, s.id, s.name, s.image, s.published, s.disk, s.replicas, s.listen, s.disk_path, s.disk_gi, s.args, a.variables, a.run_status, s.backup, s.database
+		SELECT a.id, a.paused, s.id, s.name, s.image, s.published, s.disk, s.replicas, s.listen, s.disk_path, s.disk_gi, s.args, a.variables, a.run_status, a.preparing_since, s.backup, s.database
 		FROM applications a
 		JOIN application_services s ON s.application_id = a.id
 		WHERE a.cluster_id = $1 AND a.destination_kind = 'cluster' AND a.source_kind = 'image'
@@ -1261,7 +1262,8 @@ func (s *Store) ClusterApps(ctx context.Context, clusterID string) ([]ClusterApp
 		var svc Service
 		var raw []byte
 		var args, runStatus string
-		if err := rows.Scan(&appID, &paused, &svc.ID, &svc.Name, &svc.Image, &svc.Published, &svc.Disk, &svc.Replicas, &svc.Listen, &svc.DiskPath, &svc.DiskGi, &args, &raw, &runStatus, &svc.Backup, &svc.Database); err != nil {
+		var preparingSince *time.Time
+		if err := rows.Scan(&appID, &paused, &svc.ID, &svc.Name, &svc.Image, &svc.Published, &svc.Disk, &svc.Replicas, &svc.Listen, &svc.DiskPath, &svc.DiskGi, &args, &raw, &runStatus, &preparingSince, &svc.Backup, &svc.Database); err != nil {
 			return nil, err
 		}
 		svc.Args = splitArgs(args)
@@ -1271,7 +1273,7 @@ func (s *Store) ClusterApps(ctx context.Context, clusterID string) ([]ClusterApp
 			if len(raw) > 0 {
 				_ = json.Unmarshal(raw, &env)
 			}
-			app = &ClusterApp{ID: appID, Paused: paused, Env: env, RunStatus: runStatus}
+			app = &ClusterApp{ID: appID, Paused: paused, Env: env, RunStatus: runStatus, PreparingSince: preparingSince}
 			byID[appID] = app
 			order = append(order, appID)
 		}
@@ -1318,7 +1320,14 @@ func (s *Store) SetRunStatus(ctx context.Context, applicationID, status string) 
 	if status != "running" && status != "failed" && status != "preparing" && status != "paused" {
 		return ErrNotFound
 	}
-	tag, err := s.pool.Exec(ctx, `UPDATE applications SET run_status = $2 WHERE id = $1`, applicationID, status)
+	var preparing any
+	switch status {
+	case "preparing":
+		preparing = time.Now().UTC()
+	default:
+		preparing = nil
+	}
+	tag, err := s.pool.Exec(ctx, `UPDATE applications SET run_status = $2, preparing_since = $3 WHERE id = $1`, applicationID, status, preparing)
 	if err != nil {
 		return err
 	}

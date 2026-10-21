@@ -273,6 +273,7 @@ ALTER TABLE events ADD CONSTRAINT events_level_check CHECK (level IN ('info', 'o
 CREATE INDEX IF NOT EXISTS events_owner_at ON events (owner_id, at DESC);
 
 ALTER TABLE applications ADD COLUMN IF NOT EXISTS run_detail text NOT NULL DEFAULT '';
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS preparing_since timestamptz;
 
 -- The certificate files of Traefik, sealed, so that a restart or a new cluster
 -- reuses the certificates instead of asking for new ones.

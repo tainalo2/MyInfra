@@ -309,6 +309,13 @@ func (a *API) startedAt(appID string) time.Time {
 	return a.starting[appID]
 }
 
+func preparingSince(app store.ClusterApp) time.Time {
+	if app.PreparingSince != nil {
+		return *app.PreparingSince
+	}
+	return time.Time{}
+}
+
 // checkHealth decides whether an application is online: its pods are ready
 // and its address answers in HTTPS with a valid certificate.
 func (a *API) checkHealth(ctx context.Context, host deploy.Host, clusterID string, app store.ClusterApp) {
@@ -328,17 +335,19 @@ func (a *API) checkHealth(ctx context.Context, host deploy.Host, clusterID strin
 		if a.namesAnswer(ctx, app.ID) {
 			verdict = "running"
 			_ = a.Store.SetRunDetail(ctx, app.ID, "")
-		} else if since := a.startedAt(app.ID); !since.IsZero() && time.Since(since) > certificateGrace {
+		} else if since := preparingSince(app); !since.IsZero() && time.Since(since) > certificateGrace {
 			// The pods answer but the address does not: most often the
 			// certificate. Say why instead of waiting without a word.
 			a.explainCertificates(ctx, host, clusterID, app)
 		}
 	}
 	if verdict == "preparing" {
-		since := a.startedAt(app.ID)
+		since := preparingSince(app)
 		if since.IsZero() {
 			a.markStarting(app.ID)
-		} else if time.Since(since) > startupLimit {
+			since = a.startedAt(app.ID)
+		}
+		if !since.IsZero() && time.Since(since) > startupLimit {
 			verdict = "failed"
 		}
 	}

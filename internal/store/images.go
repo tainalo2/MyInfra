@@ -204,7 +204,7 @@ func (s *Store) SetServiceReplicas(ctx context.Context, applicationID string, co
 			return ErrNotFound
 		}
 	}
-	if _, err := tx.Exec(ctx, `UPDATE applications SET run_status = 'preparing' WHERE id = $1 AND NOT paused`, applicationID); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE applications SET run_status = 'preparing', preparing_since = now() WHERE id = $1 AND NOT paused`, applicationID); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

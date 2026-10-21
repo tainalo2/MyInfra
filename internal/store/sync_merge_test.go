@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"testing"
+	"time"
 )
 
 func TestMergeKeepsRowsFromBothSides(t *testing.T) {
@@ -86,6 +87,43 @@ func TestMergeParentDeleteDropsOlderChild(t *testing.T) {
 	}
 	if len(got.Tombs) != 2 {
 		t.Fatalf("%+v", got.Tombs)
+	}
+}
+
+func TestMergeUpdatesAndJobs(t *testing.T) {
+	when := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	local := SyncDoc{
+		Updates: []syncUpdate{{
+			Kind: "server", TargetID: "s1", OwnerID: "u", Current: "1", Available: "2", Level: "patch",
+			Detail: json.RawMessage(`{}`), CheckedAt: when, Seq: 1, Origin: "a",
+		}},
+		UpdateJobs: []syncUpdateJob{{ID: "j1", OwnerID: "u", ServerID: "s1", Status: "running", Steps: []byte("[]"), CreatedAt: when, Seq: 1, Origin: "a"}},
+	}
+	remote := SyncDoc{
+		Updates: []syncUpdate{{
+			Kind: "server", TargetID: "s2", OwnerID: "u", Current: "a", Available: "b", Level: "security",
+			Detail: json.RawMessage(`{}`), CheckedAt: when, Seq: 1, Origin: "b",
+		}, {
+			Kind: "server", TargetID: "s1", OwnerID: "u", Current: "1", Available: "3", Level: "minor",
+			Detail: json.RawMessage(`{}`), CheckedAt: when, Seq: 2, Origin: "b",
+		}},
+		UpdateJobs: []syncUpdateJob{{ID: "j2", OwnerID: "u", ClusterID: "c1", Status: "running", Steps: []byte("[]"), CreatedAt: when, Seq: 1, Origin: "b"}},
+	}
+	got := mergeDocs(local, remote)
+	if len(got.Updates) != 2 {
+		t.Fatalf("updates %+v", got.Updates)
+	}
+	var s1 syncUpdate
+	for _, row := range got.Updates {
+		if row.TargetID == "s1" {
+			s1 = row
+		}
+	}
+	if s1.Available != "3" || s1.Level != "minor" {
+		t.Fatalf("s1 %+v", s1)
+	}
+	if len(got.UpdateJobs) != 2 {
+		t.Fatalf("jobs %+v", got.UpdateJobs)
 	}
 }
 

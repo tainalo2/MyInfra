@@ -115,12 +115,16 @@ func appFromPayload(raw json.RawMessage) (syncApp, error) {
 			ID: b.str("id"), OwnerID: b.str("owner_id"), Name: b.str("name"), SourceKind: b.str("source_kind"), Source: b.str("source"),
 			DestinationKind: b.str("destination_kind"), ServerID: b.strPtr("server_id"), ClusterID: b.strPtr("cluster_id"),
 			Replicas: b.num("replicas"), Variables: b.raw("variables", "{}"), RunStatus: b.str("run_status"), Paused: b.boolean("paused"),
-			Rollout: b.str("rollout"), RolloutDetail: b.str("rollout_detail"), CreatedAt: b.stamp("created_at"), Seq: b.i64("sync_seq"), Origin: b.str("sync_origin"),
+			Rollout: b.str("rollout"), RolloutDetail: b.str("rollout_detail"), PreparingSince: b.stampPtr("preparing_since"),
+			CreatedAt: b.stamp("created_at"), Seq: b.i64("sync_seq"), Origin: b.str("sync_origin"),
 		}, nil
 	}
 	var row syncApp
 	err := json.Unmarshal(raw, &row)
 	row.CreatedAt = utc(row.CreatedAt)
+	if row.PreparingSince != nil {
+		*row.PreparingSince = utc(*row.PreparingSince)
+	}
 	row.Variables = canonJSON(row.Variables, "{}")
 	return row, err
 }
@@ -209,6 +213,43 @@ func rollbackFromPayload(raw json.RawMessage) (syncRollback, error) {
 	return row, err
 }
 
+func updateFromPayload(raw json.RawMessage) (syncUpdate, error) {
+	if isSnake(raw) {
+		b := bagOf(raw)
+		return syncUpdate{
+			Kind: b.str("kind"), TargetID: b.str("target_id"), OwnerID: b.str("owner_id"),
+			Current: b.str("current"), Available: b.str("available"), Level: b.str("level"),
+			Detail: b.raw("detail", "{}"), CheckedAt: b.stamp("checked_at"), Seq: b.i64("sync_seq"), Origin: b.str("sync_origin"),
+		}, nil
+	}
+	var row syncUpdate
+	err := json.Unmarshal(raw, &row)
+	row.CheckedAt = utc(row.CheckedAt)
+	row.Detail = canonJSON(row.Detail, "{}")
+	return row, err
+}
+
+func updateJobFromPayload(raw json.RawMessage) (syncUpdateJob, error) {
+	if isSnake(raw) {
+		b := bagOf(raw)
+		return syncUpdateJob{
+			ID: b.str("id"), OwnerID: b.str("owner_id"), ClusterID: b.str("cluster_id"), ServerID: b.str("server_id"),
+			Status: b.str("status"), Steps: b.blob("steps"), CreatedAt: b.stamp("created_at"),
+			FinishedAt: b.stampPtr("finished_at"), Seq: b.i64("sync_seq"), Origin: b.str("sync_origin"),
+		}, nil
+	}
+	var row syncUpdateJob
+	err := json.Unmarshal(raw, &row)
+	row.CreatedAt = utc(row.CreatedAt)
+	if row.FinishedAt != nil {
+		*row.FinishedAt = utc(*row.FinishedAt)
+	}
+	if len(row.Steps) == 0 {
+		row.Steps = []byte("[]")
+	}
+	return row, err
+}
+
 func canonUsers(rows []syncUser) []syncUser {
 	if rows == nil {
 		rows = []syncUser{}
@@ -272,6 +313,9 @@ func canonApps(rows []syncApp) []syncApp {
 	}
 	for i := range rows {
 		rows[i].CreatedAt = utc(rows[i].CreatedAt)
+		if rows[i].PreparingSince != nil {
+			*rows[i].PreparingSince = utc(*rows[i].PreparingSince)
+		}
 		rows[i].Variables = canonJSON(rows[i].Variables, "{}")
 		if rows[i].Replicas < 1 {
 			rows[i].Replicas = 1
@@ -372,6 +416,35 @@ func canonAppSecrets(rows []syncAppSecret) []syncAppSecret {
 	for i := range rows {
 		rows[i].CreatedAt = utc(rows[i].CreatedAt)
 		rows[i].Apps = canonAppList(rows[i].Apps)
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
+	return rows
+}
+
+func canonUpdates(rows []syncUpdate) []syncUpdate {
+	if rows == nil {
+		rows = []syncUpdate{}
+	}
+	for i := range rows {
+		rows[i].CheckedAt = utc(rows[i].CheckedAt)
+		rows[i].Detail = canonJSON(rows[i].Detail, "{}")
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].ref() < rows[j].ref() })
+	return rows
+}
+
+func canonUpdateJobs(rows []syncUpdateJob) []syncUpdateJob {
+	if rows == nil {
+		rows = []syncUpdateJob{}
+	}
+	for i := range rows {
+		rows[i].CreatedAt = utc(rows[i].CreatedAt)
+		if rows[i].FinishedAt != nil {
+			*rows[i].FinishedAt = utc(*rows[i].FinishedAt)
+		}
+		if len(rows[i].Steps) == 0 {
+			rows[i].Steps = []byte("[]")
+		}
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
 	return rows

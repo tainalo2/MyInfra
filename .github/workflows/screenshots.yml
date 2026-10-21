@@ -1,0 +1,38 @@
+name: Regénérer les captures
+
+on:
+  workflow_dispatch:
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Interface
+        run: |
+          cd web && npm ci && npm run build
+          rm -rf internal/ui/dist && cp -a web/dist internal/ui/dist
+      - name: Binaire
+        run: go build -o myinfra ./cmd/myinfra
+      - name: Démarrage
+        run: |
+          export MYINFRA_MASTER_KEY=$(head -c 32 /dev/urandom | base64)
+          ./myinfra > myinfra.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:8080/api/health && break; sleep 1; done
+      - name: Captures
+        working-directory: web
+        run: |
+          npx playwright install --with-deps chromium
+          E2E_URL=http://127.0.0.1:8080 npm run screenshots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docs-screenshots
+          path: docs/screenshots/*.png

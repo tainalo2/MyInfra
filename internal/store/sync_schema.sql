@@ -49,6 +49,10 @@ ALTER TABLE image_rollbacks ADD COLUMN IF NOT EXISTS sync_seq bigint NOT NULL DE
 ALTER TABLE image_rollbacks ADD COLUMN IF NOT EXISTS sync_origin text NOT NULL DEFAULT '';
 ALTER TABLE app_secrets ADD COLUMN IF NOT EXISTS sync_seq bigint NOT NULL DEFAULT 0;
 ALTER TABLE app_secrets ADD COLUMN IF NOT EXISTS sync_origin text NOT NULL DEFAULT '';
+ALTER TABLE updates ADD COLUMN IF NOT EXISTS sync_seq bigint NOT NULL DEFAULT 0;
+ALTER TABLE updates ADD COLUMN IF NOT EXISTS sync_origin text NOT NULL DEFAULT '';
+ALTER TABLE update_jobs ADD COLUMN IF NOT EXISTS sync_seq bigint NOT NULL DEFAULT 0;
+ALTER TABLE update_jobs ADD COLUMN IF NOT EXISTS sync_origin text NOT NULL DEFAULT '';
 
 CREATE OR REPLACE FUNCTION myinfra_sync_touch() RETURNS trigger AS $$
 DECLARE
@@ -69,6 +73,8 @@ BEGIN
             rid := OLD.server_id || '/' || OLD.secret_id;
         ELSIF TG_TABLE_NAME = 'image_rollbacks' THEN
             rid := OLD.application_id;
+        ELSIF TG_TABLE_NAME = 'updates' THEN
+            rid := OLD.kind || '/' || OLD.target_id;
         ELSE
             rid := OLD.id;
         END IF;
@@ -84,6 +90,8 @@ BEGIN
         rid := NEW.server_id || '/' || NEW.secret_id;
     ELSIF TG_TABLE_NAME = 'image_rollbacks' THEN
         rid := NEW.application_id;
+    ELSIF TG_TABLE_NAME = 'updates' THEN
+        rid := NEW.kind || '/' || NEW.target_id;
     ELSE
         rid := NEW.id;
     END IF;
@@ -99,7 +107,7 @@ BEGIN
     FOREACH name IN ARRAY ARRAY[
         'users', 'secrets', 'clusters', 'servers', 'server_keys', 'applications',
         'application_services', 'domains', 'templates', 'destructions', 'template_runs', 'image_rollbacks',
-        'app_secrets'
+        'app_secrets', 'updates', 'update_jobs'
     ]
     LOOP
         EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', name || '_sync', name);

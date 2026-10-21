@@ -170,7 +170,7 @@ func (s *Store) SyncMerge(ctx context.Context, remote SyncDoc) (SyncDoc, error) 
 	}
 	if _, err := tx.Exec(ctx, `
 		LOCK TABLE users, secrets, clusters, servers, server_keys, applications, application_services,
-			domains, templates, destructions, template_runs, image_rollbacks, app_secrets, sync_tomb, sync_meta
+			domains, templates, destructions, template_runs, updates, update_jobs, image_rollbacks, app_secrets, sync_tomb, sync_meta
 		IN SHARE ROW EXCLUSIVE MODE`); err != nil {
 		return SyncDoc{}, err
 	}
@@ -210,6 +210,8 @@ func stampSync(ctx context.Context, q querier) error {
 		`UPDATE templates SET id = id WHERE sync_seq = 0`,
 		`UPDATE destructions SET id = id WHERE sync_seq = 0`,
 		`UPDATE template_runs SET id = id WHERE sync_seq = 0`,
+		`UPDATE updates SET kind = kind WHERE sync_seq = 0`,
+		`UPDATE update_jobs SET id = id WHERE sync_seq = 0`,
 		`UPDATE image_rollbacks SET application_id = application_id WHERE sync_seq = 0`,
 		`UPDATE app_secrets SET id = id WHERE sync_seq = 0`,
 	} {
@@ -253,6 +255,12 @@ func loadSync(ctx context.Context, q querier) (SyncDoc, error) {
 		return SyncDoc{}, err
 	}
 	if err := loadRuns(ctx, q, &doc); err != nil {
+		return SyncDoc{}, err
+	}
+	if err := loadUpdates(ctx, q, &doc); err != nil {
+		return SyncDoc{}, err
+	}
+	if err := loadUpdateJobs(ctx, q, &doc); err != nil {
 		return SyncDoc{}, err
 	}
 	if err := loadRollbacks(ctx, q, &doc); err != nil {
@@ -374,7 +382,7 @@ func loadKeys(ctx context.Context, q querier, doc *SyncDoc) error {
 func loadApps(ctx context.Context, q querier, doc *SyncDoc) error {
 	rows, err := q.Query(ctx, `
 		SELECT id, owner_id, name, source_kind, source, destination_kind, server_id, cluster_id, replicas, variables,
-			run_status, paused, rollout, rollout_detail, created_at, sync_seq, sync_origin
+			run_status, paused, rollout, rollout_detail, preparing_since, created_at, sync_seq, sync_origin
 		FROM applications`)
 	if err != nil {
 		return err
@@ -383,7 +391,7 @@ func loadApps(ctx context.Context, q querier, doc *SyncDoc) error {
 	for rows.Next() {
 		var row syncApp
 		var variables []byte
-		if err := rows.Scan(&row.ID, &row.OwnerID, &row.Name, &row.SourceKind, &row.Source, &row.DestinationKind, &row.ServerID, &row.ClusterID, &row.Replicas, &variables, &row.RunStatus, &row.Paused, &row.Rollout, &row.RolloutDetail, &row.CreatedAt, &row.Seq, &row.Origin); err != nil {
+		if err := rows.Scan(&row.ID, &row.OwnerID, &row.Name, &row.SourceKind, &row.Source, &row.DestinationKind, &row.ServerID, &row.ClusterID, &row.Replicas, &variables, &row.RunStatus, &row.Paused, &row.Rollout, &row.RolloutDetail, &row.PreparingSince, &row.CreatedAt, &row.Seq, &row.Origin); err != nil {
 			return err
 		}
 		row.Variables = variables
@@ -482,6 +490,46 @@ func loadRuns(ctx context.Context, q querier, doc *SyncDoc) error {
 	return rows.Err()
 }
 
+func loadUpdates(ctx context.Context, q querier, doc *SyncDoc) error {
+	rows, err := q.Query(ctx, `
+		SELECT kind, target_id, owner_id, current, available, level, detail, checked_at, sync_seq, sync_origin
+		FROM updates`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var row syncUpdate
+		var detail []byte
+		if err := rows.Scan(&row.Kind, &row.TargetID, &row.OwnerID, &row.Current, &row.Available, &row.Level, &detail, &row.CheckedAt, &row.Seq, &row.Origin); err != nil {
+			return err
+		}
+		row.Detail = detail
+		doc.Updates = append(doc.Updates, row)
+	}
+	return rows.Err()
+}
+
+func loadUpdateJobs(ctx context.Context, q querier, doc *SyncDoc) error {
+	rows, err := q.Query(ctx, `
+		SELECT id, owner_id, cluster_id, server_id, status, steps, created_at, finished_at, sync_seq, sync_origin
+		FROM update_jobs`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var row syncUpdateJob
+		var steps []byte
+		if err := rows.Scan(&row.ID, &row.OwnerID, &row.ClusterID, &row.ServerID, &row.Status, &steps, &row.CreatedAt, &row.FinishedAt, &row.Seq, &row.Origin); err != nil {
+			return err
+		}
+		row.Steps = steps
+		doc.UpdateJobs = append(doc.UpdateJobs, row)
+	}
+	return rows.Err()
+}
+
 func loadRollbacks(ctx context.Context, q querier, doc *SyncDoc) error {
 	rows, err := q.Query(ctx, `SELECT application_id, images, run_status, started_at, sync_seq, sync_origin FROM image_rollbacks`)
 	if err != nil {
@@ -529,6 +577,8 @@ func replaceSync(ctx context.Context, q querier, doc SyncDoc) error {
 		{`DELETE FROM domains WHERE NOT (id = ANY($1::text[]))`, idsOf(doc.Domains, func(r syncDomain) string { return r.ID })},
 		{`DELETE FROM application_services WHERE NOT (id = ANY($1::text[]))`, idsOf(doc.Services, func(r syncService) string { return r.ID })},
 		{`DELETE FROM template_runs WHERE NOT (id = ANY($1::text[]))`, idsOf(doc.Runs, func(r syncRun) string { return r.ID })},
+		{`DELETE FROM update_jobs WHERE NOT (id = ANY($1::text[]))`, idsOf(doc.UpdateJobs, func(r syncUpdateJob) string { return r.ID })},
+		{`DELETE FROM updates WHERE NOT ((kind || '/' || target_id) = ANY($1::text[]))`, idsOf(doc.Updates, func(r syncUpdate) string { return r.ref() })},
 		{`DELETE FROM destructions WHERE NOT (id = ANY($1::text[]))`, idsOf(doc.Destructions, func(r syncDestruction) string { return r.ID })},
 		{`DELETE FROM applications WHERE NOT (id = ANY($1::text[]))`, idsOf(doc.Applications, func(r syncApp) string { return r.ID })},
 		{`DELETE FROM server_keys WHERE NOT ((server_id || '/' || secret_id) = ANY($1::text[]))`, idsOf(doc.Keys, func(r syncKey) string { return r.ref() })},
@@ -621,16 +671,16 @@ func replaceSync(ctx context.Context, q querier, doc SyncDoc) error {
 		if _, err := q.Exec(ctx, `
 			INSERT INTO applications (
 				id, owner_id, name, source_kind, source, destination_kind, server_id, cluster_id, replicas, variables,
-				run_status, paused, rollout, rollout_detail, created_at, sync_seq, sync_origin
-			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+				run_status, paused, rollout, rollout_detail, preparing_since, created_at, sync_seq, sync_origin
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
 			ON CONFLICT (id) DO UPDATE SET
 				owner_id = EXCLUDED.owner_id, name = EXCLUDED.name, source_kind = EXCLUDED.source_kind, source = EXCLUDED.source,
 				destination_kind = EXCLUDED.destination_kind, server_id = EXCLUDED.server_id, cluster_id = EXCLUDED.cluster_id,
 				replicas = EXCLUDED.replicas, variables = EXCLUDED.variables, run_status = EXCLUDED.run_status, paused = EXCLUDED.paused,
-				rollout = EXCLUDED.rollout, rollout_detail = EXCLUDED.rollout_detail, created_at = EXCLUDED.created_at,
-				sync_seq = EXCLUDED.sync_seq, sync_origin = EXCLUDED.sync_origin`,
+				rollout = EXCLUDED.rollout, rollout_detail = EXCLUDED.rollout_detail, preparing_since = EXCLUDED.preparing_since,
+				created_at = EXCLUDED.created_at, sync_seq = EXCLUDED.sync_seq, sync_origin = EXCLUDED.sync_origin`,
 			row.ID, row.OwnerID, row.Name, row.SourceKind, row.Source, row.DestinationKind, row.ServerID, row.ClusterID, row.Replicas, string(row.Variables),
-			row.RunStatus, row.Paused, row.Rollout, row.RolloutDetail, row.CreatedAt, row.Seq, row.Origin); err != nil {
+			row.RunStatus, row.Paused, row.Rollout, row.RolloutDetail, row.PreparingSince, row.CreatedAt, row.Seq, row.Origin); err != nil {
 			return err
 		}
 	}
@@ -678,6 +728,37 @@ func replaceSync(ctx context.Context, q querier, doc SyncDoc) error {
 				owner_id = EXCLUDED.owner_id, template_id = EXCLUDED.template_id, status = EXCLUDED.status, cluster_id = EXCLUDED.cluster_id,
 				body = EXCLUDED.body, created_at = EXCLUDED.created_at, sync_seq = EXCLUDED.sync_seq, sync_origin = EXCLUDED.sync_origin`,
 			row.ID, row.OwnerID, row.TemplateID, row.Status, row.ClusterID, string(row.Body), row.CreatedAt, row.Seq, row.Origin); err != nil {
+			return err
+		}
+	}
+	for _, row := range doc.Updates {
+		detail := row.Detail
+		if len(detail) == 0 {
+			detail = json.RawMessage(`{}`)
+		}
+		if _, err := q.Exec(ctx, `
+			INSERT INTO updates (kind, target_id, owner_id, current, available, level, detail, checked_at, sync_seq, sync_origin)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+			ON CONFLICT (kind, target_id) DO UPDATE SET
+				owner_id = EXCLUDED.owner_id, current = EXCLUDED.current, available = EXCLUDED.available, level = EXCLUDED.level,
+				detail = EXCLUDED.detail, checked_at = EXCLUDED.checked_at, sync_seq = EXCLUDED.sync_seq, sync_origin = EXCLUDED.sync_origin`,
+			row.Kind, row.TargetID, row.OwnerID, row.Current, row.Available, row.Level, string(detail), row.CheckedAt, row.Seq, row.Origin); err != nil {
+			return err
+		}
+	}
+	for _, row := range doc.UpdateJobs {
+		steps := row.Steps
+		if len(steps) == 0 {
+			steps = []byte("[]")
+		}
+		if _, err := q.Exec(ctx, `
+			INSERT INTO update_jobs (id, owner_id, cluster_id, server_id, status, steps, created_at, finished_at, sync_seq, sync_origin)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+			ON CONFLICT (id) DO UPDATE SET
+				owner_id = EXCLUDED.owner_id, cluster_id = EXCLUDED.cluster_id, server_id = EXCLUDED.server_id, status = EXCLUDED.status,
+				steps = EXCLUDED.steps, created_at = EXCLUDED.created_at, finished_at = EXCLUDED.finished_at,
+				sync_seq = EXCLUDED.sync_seq, sync_origin = EXCLUDED.sync_origin`,
+			row.ID, row.OwnerID, row.ClusterID, row.ServerID, row.Status, steps, row.CreatedAt, row.FinishedAt, row.Seq, row.Origin); err != nil {
 			return err
 		}
 	}

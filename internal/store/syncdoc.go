@@ -119,6 +119,7 @@ type syncApp struct {
 	Paused          bool            `json:"paused"`
 	Rollout         string          `json:"rollout"`
 	RolloutDetail   string          `json:"rolloutDetail"`
+	PreparingSince  *time.Time      `json:"preparingSince,omitempty"`
 	CreatedAt       time.Time       `json:"createdAt"`
 	Seq             int64           `json:"seq"`
 	Origin          string          `json:"origin"`
@@ -198,6 +199,34 @@ type syncRollback struct {
 	Origin        string          `json:"origin"`
 }
 
+type syncUpdate struct {
+	Kind      string          `json:"kind"`
+	TargetID  string          `json:"targetId"`
+	OwnerID   string          `json:"ownerId"`
+	Current   string          `json:"current"`
+	Available string          `json:"available"`
+	Level     string          `json:"level"`
+	Detail    json.RawMessage `json:"detail"`
+	CheckedAt time.Time       `json:"checkedAt"`
+	Seq       int64           `json:"seq"`
+	Origin    string          `json:"origin"`
+}
+
+func (r syncUpdate) ref() string { return r.Kind + "/" + r.TargetID }
+
+type syncUpdateJob struct {
+	ID         string     `json:"id"`
+	OwnerID    string     `json:"ownerId"`
+	ClusterID  string     `json:"clusterId"`
+	ServerID   string     `json:"serverId"`
+	Status     string     `json:"status"`
+	Steps      []byte     `json:"steps"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	FinishedAt *time.Time `json:"finishedAt,omitempty"`
+	Seq        int64      `json:"seq"`
+	Origin     string     `json:"origin"`
+}
+
 type syncTomb struct {
 	Table   string          `json:"table"`
 	ID      string          `json:"id"`
@@ -220,6 +249,8 @@ type SyncDoc struct {
 	Runs         []syncRun         `json:"runs"`
 	Rollbacks    []syncRollback    `json:"rollbacks"`
 	AppSecrets   []syncAppSecret   `json:"appSecrets"`
+	Updates      []syncUpdate      `json:"updates"`
+	UpdateJobs   []syncUpdateJob   `json:"updateJobs"`
 	Tombs        []syncTomb        `json:"tombs"`
 }
 
@@ -245,6 +276,8 @@ func mergeDocs(local, remote SyncDoc) SyncDoc {
 	doc.Runs, doc.Tombs = mergeRuns(local.Runs, remote.Runs, doc.Tombs)
 	doc.Rollbacks, doc.Tombs = mergeRollbacks(local.Rollbacks, remote.Rollbacks, doc.Tombs)
 	doc.AppSecrets, doc.Tombs = mergeAppSecrets(local.AppSecrets, remote.AppSecrets, doc.Tombs)
+	doc.Updates, doc.Tombs = mergeUpdates(local.Updates, remote.Updates, doc.Tombs)
+	doc.UpdateJobs, doc.Tombs = mergeUpdateJobs(local.UpdateJobs, remote.UpdateJobs, doc.Tombs)
 	return reconcile(doc).canon()
 }
 
@@ -298,6 +331,14 @@ func mergeRollbacks(a, b []syncRollback, tombs []syncTomb) ([]syncRollback, []sy
 
 func mergeAppSecrets(a, b []syncAppSecret, tombs []syncTomb) ([]syncAppSecret, []syncTomb) {
 	return mergeByID("app_secrets", a, b, tombs, func(r syncAppSecret) string { return r.ID }, func(r syncAppSecret) syncVersion { return syncVersion{r.Seq, r.Origin} })
+}
+
+func mergeUpdates(a, b []syncUpdate, tombs []syncTomb) ([]syncUpdate, []syncTomb) {
+	return mergeByID("updates", a, b, tombs, func(r syncUpdate) string { return r.ref() }, func(r syncUpdate) syncVersion { return syncVersion{r.Seq, r.Origin} })
+}
+
+func mergeUpdateJobs(a, b []syncUpdateJob, tombs []syncTomb) ([]syncUpdateJob, []syncTomb) {
+	return mergeByID("update_jobs", a, b, tombs, func(r syncUpdateJob) string { return r.ID }, func(r syncUpdateJob) syncVersion { return syncVersion{r.Seq, r.Origin} })
 }
 
 func mergeByID[T any](table string, left, right []T, tombs []syncTomb, id func(T) string, ver func(T) syncVersion) ([]T, []syncTomb) {
@@ -519,6 +560,20 @@ func resurrect(doc *SyncDoc, tb syncTomb, v syncVersion) bool {
 		}
 		row.Seq, row.Origin = v.Seq, v.Origin
 		doc.AppSecrets = append(doc.AppSecrets, row)
+	case "updates":
+		row, err := updateFromPayload(tb.Payload)
+		if err != nil || row.Kind == "" || row.TargetID == "" {
+			return false
+		}
+		row.Seq, row.Origin = v.Seq, v.Origin
+		doc.Updates = append(doc.Updates, row)
+	case "update_jobs":
+		row, err := updateJobFromPayload(tb.Payload)
+		if err != nil || row.ID == "" {
+			return false
+		}
+		row.Seq, row.Origin = v.Seq, v.Origin
+		doc.UpdateJobs = append(doc.UpdateJobs, row)
 	default:
 		return false
 	}
@@ -600,6 +655,12 @@ func dropLostTombs(doc SyncDoc) SyncDoc {
 	}
 	for _, row := range doc.AppSecrets {
 		alive["app_secrets/"+row.ID] = syncVersion{row.Seq, row.Origin}
+	}
+	for _, row := range doc.Updates {
+		alive["updates/"+row.ref()] = syncVersion{row.Seq, row.Origin}
+	}
+	for _, row := range doc.UpdateJobs {
+		alive["update_jobs/"+row.ID] = syncVersion{row.Seq, row.Origin}
 	}
 	var keep []syncTomb
 	for _, tb := range doc.Tombs {
@@ -692,6 +753,18 @@ func rowAlive(doc SyncDoc, table, id string) bool {
 				return true
 			}
 		}
+	case "updates":
+		for _, row := range doc.Updates {
+			if row.ref() == id {
+				return true
+			}
+		}
+	case "update_jobs":
+		for _, row := range doc.UpdateJobs {
+			if row.ID == id {
+				return true
+			}
+		}
 	}
 	return false
 }
@@ -744,6 +817,12 @@ func docLinks(doc SyncDoc) []syncLink {
 	for _, row := range doc.AppSecrets {
 		out = append(out, syncLink{"app_secrets", row.ID, "users", row.OwnerID, syncVersion{row.Seq, row.Origin}})
 	}
+	for _, row := range doc.Updates {
+		out = append(out, syncLink{"updates", row.ref(), "users", row.OwnerID, syncVersion{row.Seq, row.Origin}})
+	}
+	for _, row := range doc.UpdateJobs {
+		out = append(out, syncLink{"update_jobs", row.ID, "users", row.OwnerID, syncVersion{row.Seq, row.Origin}})
+	}
 	return out
 }
 
@@ -775,6 +854,10 @@ func takeRow(doc *SyncDoc, table, id string) (json.RawMessage, bool) {
 		return take(&doc.Rollbacks, id, func(r syncRollback) string { return r.ApplicationID })
 	case "app_secrets":
 		return take(&doc.AppSecrets, id, func(r syncAppSecret) string { return r.ID })
+	case "updates":
+		return take(&doc.Updates, id, func(r syncUpdate) string { return r.ref() })
+	case "update_jobs":
+		return take(&doc.UpdateJobs, id, func(r syncUpdateJob) string { return r.ID })
 	default:
 		return nil, false
 	}
@@ -809,6 +892,8 @@ func (d SyncDoc) canon() SyncDoc {
 	d.Runs = canonRuns(d.Runs)
 	d.Rollbacks = canonRollbacks(d.Rollbacks)
 	d.AppSecrets = canonAppSecrets(d.AppSecrets)
+	d.Updates = canonUpdates(d.Updates)
+	d.UpdateJobs = canonUpdateJobs(d.UpdateJobs)
 	if d.Tombs == nil {
 		d.Tombs = []syncTomb{}
 	}
@@ -857,6 +942,10 @@ func canonPayload(table string, raw json.RawMessage) json.RawMessage {
 		out, err = rollbackFromPayload(raw)
 	case "app_secrets":
 		out, err = appSecretFromPayload(raw)
+	case "updates":
+		out, err = updateFromPayload(raw)
+	case "update_jobs":
+		out, err = updateJobFromPayload(raw)
 	default:
 		return raw
 	}
@@ -914,6 +1003,12 @@ func maxSeq(doc SyncDoc) int64 {
 		bump(row.Seq)
 	}
 	for _, row := range doc.AppSecrets {
+		bump(row.Seq)
+	}
+	for _, row := range doc.Updates {
+		bump(row.Seq)
+	}
+	for _, row := range doc.UpdateJobs {
 		bump(row.Seq)
 	}
 	for _, tb := range doc.Tombs {
@@ -1024,6 +1119,18 @@ func (b bag) stamp(k string) time.Time {
 	var t time.Time
 	_ = json.Unmarshal(b[k], &t)
 	return utc(t)
+}
+
+func (b bag) stampPtr(k string) *time.Time {
+	if b[k] == nil || bytes.Equal(b[k], []byte("null")) {
+		return nil
+	}
+	var t time.Time
+	if err := json.Unmarshal(b[k], &t); err != nil || t.IsZero() {
+		return nil
+	}
+	t = utc(t)
+	return &t
 }
 
 func (b bag) blob(k string) []byte {

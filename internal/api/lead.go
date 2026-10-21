@@ -115,6 +115,8 @@ func (a *API) takeLead(w http.ResponseWriter, r *http.Request) {
 		message = "Cette copie a pris la main sans réponse de la copie principale : celle-ci cédera dès son retour."
 	}
 	a.note(ctx, owner, newID(), "copy.lead", "warn", message, "", "")
+	a.Replica = false
+	a.resumeDestructions()
 	writeJSON(w, http.StatusAccepted, map[string]any{"status": "restarting", "reached": reached})
 	a.restartForRole()
 }
@@ -214,6 +216,10 @@ func (a *API) syncTerm(w http.ResponseWriter, r *http.Request, replica bool) {
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	if replica != a.Replica {
+		if !replica {
+			a.Replica = false
+			a.resumeDestructions()
+		}
 		a.restartForRole()
 	}
 }

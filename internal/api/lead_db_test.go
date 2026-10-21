@@ -169,6 +169,9 @@ func TestForcedLeadWithoutMain(t *testing.T) {
 	if rec := call(`{"force":true}`); rec.Code != http.StatusAccepted {
 		t.Fatalf("reprise forcée refusée : %d %s", rec.Code, rec.Body)
 	}
+	if a.Replica {
+		t.Fatal("takeLead devrait marquer cette copie comme pilote avant le redémarrage")
+	}
 	role, _ := a.Store.CopyRole(context.Background())
 	if role.Replica || role.Epoch != 2 || role.MainURL != "https://myinfra-absente.invalid" {
 		t.Fatalf("rôle inattendu : %+v", role)

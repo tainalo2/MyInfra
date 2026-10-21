@@ -7,7 +7,9 @@
     "vite": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "screenshots": "UPDATE_SCREENSHOTS=1 playwright test e2e/screenshots.spec.ts",
+    "screenshots:check": "playwright test e2e/screenshots-check.spec.ts"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.6",

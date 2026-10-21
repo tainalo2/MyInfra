@@ -228,7 +228,11 @@ func (a *API) exchange(ctx context.Context, peer string, local store.SyncDoc) er
 	a.syncMu.Lock()
 	defer a.syncMu.Unlock()
 	_, err = a.Store.SyncMerge(ctx, merged)
-	return err
+	if err != nil {
+		return err
+	}
+	_ = a.Store.AddPeer(ctx, peer)
+	return nil
 }
 
 type peerState struct {

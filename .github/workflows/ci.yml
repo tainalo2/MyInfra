@@ -64,6 +64,7 @@ jobs:
         run: |
           npx playwright install --with-deps chromium
           E2E_URL=http://127.0.0.1:8080 npm run e2e
+          E2E_URL=http://127.0.0.1:8080 npm run screenshots:check
       - if: failure()
         run: cat myinfra.log
       - if: failure()
