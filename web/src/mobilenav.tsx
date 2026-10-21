@@ -2,8 +2,8 @@ import { useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowUpCircle,
+  Globe,
   History,
-  House,
   LayoutGrid,
   LayoutTemplate,
   Menu,
@@ -24,7 +24,7 @@ import { urgent, useUpdates } from "./updates";
 type Tab = { to: string; label: MsgKey; icon: LucideIcon; end?: boolean; match?: string[] };
 
 const tabs: Tab[] = [
-  { to: "/", label: "nav.home", icon: House, end: true },
+  { to: "/", label: "nav.home", icon: Globe, end: true },
   { to: "/applications", label: "nav.apps", icon: LayoutGrid, match: ["/applications", "/nouveau", "/catalogue"] },
   { to: "/clusters", label: "nav.servers", icon: Network, match: ["/clusters", "/serveurs"] },
   { to: "/historique", label: "nav.activity", icon: History, match: ["/historique", "/deploiements", "/suppressions", "/destructions"] },

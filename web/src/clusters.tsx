@@ -297,6 +297,29 @@ function ClusterCard({
           </ActionsMenu>
         </span>
       </div>
+      {!removal && servers.length > 0 && servers.every((server) => server.reach) ? (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-bad px-4 py-3">
+          <p className="text-bad">{servers.every((server) => server.reach === "gone") ? text("reach.clusterGone") : text("reach.clusterLost")}</p>
+          {servers.every((server) => server.reach === "gone") ? (
+            <Button
+              type="button"
+              variant="danger"
+              onClick={() => {
+                setApps(null);
+                setDialogError("");
+                setConfirm(true);
+              }}
+            >
+              {text("reach.removeCluster")}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+      {!removal && servers.some((server) => server.reach) && !servers.every((server) => server.reach) ? (
+        <p className="mt-4 rounded-md border border-bad px-4 py-3 text-bad">
+          {text("reach.clusterSome", { count: String(servers.filter((server) => server.reach).length), total: String(servers.length) })}
+        </p>
+      ) : null}
       <RemovalNotice job={removal} />
       {nodeUpdates.length > 0 && cluster.origin !== "imported" ? (
         <p className="flex flex-wrap items-center gap-2 text-muted">

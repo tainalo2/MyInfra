@@ -229,6 +229,12 @@ func (a *API) listUpdates(w http.ResponseWriter, r *http.Request) {
 			// The target was removed since the check.
 			continue
 		}
+		if row.Kind == "server" {
+			// A server that no longer answers, or is gone, cannot be updated.
+			if state, _ := a.reachOf(row.TargetID); state != "" {
+				continue
+			}
+		}
 		out = append(out, updateView{
 			Kind: row.Kind, ID: row.TargetID, Name: name, Current: row.Current, Available: row.Available,
 			Level: row.Level, Detail: row.Detail, CheckedAt: row.CheckedAt,

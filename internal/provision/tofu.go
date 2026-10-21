@@ -176,6 +176,16 @@ func (c Client) destroyStack(ctx context.Context, provider string, creds catalog
 	return os.RemoveAll(dir)
 }
 
+// ForgetStack drops the state kept for a machine its provider no longer has.
+func (c Client) ForgetStack(provider, id string) {
+	if provider == "" || strings.TrimSpace(id) == "" {
+		return
+	}
+	if dir, err := c.stackDir(provider, id); err == nil {
+		_ = os.RemoveAll(dir)
+	}
+}
+
 func (c Client) HasTofuState(provider, id string) bool {
 	dir, err := c.stackDir(provider, id)
 	if err != nil {

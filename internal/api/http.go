@@ -39,6 +39,7 @@ type API struct {
 	// database says: the lead cannot change from the screen.
 	RoleFixed    bool
 	roleChanging atomic.Bool
+	reach        reachCache
 	Shutdown     func(context.Context) error
 	transfer     transferState
 	deployMu     sync.Mutex

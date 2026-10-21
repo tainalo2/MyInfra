@@ -173,6 +173,13 @@ export type Server = {
   deploy?: DeployStep[];
   cost?: Cost;
   createdAt?: string;
+  // reach is "lost" when the server stopped answering, "gone" when its
+  // provider no longer has it.
+  reach?: "lost" | "gone";
+  lostSince?: string;
+  seenAt?: string;
+  providerCheckedAt?: string;
+  providerError?: string;
 };
 
 export type Cost = {

@@ -245,6 +245,7 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("POST /api/sync/yield", a.syncYield)
 	mux.HandleFunc("POST /api/sync/lead", a.syncLead)
 	mux.HandleFunc("POST /api/copies/lead", a.auth(a.takeLead))
+	mux.HandleFunc("POST /api/servers/{id}/check", a.auth(a.checkServerNow))
 	mux.HandleFunc("POST /api/copies/handover", a.auth(a.steady(a.handOver)))
 
 	mux.HandleFunc("POST /api/join", a.join)

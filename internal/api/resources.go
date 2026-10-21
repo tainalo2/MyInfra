@@ -52,6 +52,13 @@ type serverView struct {
 	Deploy       []deploy.Step `json:"deploy,omitempty"`
 	Cost         *billView     `json:"cost,omitempty"`
 	CreatedAt    time.Time     `json:"createdAt"`
+	// Reach is "lost" when the server stopped answering, "gone" when its
+	// provider no longer has it.
+	Reach             string     `json:"reach,omitempty"`
+	LostSince         *time.Time `json:"lostSince,omitempty"`
+	SeenAt            *time.Time `json:"seenAt,omitempty"`
+	ProviderCheckedAt *time.Time `json:"providerCheckedAt,omitempty"`
+	ProviderError     string     `json:"providerError,omitempty"`
 }
 
 func (a *API) toServer(row store.Server) serverView {
@@ -73,6 +80,7 @@ func (a *API) toServer(row store.Server) serverView {
 	if plan != nil {
 		view.Cost = billOf(plan.Hourly, plan.Monthly, plan.Currency, row.CreatedAt)
 	}
+	a.reachServer(&view)
 	return view
 }
 
@@ -566,14 +574,23 @@ func (a *API) applications(ctx context.Context, owner string) ([]appView, map[st
 		if row.ClusterID != "" {
 			sample, ok := samples[row.ClusterID]
 			if !ok {
-				sample, _ = a.clusterSample(ctx, owner, row.ClusterID)
+				// A cluster that no longer answers keeps an old measure:
+				// it is not shown.
+				if !a.clusterLost(row.ClusterID) {
+					sample, _ = a.clusterSample(ctx, owner, row.ClusterID)
+				}
 				samples[row.ClusterID] = sample
 			}
-			row.RunStatus = a.noteAppHealth(ctx, row, sample)
+			if !a.clusterLost(row.ClusterID) {
+				row.RunStatus = a.noteAppHealth(ctx, row, sample)
+			}
 		}
-		out = append(out, toApp(row))
+		view := toApp(row)
+		a.reachApp(&view)
+		out = append(out, view)
 	}
 	if self, ok := a.selfView(ctx, owner); ok {
+		a.reachApp(&self)
 		out = append(out, self)
 	}
 	return out, samples, nil
@@ -586,6 +603,7 @@ func (a *API) getApplication(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "Introuvable.")
 			return
 		}
+		a.reachApp(&self)
 		writeJSON(w, http.StatusOK, self)
 		return
 	}
@@ -594,7 +612,9 @@ func (a *API) getApplication(w http.ResponseWriter, r *http.Request) {
 		a.mapErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toApp(app))
+	view := toApp(app)
+	a.reachApp(&view)
+	writeJSON(w, http.StatusOK, view)
 }
 
 func (a *API) createApplication(w http.ResponseWriter, r *http.Request) {

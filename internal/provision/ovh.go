@@ -239,6 +239,9 @@ func (c Client) ovhJSON(ctx context.Context, creds catalog.Creds, method, rawURL
 	if status == http.StatusNotFound && method == http.MethodDelete {
 		return nil, nil
 	}
+	if status == http.StatusNotFound && method == http.MethodGet {
+		return nil, errMachineGone
+	}
 	if status >= 300 {
 		return nil, refused(status, raw)
 	}

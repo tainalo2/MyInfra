@@ -32,7 +32,7 @@ export function worst(tones: Tone[]): Tone {
 type Sample = { cpu: { used: number; total: number }; memory: { used: number; total: number }; disk: { used: number; total: number }; measured: boolean };
 
 export function healthOf(server: Server, sample?: Sample): Tone {
-  if (server.status === "failed") return "bad";
+  if (server.status === "failed" || server.reach) return "bad";
   if (server.status === "pending" || server.status === "deploying") return "warn";
   if (sample?.measured) {
     const pressure = Math.max(ratio(sample.cpu), ratio(sample.memory), ratio(sample.disk));

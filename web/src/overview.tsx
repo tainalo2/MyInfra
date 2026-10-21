@@ -8,7 +8,7 @@ import { useI18n } from "./lang";
 import { hourlyRate, money } from "./measure";
 import { UsageMeters } from "./meters";
 import { placeOf } from "./places";
-import { Button, ErrorText, Field, HealthDot, Icon, IconButton, LoadingLines, Select, TextButton, focus, podFailed, podHealth, statusLabel, useDeployments, useDestructions } from "./ui";
+import { Button, ErrorText, Field, HealthDot, Icon, IconButton, LoadingLines, Select, TextButton, focus, liveServer, podFailed, podHealth, serverState, statusLabel, useDeployments, useDestructions } from "./ui";
 import { EventList } from "./world";
 import { appHealth } from "./kit";
 import { urgent, useUpdates } from "./updates";
@@ -161,7 +161,7 @@ export function Overview() {
     const singlePoint = (app: Application) => {
       // A copy that restarts elsewhere from its replicated data is not one.
       if (!app.clusterId || app.paused || app.failover) return "";
-      const nodes = servers.filter((server) => server.clusterId === app.clusterId && server.status === "linked").length;
+      const nodes = servers.filter((server) => server.clusterId === app.clusterId && liveServer(server)).length;
       const hosts = hostsOf(app);
       if (nodes < 2 || hosts.size !== 1) return "";
       return [...hosts][0];
@@ -406,10 +406,11 @@ function attentionOf(
 ): Item[] {
   const items: Item[] = [];
   for (const app of model.apps) {
-    if (!app.paused && app.runStatus === "failed") items.push({ key: `app:${app.id}`, tone: "bad", label: text("overview.appFailed", { name: app.name }), onClick: () => select(`app:${app.id}`) });
+    if (!app.paused && (app.runStatus === "failed" || app.runStatus === "unreachable")) items.push({ key: `app:${app.id}`, tone: "bad", label: text(app.runStatus === "unreachable" ? "overview.appUnreachable" : "overview.appFailed", { name: app.name }), onClick: () => select(`app:${app.id}`) });
   }
   for (const server of model.servers) {
-    if (server.status === "failed") items.push({ key: `server:${server.id}`, tone: "bad", label: text("overview.serverFailed", { name: server.name }), to: `/serveurs/${server.id}` });
+    if (server.reach) items.push({ key: `server:${server.id}`, tone: "bad", label: text(server.reach === "gone" ? "overview.serverGone" : "overview.serverLost", { name: server.name }), to: `/serveurs/${server.id}` });
+    else if (server.status === "failed") items.push({ key: `server:${server.id}`, tone: "bad", label: text("overview.serverFailed", { name: server.name }), to: `/serveurs/${server.id}` });
   }
   for (const item of deployments) items.push({ key: `deploy:${item.id}`, tone: "warn", label: text("overview.deploying", { name: item.name }), to: item.to });
   for (const job of jobs) {
@@ -507,7 +508,7 @@ function Rows({
               {servers.map((server) => (
                 <li key={server.id}>
                   <button type="button" className={rowClass(active("server", server.id))} aria-pressed={active("server", server.id)} onClick={() => select(`server:${server.id}`)}>
-                    <HealthDot status={server.status} />
+                    <HealthDot status={serverState(server)} />
                     <span className="min-w-0 flex-1 truncate">{server.name}</span>
                     <span className="shrink-0 text-muted">{rate(server)}</span>
                   </button>
@@ -599,7 +600,7 @@ function rate(server: OverviewServer) {
 function Figures({ model, loading }: { model: Model; loading: boolean }) {
   if (loading) return null;
   const online = model.apps.filter((app) => !app.paused && app.runStatus === "running").length;
-  const linked = model.servers.filter((server) => server.status === "linked").length;
+  const linked = model.servers.filter((server) => liveServer(server)).length;
   const ready = model.pods.filter((pod) => pod.ready).length;
   const totals = new Map<string, number>();
   const providers = new Map<string, number>();
@@ -701,7 +702,7 @@ function Card({
           {servers.map((server) => (
             <li key={server.id}>
               <button type="button" onClick={() => select(`server:${server.id}`)} className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left">
-                <HealthDot status={server.status} />
+                <HealthDot status={serverState(server)} />
                 <span className="flex-1 truncate">{server.name}</span>
                 <span className="text-muted">{server.clusterName || text("server.alone")}</span>
               </button>
@@ -823,7 +824,7 @@ function AppCard({
       {asking ? (
         <RedundancyDialog
           app={app}
-          nodes={model.servers.filter((server) => server.clusterId === app.clusterId && server.status === "linked").length}
+          nodes={model.servers.filter((server) => server.clusterId === app.clusterId && liveServer(server)).length}
           onClose={() => setAsking(false)}
           onDone={() => {
             setAsking(false);
@@ -957,7 +958,7 @@ function RedundancyDialog({ app, nodes, onClose, onDone }: { app: Application; n
 }
 
 function ServerCard({ server, model, select, onOpen }: { server: OverviewServer; model: Model; select: (sel: string) => void; onOpen: (to: string) => void }) {
-  const status = statusLabel(server.status);
+  const status = statusLabel(serverState(server));
   const apps = model.apps.filter((app) => model.hostsOf(app).has(server.id));
   const pods = model.podsOfServer.get(server.id) ?? [];
   const facts = [server.providerName || server.provider, siteOf(server) || server.plan?.location, server.plan?.name, server.clusterName || text("server.alone"), rate(server)].filter(Boolean);

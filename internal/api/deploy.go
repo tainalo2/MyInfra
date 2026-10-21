@@ -373,6 +373,10 @@ func (a *API) applyFirewall(ctx context.Context, owner, clusterID string) error 
 		if row.Status != "linked" && row.Status != "deploying" {
 			continue
 		}
+		// A server that no longer answers would hold the whole round.
+		if state, _ := a.reachOf(row.ID); state != "" {
+			continue
+		}
 		nodes = append(nodes, row)
 	}
 	if len(nodes) == 0 {

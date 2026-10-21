@@ -176,6 +176,9 @@ func (a *API) checkServers(ctx context.Context) error {
 		if server.Status != "linked" || server.Address == "" {
 			continue
 		}
+		if state, _ := a.reachOf(server.ID); state != "" {
+			continue
+		}
 		group.Add(1)
 		go func(server store.Server) {
 			defer group.Done()
@@ -356,6 +359,9 @@ func (a *API) targetServers(ctx context.Context, owner, clusterID, serverID stri
 			continue
 		}
 		if server.Status != "linked" || server.Address == "" {
+			continue
+		}
+		if state, _ := a.reachOf(server.ID); state != "" {
 			if serverID != "" {
 				return nil, nil, errString("Ce serveur n'est pas prêt : il ne peut pas être mis à jour maintenant.")
 			}

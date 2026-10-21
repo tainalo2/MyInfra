@@ -48,7 +48,7 @@ func (a *API) overview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, server := range servers {
-		if server.ClusterID == "" {
+		if server.ClusterID == "" || a.clusterLost(server.ClusterID) {
 			continue
 		}
 		if _, ok := samples[server.ClusterID]; !ok {

@@ -254,7 +254,7 @@ func (a *API) runDestruction(owner, id string) {
 		if err := a.persistDestruction(owner, id, "running", job); err != nil {
 			return
 		}
-		detail, err := a.performDestruction(owner, &job.Steps[index])
+		detail, err := a.performDestruction(owner, &job.Steps[index], wholeCluster(job))
 		if err != nil {
 			job.Steps[index].Status = "failed"
 			job.Steps[index].Detail = err.Error()
@@ -277,7 +277,19 @@ func (a *API) persistDestruction(owner, id, status string, job destructionJob) e
 	return a.Store.UpdateDestruction(context.Background(), owner, id, status, raw)
 }
 
-func (a *API) performDestruction(owner string, step *destructionStep) (string, error) {
+// wholeCluster tells whether a destruction removes a cluster with all its
+// servers: draining a node, or closing the firewall behind it, is then of no
+// use, and would wait on servers that may be gone already.
+func wholeCluster(job destructionJob) bool {
+	for _, step := range job.Steps {
+		if step.Action == "cluster" {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *API) performDestruction(owner string, step *destructionStep, whole bool) (string, error) {
 	switch step.Action {
 	case "server":
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
@@ -285,21 +297,26 @@ func (a *API) performDestruction(owner string, step *destructionStep) (string, e
 		// A deployment still running on this machine would keep its SSH
 		// session, and the deployment lock, on a machine that no longer exists.
 		a.abortDeploy(step.ServerID)
+		// A machine its provider no longer has is only removed from MyInfra:
+		// nothing would answer the steps that act on it.
+		gone, provider := a.machineGone(ctx, owner, step.ProviderID, step.MachineID)
 		clusterID := ""
 		if srv, err := a.Store.Server(ctx, owner, step.ServerID); err == nil {
 			clusterID = srv.ClusterID
-			if clusterID != "" {
+			if clusterID != "" && !gone && !whole {
 				a.removeNode(ctx, owner, srv)
 			}
 		}
-		if err := a.destroyMachine(ctx, owner, step.ProviderID, step.MachineID); err != nil {
+		if gone {
+			provisionClient(a).ForgetStack(provider, step.MachineID)
+		} else if err := a.destroyMachine(ctx, owner, step.ProviderID, step.MachineID); err != nil {
 			slog.Info("destruction machine", "server", step.ServerID, "err", err)
 			return "", errors.New("La machine n'a pas pu être détruite : " + err.Error())
 		}
 		if err := a.Store.DeleteServer(ctx, owner, step.ServerID); err != nil && !errors.Is(err, store.ErrNotFound) {
 			return "", errors.New("Le serveur n'a pas pu être retiré.")
 		}
-		if clusterID != "" {
+		if clusterID != "" && !whole {
 			if err := a.reconcileFirewall(ctx, owner, clusterID); err != nil {
 				slog.Info("pare-feu", "cluster", clusterID, "err", err)
 			}
@@ -478,6 +495,9 @@ func (a *API) otherPlane(ctx context.Context, owner string, srv store.Server) (d
 	}
 	for _, row := range rows {
 		if row.ID == srv.ID || row.ClusterID != srv.ClusterID || !row.ControlPlane || row.Status != "linked" || row.Address == "" {
+			continue
+		}
+		if state, _ := a.reachOf(row.ID); state != "" {
 			continue
 		}
 		keyIDs, err := a.Store.ServerKeyIDs(ctx, row.ID)

@@ -13,7 +13,7 @@ import { placeLabel } from "./places";
 import { ProviderSelect } from "./provider-select";
 import { TofuFiles } from "./tofu";
 import { EventList } from "./world";
-import { text, knownMessage } from "./i18n";
+import { currentLocale, text, knownMessage } from "./i18n";
 import {
   ActionsMenu,
   Button,
@@ -34,7 +34,9 @@ import {
   TextButton,
   podFailed,
   podHealth,
+  liveServer,
   removalOf,
+  serverState,
   statusLabel,
   useDestructions,
 } from "./ui";
@@ -43,6 +45,7 @@ import { PodActions } from "./pods";
 import { ToolInstall } from "./tools";
 import { ServerFacts, ServerUpdateNotice, UpdateBadge, UpdateJobs, useUpdate } from "./updates";
 import { UpdateLock, useActivity } from "./activity";
+import { useI18n } from "./lang";
 
 export function ServerForm({ clusterId }: { clusterId: string }) {
   const navigate = useNavigate();
@@ -488,7 +491,7 @@ export function ServerCard({
   usageLoading?: boolean;
   compact?: boolean;
 }) {
-  const label = statusLabel(server.status);
+  const label = statusLabel(serverState(server));
   const removal = removalOf(useDestructions(), "server", server.id);
   const update = useUpdate("server", server.id);
   if (compact) {
@@ -572,7 +575,7 @@ export function ServerPage() {
   const { updating, transferring } = useActivity();
   const server = serverPoll.data;
   const setServer = serverPoll.setData;
-  const linked = server?.status === "linked";
+  const linked = !!server && liveServer(server);
   const deploying = server?.status === "pending" || server?.status === "deploying";
   const active = Boolean(server?.deploy?.some((step) => step.status === "running" || step.status === "pending")) && !linked;
   const runtimePoll = usePoll<ServerRuntime>(id && linked ? `/api/servers/${id}/runtime` : null, 10000);
@@ -617,7 +620,7 @@ export function ServerPage() {
   const failed = server.status === "failed";
   const locked = updating(server.id, server.clusterId) || transferring;
   const facts: [string, ReactNode][] = [
-    [text("server.status"), <StatusBadge status={server.status} />],
+    [text("server.status"), <StatusBadge status={serverState(server)} />],
     [text("server.provider"), (
       <span className="inline-flex items-center gap-2">
         {server.provider ? <ProviderLogo id={server.provider} /> : <Icon icon={ServerIcon} />}
@@ -648,6 +651,7 @@ export function ServerPage() {
           </div>
         ))}
       </dl>
+      <ReachNotice server={server} onChecked={setServer} onRemove={() => setConfirm(true)} />
       <ServerFacts serverId={server.id} />
       {!server.plan && server.joinCommand ? (
         <div className="mt-6 flex max-w-[720px] items-start gap-4">
@@ -823,3 +827,61 @@ export function billText(cost: Cost, cluster = false, hourly?: number) {
 }
 
 
+
+// ReachNotice tells, on the page of a server, that it no longer answers or
+// that its provider no longer has it, and what to do about it.
+function ReachNotice({ server, onChecked, onRemove }: { server: Server; onChecked: (server: Server) => void; onRemove: () => void }) {
+  useI18n();
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState("");
+  if (!server.reach) return null;
+  const gone = server.reach === "gone";
+  const provider = server.providerName || text("server.manual");
+
+  async function check() {
+    setChecking(true);
+    setError("");
+    try {
+      onChecked(await api<Server>(`/api/servers/${server.id}/check`, { method: "POST" }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : text("common.error"));
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  return (
+    <div className="mt-6 flex max-w-[720px] flex-col gap-3 rounded-md border border-bad px-4 py-3">
+      <p className="font-medium text-bad">{gone ? text("reach.goneTitle", { provider }) : text("reach.lostTitle")}</p>
+      <p className="text-muted">
+        {gone
+          ? text("reach.goneText")
+          : server.seenAt
+            ? text("reach.lostSince", { since: when(server.seenAt) })
+            : text("reach.lostText")}
+      </p>
+      {!gone && server.providerCheckedAt ? (
+        <p className="text-[13px] text-faint">
+          {server.providerError ? text("reach.providerError", { error: knownMessage(server.providerError) }) : text("reach.providerPresent", { provider, at: when(server.providerCheckedAt) })}
+        </p>
+      ) : null}
+      {error ? <ErrorText>{error}</ErrorText> : null}
+      <div className="flex flex-wrap gap-3">
+        {gone ? (
+          <Button type="button" variant="danger" onClick={onRemove}>
+            <Icon icon={Trash2} />
+            {text("reach.remove")}
+          </Button>
+        ) : null}
+        <Button type="button" variant="secondary" onClick={() => void check()} disabled={checking}>
+          {checking ? <Spinner /> : <Icon icon={RotateCcw} />}
+          {text("reach.check")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function when(at: string) {
+  return new Date(at).toLocaleString(currentLocale(), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}

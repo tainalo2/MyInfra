@@ -372,3 +372,16 @@ CREATE TABLE IF NOT EXISTS copy_role (
 -- The term of the copy that drives: each time a copy takes the lead its term
 -- goes up, and a copy that finds a later term elsewhere stops driving.
 ALTER TABLE copy_role ADD COLUMN IF NOT EXISTS epoch bigint NOT NULL DEFAULT 0;
+
+-- What this copy sees of each server: whether it answers, and whether its
+-- provider still has it. Each copy observes for itself: copies never
+-- exchange it.
+CREATE TABLE IF NOT EXISTS server_health (
+    server_id text PRIMARY KEY,
+    seen_at timestamptz,
+    lost_since timestamptz,
+    fails integer NOT NULL DEFAULT 0,
+    provider_state text NOT NULL DEFAULT '' CHECK (provider_state IN ('', 'present', 'gone')),
+    provider_checked_at timestamptz,
+    provider_error text NOT NULL DEFAULT ''
+);

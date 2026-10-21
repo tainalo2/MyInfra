@@ -8,7 +8,7 @@ import {
   ChevronLeft,
   ChevronUp,
   History,
-  LayoutDashboard,
+  Globe,
   LayoutGrid,
   LayoutTemplate,
   List,
@@ -253,7 +253,7 @@ export function podHealth(pod: { ready: boolean; phase: string; reason: string }
 }
 
 const nav: NavSpec[] = [
-  { to: "/", label: "nav.overview", icon: LayoutDashboard, end: true },
+  { to: "/", label: "nav.overview", icon: Globe, end: true },
   { to: "/applications", label: "nav.apps", icon: LayoutGrid, match: ["/applications", "/nouveau", "/catalogue"] },
   { to: "/clusters", label: "nav.servers", icon: Network, match: ["/serveurs"] },
   { to: "/templates", label: "nav.templates", icon: LayoutTemplate, match: ["/templates"] },
@@ -653,9 +653,13 @@ export function PageTitle({
   mark?: ReactNode;
   action?: ReactNode;
 }) {
-  // Each page names its tab, so that several tabs can be told apart.
+  // Each page names its tab, so that several tabs can be told apart. A page
+  // without a title, such as the overview, leaves just MyInfra.
   useEffect(() => {
     document.title = title ? `${title} · MyInfra` : "MyInfra";
+    return () => {
+      document.title = "MyInfra";
+    };
   }, [title]);
   return (
     <div className="mb-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 md:mb-12">
@@ -757,6 +761,17 @@ export function HealthDot({ status }: { status?: string }) {
   return <span className={`inline-block size-2.5 shrink-0 rounded-full ${color}`} role="img" aria-label={label.text} title={label.text} />;
 }
 
+// serverState is the status to show for a server: what this copy sees of it
+// before what was recorded.
+export function serverState(server: { status: string; reach?: string }) {
+  return server.reach || server.status;
+}
+
+// liveServer tells whether a server is linked and still answers.
+export function liveServer(server: { status: string; reach?: string }) {
+  return server.status === "linked" && !server.reach;
+}
+
 export function statusLabel(status: string) {
   switch (status) {
     case "linked":
@@ -787,6 +802,11 @@ export function statusLabel(status: string) {
       return { text: text("status.removing"), tone: "text-warn" };
     case "unpublished":
       return { text: text("status.unpublished"), tone: "text-muted" };
+    case "lost":
+    case "unreachable":
+      return { text: text("status.unreachable"), tone: "text-bad" };
+    case "gone":
+      return { text: text("status.gone"), tone: "text-bad" };
     case "":
       // Not delivered yet: the first delivery is on its way.
       return { text: text("status.preparing"), tone: "text-warn" };
