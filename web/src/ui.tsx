@@ -7,38 +7,27 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronUp,
-  Cloud,
-  Container,
-  GitBranch,
-  HardDrive,
-  Globe,
-  ArrowRightLeft,
   History,
-  KeyRound,
   LayoutDashboard,
   LayoutGrid,
   LayoutTemplate,
   List,
-  Lock,
   Moon,
   MoreHorizontal,
   Network,
-  Plug,
   Plus,
-  Rocket,
-  Shield,
   Sun,
-  Trash2,
-  Waypoints,
   type LucideIcon,
   ArrowUpCircle,
-  ListTree,
+  Settings,
 } from "lucide-react";
 import { api, type Deployment, type Destruction } from "./api";
 import { Palette, SearchButton } from "./palette";
 import { BottomTabs } from "./mobilenav";
 import { ToastHost } from "./kit";
 import { UpdatesHost, VersionNote, urgent, useUpdates } from "./updates";
+import { ActivityHost, BusyIndicator, ReplicaBanner, TransferBanner, useActivity } from "./activity";
+import { settingsMatch } from "./navmap";
 import { useTheme } from "./theme";
 
 export const focus =
@@ -266,26 +255,14 @@ export function podHealth(pod: { ready: boolean; phase: string; reason: string }
 const nav: NavSpec[] = [
   { to: "/", label: "nav.overview", icon: LayoutDashboard, end: true },
   { to: "/applications", label: "nav.apps", icon: LayoutGrid, match: ["/applications", "/nouveau", "/catalogue"] },
-  { to: "/clusters", label: "nav.clusters", icon: Network, match: ["/serveurs"] },
-  { to: "/historique", label: "nav.history", icon: History },
+  { to: "/clusters", label: "nav.servers", icon: Network, match: ["/serveurs"] },
   { to: "/templates", label: "nav.templates", icon: LayoutTemplate, match: ["/templates"] },
 ];
 
-const connect: NavSpec[] = [
-  { to: "/providers", label: "nav.providers", icon: Cloud },
-  { to: "/dns", label: "nav.dns", icon: Globe, end: true },
-  { to: "/dns/enregistrements", label: "nav.dnsRecords", icon: ListTree },
-  { to: "/git", label: "nav.git", icon: GitBranch },
-  { to: "/registres", label: "nav.registries", icon: Container },
-  { to: "/images", label: "nav.images", icon: HardDrive },
-];
-
-const ssh: NavSpec = { to: "/cles", label: "nav.ssh", icon: KeyRound };
-const secretsNav: NavSpec = { to: "/secrets", label: "nav.secrets", icon: Shield, match: ["/secrets"] };
-const transfer: NavSpec = { to: "/transfert", label: "nav.transfer", icon: ArrowRightLeft };
-const copies: NavSpec = { to: "/copies", label: "nav.copies", icon: Waypoints };
-const account: NavSpec = { to: "/compte", label: "nav.account", icon: Lock };
+const activityNav: NavSpec = { to: "/historique", label: "nav.activity", icon: History, match: ["/deploiements", "/suppressions", "/destructions"] };
 const updatesNav: NavSpec = { to: "/mises-a-jour", label: "nav.updates", icon: ArrowUpCircle };
+// Settings gathers what is set once and seldom touched again.
+const settingsNav: NavSpec = { to: "/reglages", label: "nav.settings", icon: Settings, match: settingsMatch };
 
 type NavSpec = { to: string; label: MsgKey; icon: LucideIcon; end?: boolean; match?: string[] };
 
@@ -313,6 +290,12 @@ function NavItem({ to, label, icon, end, match, count, hot }: NavSpec & { count?
   );
 }
 
+// ActivityNav shows how many operations run.
+function ActivityNav() {
+  const { activity } = useActivity();
+  return <NavItem {...activityNav} count={activity?.operations.length ?? 0} />;
+}
+
 // UpdatesNav shows how many updates wait, red when one fixes security.
 function UpdatesNav() {
   const { view } = useUpdates();
@@ -320,41 +303,6 @@ function UpdatesNav() {
   return <NavItem {...updatesNav} count={items.length} hot={items.some(urgent)} />;
 }
 
-function ConnectMenu() {
-  useI18n();
-  const location = useLocation();
-  const inside = connect.some((item) => location.pathname === item.to);
-  const [open, setOpen] = useState(inside);
-
-  useEffect(() => {
-    if (inside) setOpen(true);
-  }, [inside]);
-
-  return (
-    <div>
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-label={text("nav.connect")}
-        onClick={() => setOpen((value) => !value)}
-        className={`flex w-full items-center gap-3 rounded-md px-3 py-2 ${focus} ${inside ? "text-ink" : "text-muted"}`}
-      >
-        <Icon icon={Plug} />
-        <span className="hidden flex-1 text-left md:inline" aria-hidden>
-          {text("nav.connect")}
-        </span>
-        <ChevronDown size={16} strokeWidth={1.5} className={`hidden md:inline ${open ? "rotate-180" : ""}`} aria-hidden />
-      </button>
-      {open ? (
-        <div className="mt-1 flex flex-col gap-1 md:pl-4">
-          {connect.map((item) => (
-            <NavItem key={item.to} {...item} />
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 export function Header({ search = false }: { search?: boolean }) {
   const { theme, toggle } = useTheme();
@@ -368,6 +316,7 @@ export function Header({ search = false }: { search?: boolean }) {
           MyInfra
         </Link>
         <div className="flex items-center gap-3">
+          {search ? <BusyIndicator /> : null}
           {search ? <SearchButton /> : null}
           <select
             aria-label={text("header.lang")}
@@ -476,6 +425,7 @@ export function Shell() {
   return (
     <ToastHost>
     <UpdatesHost>
+    <ActivityHost>
     <TrailContext.Provider value={{ override, setOverride }}>
     <DestructionJobs.Provider value={jobs}>
     <OpenDeployments.Provider value={deploys}>
@@ -487,16 +437,10 @@ export function Shell() {
             {nav.map((item) => (
               <NavItem key={item.to} {...item} />
             ))}
-            {deploys.length > 0 ? <NavItem to="/deploiements" label="nav.deployments" icon={Rocket} match={["/deploiements"]} /> : null}
-            {jobs.length > 0 ? <NavItem to="/suppressions" label="nav.destructions" icon={Trash2} match={["/suppressions", "/destructions"]} /> : null}
-            <ConnectMenu />
-            <NavItem {...ssh} />
-            <NavItem {...secretsNav} />
+            <ActivityNav />
+            <UpdatesNav />
             <div className="mt-auto flex flex-col gap-1 border-t border-line pt-4">
-              <UpdatesNav />
-              <NavItem {...transfer} />
-              <NavItem {...copies} />
-              <NavItem {...account} />
+              <NavItem {...settingsNav} />
             </div>
           </nav>
           <div className="hidden shrink-0 flex-col gap-1 px-4 pb-4 md:flex">
@@ -513,6 +457,8 @@ export function Shell() {
         ) : (
           <main className="min-w-0 flex-1 overflow-y-auto px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-4 md:px-6 md:py-12">
             <div className="mx-auto w-full max-w-[960px]">
+              <TransferBanner />
+              <ReplicaBanner />
               <Breadcrumb />
               <Suspense fallback={<LoadingLines lines={4} />}>
                 <Outlet />
@@ -527,6 +473,7 @@ export function Shell() {
     </OpenDeployments.Provider>
     </DestructionJobs.Provider>
     </TrailContext.Provider>
+    </ActivityHost>
     </UpdatesHost>
     </ToastHost>
   );
@@ -669,7 +616,7 @@ function crumbsFor(pathname: string, names: Record<string, string>): Crumb[] {
   const secret = path.match(/^\/secrets\/([^/]+)$/);
   if (secret) {
     const id = decodeURIComponent(secret[1]);
-    return current([{ label: text("crumb.secrets"), to: "/secrets" }, { label: names[`secret:${id}`] || text("crumb.secret") }]);
+    return current([{ label: text("nav.settings"), to: "/reglages" }, { label: text("crumb.secrets"), to: "/secrets" }, { label: names[`secret:${id}`] || text("crumb.secret") }]);
   }
   const fixed: Record<string, MsgKey> = {
     "/cles": "nav.ssh",
@@ -681,10 +628,13 @@ function crumbsFor(pathname: string, names: Record<string, string>): Crumb[] {
     "/images": "nav.images",
     "/compte": "nav.account",
     "/transfert": "nav.transfer",
-    "/transfert/suivi": "crumb.transferFollow",
     "/copies": "nav.copies",
+    "/dns/enregistrements": "nav.dnsRecords",
   };
-  if (fixed[path]) return [{ label: text(fixed[path]) }];
+  const settings: Crumb = { label: text("nav.settings"), to: "/reglages" };
+  if (path === "/transfert/suivi") return [settings, { label: text("nav.transfer"), to: "/transfert" }, { label: text("crumb.transferFollow") }];
+  if (path === "/historique") return [{ label: text("nav.activity") }];
+  if (fixed[path]) return [settings, { label: text(fixed[path]) }];
   return [];
 }
 
@@ -757,13 +707,15 @@ export function ListActions({
   label: string;
   onCreate: () => void;
 }) {
+  // Nothing is created while MyInfra moves: it would stay behind.
+  const { transferring } = useActivity();
   return (
     <div className="flex items-center gap-4">
       {/* On a phone both modes show one column: the switch would change nothing. */}
       <span className="hidden md:inline-flex">
         <ListModeButton mode={mode} onToggle={onToggle} />
       </span>
-      <Button type="button" onClick={onCreate}>
+      <Button type="button" onClick={onCreate} disabled={transferring} title={transferring ? text("activity.transferBanner") : undefined}>
         <Icon icon={Plus} />
         {label}
       </Button>
@@ -772,10 +724,11 @@ export function ListActions({
 }
 
 export function EmptyList({ message, label, onCreate }: { message: string; label: string; onCreate: () => void }) {
+  const { transferring } = useActivity();
   return (
     <div className="flex flex-col items-start gap-6">
       <p className="text-muted">{message}</p>
-      <Button type="button" onClick={onCreate}>
+      <Button type="button" onClick={onCreate} disabled={transferring} title={transferring ? text("activity.transferBanner") : undefined}>
         <Icon icon={Plus} />
         {label}
       </Button>

@@ -223,7 +223,7 @@ func (a *API) deleteSelf(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		_ = a.Store.DeletePeer(r.Context(), role.MainURL)
-		if err := a.Store.SetCopyRole(r.Context(), store.CopyRole{}); err == nil {
+		if err := a.Store.SetCopyRole(r.Context(), store.CopyRole{Epoch: role.Epoch + 1}); err == nil {
 			a.note(r.Context(), owner, newID(), "myinfra.removed", "warn", "MyInfra a été retiré du cluster : cette copie pilote de nouveau les machines.", "", app.ClusterID)
 			writeJSON(w, http.StatusAccepted, map[string]string{"status": "stopping", "restart": "true"})
 			go func() {

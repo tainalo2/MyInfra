@@ -1,3 +1,4 @@
+import { RunningList } from "./activity";
 import { useEffect, useState } from "react";
 import { Earth, History } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -9,7 +10,9 @@ export function HistoryPage() {
   const [params] = useSearchParams();
   return (
     <>
-      <PageTitle title={text("nav.history")} icon={History} />
+      <PageTitle title={text("nav.activity")} icon={History} />
+      <RunningList />
+      <h2 className="mb-3 text-lg">{text("activity.history")}</h2>
       <EventList server={params.get("server") ?? ""} cluster={params.get("cluster") ?? ""} />
     </>
   );

@@ -116,6 +116,9 @@ func (a *API) createServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
 		return
 	}
+	if a.refuseBusyTarget(w, r, "", body.ClusterID) {
+		return
+	}
 	name, ok := cleanName(body.Name)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "Donnez un nom à la machine.")
@@ -397,12 +400,41 @@ func (a *API) deleteCluster(w http.ResponseWriter, r *http.Request) {
 		a.mapErr(w, err)
 		return
 	}
+	// A cluster that holds MyInfra asks for the phrase, whichever copy asks:
+	// the one in the cluster, or a copy that follows it.
 	expected := cluster.Name
-	if inst, instErr := a.Store.Installation(r.Context()); instErr == nil && inst.Method == "pod" && inst.ClusterID == cluster.ID {
+	if app, ok := a.selfRecord(r.Context()); ok && app.ClusterID == cluster.ID {
 		expected = selfDestroyPhrase
 	}
 	if !confirmedName(w, r, expected) {
 		return
+	}
+	// From a copy that follows the MyInfra of this cluster, that copy would
+	// destroy the servers it runs on and stop half way. This copy takes over
+	// instead: it leaves the sync, drives again, and runs the destruction.
+	takeOver := false
+	selfName := store.Name{}
+	// After this copy took the lead back, the copy of the cluster still
+	// follows it: its peer and its name go the same way.
+	if role, err := a.Store.CopyRole(r.Context()); err == nil && role.MainMethod == "pod" && role.MainClusterID == cluster.ID {
+		// That copy writes its name again until its servers are gone: the
+		// name is removed once more after them.
+		if zone := zoneOfURL(role.MainURL); zone != "" {
+			if account, err := a.accountForZone(r.Context(), owner, zone); err == nil {
+				selfName = store.Name{Hostname: hostOfURL(role.MainURL), Zone: zone, SecretID: account}
+			}
+		}
+		_ = a.Store.DeletePeer(r.Context(), role.MainURL)
+		if zone := zoneOfURL(role.MainURL); zone != "" {
+			if sec, creds, err := a.dnsAccountOf(r.Context(), owner, zone); err == nil {
+				_ = a.dnsClient().DropAddress(r.Context(), sec.Provider, creds, zone, hostOfURL(role.MainURL))
+			}
+		}
+		if err := a.Store.SetCopyRole(r.Context(), store.CopyRole{Epoch: role.Epoch + 1}); err != nil {
+			a.mapErr(w, err)
+			return
+		}
+		takeOver = role.Replica
 	}
 	rows, err := a.Store.ListServers(r.Context(), owner)
 	if err != nil {
@@ -419,6 +451,29 @@ func (a *API) deleteCluster(w http.ResponseWriter, r *http.Request) {
 		if row.ClusterID == cluster.ID {
 			members = append(members, row)
 		}
+	}
+	if selfName.Hostname != "" {
+		names = append(names, selfName)
+	}
+	if takeOver {
+		row, err := a.startDestruction(r.Context(), owner, "cluster", cluster.ID, cluster.Name, clusterSteps(members, names, cluster.ID))
+		if err != nil {
+			a.mapErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusAccepted, destructionViewOf(row))
+		// Started again as the copy that drives, it resumes the destruction.
+		go func() {
+			time.Sleep(3 * time.Second)
+			if a.Restart != nil {
+				a.Restart()
+			} else if a.Shutdown != nil {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				_ = a.Shutdown(ctx)
+			}
+		}()
+		return
 	}
 	a.respondDestruction(w, r, owner, "cluster", cluster.ID, cluster.Name, clusterSteps(members, names, cluster.ID))
 }
@@ -558,6 +613,9 @@ func (a *API) createApplication(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
+		return
+	}
+	if a.refuseBusyTarget(w, r, body.ServerID, body.ClusterID) {
 		return
 	}
 	name, ok := cleanName(body.Name)

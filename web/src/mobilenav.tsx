@@ -1,28 +1,16 @@
 import { useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
-  ArrowRightLeft,
   ArrowUpCircle,
-  Cloud,
-  Container,
-  GitBranch,
-  HardDrive,
-  Globe,
   History,
   House,
-  KeyRound,
   LayoutGrid,
   LayoutTemplate,
-  ListTree,
-  Lock,
   Menu,
   Moon,
   Network,
-  Rocket,
-  Shield,
+  Settings,
   Sun,
-  Trash2,
-  Waypoints,
   type LucideIcon,
 } from "lucide-react";
 import { langNames, langs, text, type MsgKey } from "./i18n";
@@ -30,6 +18,7 @@ import { Sheet } from "./kit";
 import { useI18n } from "./lang";
 import { useTheme } from "./theme";
 import { Icon, focus } from "./ui";
+import { settingsMatch } from "./navmap";
 import { urgent, useUpdates } from "./updates";
 
 type Tab = { to: string; label: MsgKey; icon: LucideIcon; end?: boolean; match?: string[] };
@@ -43,18 +32,8 @@ const tabs: Tab[] = [
 
 const more: Tab[] = [
   { to: "/templates", label: "nav.templates", icon: LayoutTemplate },
-  { to: "/providers", label: "nav.providers", icon: Cloud },
-  { to: "/dns", label: "nav.dns", icon: Globe },
-  { to: "/dns/enregistrements", label: "nav.dnsRecords", icon: ListTree },
-  { to: "/git", label: "nav.git", icon: GitBranch },
-  { to: "/registres", label: "nav.registries", icon: Container },
-  { to: "/images", label: "nav.images", icon: HardDrive },
-  { to: "/cles", label: "nav.ssh", icon: KeyRound },
-  { to: "/secrets", label: "nav.secrets", icon: Shield },
   { to: "/mises-a-jour", label: "nav.updates", icon: ArrowUpCircle },
-  { to: "/transfert", label: "nav.transfer", icon: ArrowRightLeft },
-  { to: "/copies", label: "nav.copies", icon: Waypoints },
-  { to: "/compte", label: "nav.account", icon: Lock },
+  { to: "/reglages", label: "nav.settings", icon: Settings, match: settingsMatch },
 ];
 
 // BottomTabs is the navigation of a phone: the four places used most, within
@@ -67,7 +46,7 @@ export function BottomTabs({ deployments, removals }: { deployments: number; rem
   const { view } = useUpdates();
   const updates = view?.updates.length ?? 0;
   const hot = view?.updates.some(urgent) ?? false;
-  const inMore = more.some((item) => location.pathname.startsWith(item.to));
+  const inMore = more.some((item) => location.pathname.startsWith(item.to) || (item.match?.some((prefix) => location.pathname.startsWith(prefix)) ?? false));
   return (
     <>
       <nav
@@ -108,23 +87,19 @@ export function BottomTabs({ deployments, removals }: { deployments: number; rem
           {text("nav.more")}
         </button>
       </nav>
-      {open ? <MoreSheet deployments={deployments} removals={removals} onClose={() => setOpen(false)} /> : null}
+      {open ? <MoreSheet onClose={() => setOpen(false)} /> : null}
     </>
   );
 }
 
-function MoreSheet({ deployments, removals, onClose }: { deployments: number; removals: number; onClose: () => void }) {
+function MoreSheet({ onClose }: { onClose: () => void }) {
   const { lang, setLang } = useI18n();
   const { theme, toggle } = useTheme();
   const navigate = useNavigate();
   const { view } = useUpdates();
   const updates = view?.updates.length ?? 0;
   const hot = view?.updates.some(urgent) ?? false;
-  const items: Tab[] = [
-    ...(deployments > 0 ? [{ to: "/deploiements", label: "nav.deployments" as MsgKey, icon: Rocket }] : []),
-    ...(removals > 0 ? [{ to: "/suppressions", label: "nav.destructions" as MsgKey, icon: Trash2 }] : []),
-    ...more,
-  ];
+  const items: Tab[] = more;
   return (
     <Sheet title={text("nav.more")} onClose={onClose}>
       <ul className="-mx-2 flex flex-col">

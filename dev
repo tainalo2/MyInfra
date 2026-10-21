@@ -229,14 +229,12 @@ esac
 
 ensure_postgres
 
-# Réplique par défaut seulement quand une copie principale la synchronise :
-# seule, une réplique enregistre des demandes que personne n'exécute.
-if [ -z "${MYINFRA_REPLICA:-}" ]; then
-  if [ -n "${MYINFRA_PEERS:-}" ]; then
-    MYINFRA_REPLICA=1
-  else
-    MYINFRA_REPLICA=0
-  fi
+# Réplique quand une copie principale la synchronise. Sans MYINFRA_PEERS,
+# rien n'est forcé : une copie gardée par un transfert reste une réplique,
+# comme sa base l'indique, au lieu de piloter les machines en même temps
+# que la nouvelle copie.
+if [ -z "${MYINFRA_REPLICA:-}" ] && [ -n "${MYINFRA_PEERS:-}" ]; then
+  MYINFRA_REPLICA=1
   export MYINFRA_REPLICA
 fi
 
@@ -275,11 +273,11 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-if [ "$MYINFRA_REPLICA" = "1" ]; then
-  echo "Réplique : cette copie ne déploie pas les machines."
-else
-  echo "Cette copie déploie les machines."
-fi
+case "${MYINFRA_REPLICA:-}" in
+  1) echo "Réplique : cette copie ne déploie pas les machines." ;;
+  0) echo "Cette copie déploie les machines." ;;
+  *) echo "Rôle de cette copie : celui que sa base indique (voir Copies)." ;;
+esac
 if [ -n "${MYINFRA_PEERS:-}" ]; then
   echo "Synchronisation : $MYINFRA_PEERS"
 fi

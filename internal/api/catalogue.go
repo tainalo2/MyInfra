@@ -45,6 +45,9 @@ func (a *API) installCatalogue(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
 		return
 	}
+	if a.refuseBusyTarget(w, r, body.ServerID, body.ClusterID) {
+		return
+	}
 	name, ok := cleanName(body.Name)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "Donnez un nom à l'application.")

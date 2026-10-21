@@ -368,3 +368,7 @@ CREATE TABLE IF NOT EXISTS copy_role (
     main_cluster_id text NOT NULL DEFAULT '',
     main_url text NOT NULL DEFAULT ''
 );
+
+-- The term of the copy that drives: each time a copy takes the lead its term
+-- goes up, and a copy that finds a later term elsewhere stops driving.
+ALTER TABLE copy_role ADD COLUMN IF NOT EXISTS epoch bigint NOT NULL DEFAULT 0;

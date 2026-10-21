@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -21,7 +22,7 @@ func TestWaitHealthTellsAMissingCertificate(t *testing.T) {
 	var states []string
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	err := waitHealth(ctx, srv.URL, func(state string) {
+	err := waitHealth(ctx, srv.URL, nil, func(state string) {
 		mu.Lock()
 		states = append(states, state)
 		mu.Unlock()
@@ -61,5 +62,57 @@ func TestPeersForNewCopy(t *testing.T) {
 		if got := a.peersForNewCopy(); len(got) != c.want {
 			t.Errorf("%s keep=%v : %v", c.url, c.keep, got)
 		}
+	}
+}
+
+func TestPodProgress(t *testing.T) {
+	raw := `{"items":[
+	 {"metadata":{"name":"database-1","labels":{"cnpg.io/cluster":"database"}},"status":{"phase":"Running","conditions":[{"type":"Ready","status":"True"}]}},
+	 {"metadata":{"name":"database-2","labels":{"cnpg.io/cluster":"database"}},"status":{"phase":"Pending","conditions":[{"type":"PodScheduled","status":"False","message":"0/1 nodes are available"}]}},
+	 {"metadata":{"name":"myinfra-abc","labels":{}},"status":{"phase":"Pending","initContainerStatuses":[{"name":"database","state":{"running":{}}}]}},
+	 {"metadata":{"name":"myinfra-def","labels":{}},"status":{"phase":"Pending","containerStatuses":[{"name":"myinfra","state":{"waiting":{"reason":"ImagePullBackOff","message":"not found"}}}]}}
+	]}`
+	got := map[string]podState{}
+	for _, pod := range podProgress(raw) {
+		got[pod.Name] = pod
+	}
+	want := map[string][2]string{
+		"database-1":  {"ready", "ok"},
+		"myinfra-abc": {"database", "wait"},
+		"myinfra-def": {"ImagePullBackOff (not found)", "bad"},
+	}
+	for name, w := range want {
+		if got[name].State != w[0] || got[name].Tone != w[1] {
+			t.Fatalf("%s : %+v", name, got[name])
+		}
+	}
+	if !strings.HasPrefix(got["database-2"].State, "unschedulable") || got["database-2"].Role != "database" {
+		t.Fatalf("%+v", got["database-2"])
+	}
+	if pods := podProgress(`{"items":[]}`); pods == nil || len(pods) != 0 {
+		t.Fatal(pods)
+	}
+}
+
+// The copy is reached at its cluster's addresses, whatever the machine's
+// resolver answers for its name.
+func TestCopyClientDialsTheClusterAddresses(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Host != "" && !strings.HasPrefix(r.Host, "myinfra.invalid") {
+			t.Errorf("host %q", r.Host)
+		}
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+	_, port, _ := net.SplitHostPort(strings.TrimPrefix(srv.URL, "https://"))
+	base := "https://myinfra.invalid:" + port
+	client := copyClient(base, []string{"127.0.0.1"}, true, 5*time.Second)
+	res, err := client.Get(base + "/api/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatal(res.StatusCode)
 	}
 }

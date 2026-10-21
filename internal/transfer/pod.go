@@ -158,8 +158,8 @@ spec:
       # MyInfra starts once its database answers, instead of failing until then.
       initContainers:
         - name: database
-          image: rancher/mirrored-library-busybox:1.37.0
-          command: [sh, -c, "until nc -z -w 2 %[6]s-rw 5432; do sleep 2; done"]
+          image: postgres:17-alpine
+          command: [sh, -c, "until pg_isready -q -h %[6]s-rw -p 5432; do sleep 2; done"]
       containers:
         - name: myinfra
           image: %[9]s

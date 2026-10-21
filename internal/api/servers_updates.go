@@ -309,12 +309,13 @@ func (a *API) jobView(ctx context.Context, job store.UpdateJob) updateJobView {
 	if view.Steps == nil {
 		view.Steps = []updateStep{}
 	}
-	if job.ClusterID != "" {
-		if cluster, err := a.Store.Cluster(ctx, job.OwnerID, job.ClusterID); err == nil {
-			view.Name = cluster.Name
+	// A job of one server is named after it, a job of a cluster after the cluster.
+	if job.ServerID != "" {
+		if server, err := a.Store.Server(ctx, job.OwnerID, job.ServerID); err == nil {
+			view.Name = server.Name
 		}
-	} else if server, err := a.Store.Server(ctx, job.OwnerID, job.ServerID); err == nil {
-		view.Name = server.Name
+	} else if cluster, err := a.Store.Cluster(ctx, job.OwnerID, job.ClusterID); err == nil {
+		view.Name = cluster.Name
 	}
 	return view
 }

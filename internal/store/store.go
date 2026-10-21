@@ -1784,3 +1784,22 @@ func (s *Store) OwnedNames(ctx context.Context, owner string) ([]OwnedName, erro
 	}
 	return out, rows.Err()
 }
+
+// HoldNames stops publishing the names of what is being removed: an
+// application, the applications of a server or of a cluster. Without it, the
+// names a destruction removes are written again until the applications go.
+func (s *Store) HoldNames(ctx context.Context, owner, kind, target string) error {
+	var where string
+	switch kind {
+	case "application":
+		where = `application_id = $2 AND application_id IN (SELECT id FROM applications WHERE owner_id = $1)`
+	case "server":
+		where = `application_id IN (SELECT id FROM applications WHERE owner_id = $1 AND server_id = $2)`
+	case "cluster":
+		where = `application_id IN (SELECT id FROM applications WHERE owner_id = $1 AND cluster_id = $2)`
+	default:
+		return nil
+	}
+	_, err := s.pool.Exec(ctx, `UPDATE domains SET status = 'unpublished' WHERE kind = 'custom' AND `+where, owner, target)
+	return err
+}

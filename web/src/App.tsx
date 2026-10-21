@@ -34,6 +34,7 @@ const TransferFollow = page(() => import("./transfer"), "TransferFollow");
 const Copies = page(() => import("./copies"), "Copies");
 const UpdatesPage = page(() => import("./updates"), "UpdatesPage");
 const DnsRecords = page(() => import("./dnsrecords"), "DnsRecords");
+const SettingsPage = page(() => import("./settings"), "SettingsPage");
 const Templates = page(() => import("./templates"), "Templates");
 const TemplateEditor = page(() => import("./templates"), "TemplateEditor");
 const TemplateLaunch = page(() => import("./templates"), "TemplateLaunch");
@@ -239,7 +240,7 @@ export function App() {
         <Route path="/transfert/suivi" element={<TransferFollow />} />
         <Route path="/copies" element={<Copies />} />
         <Route path="/mises-a-jour" element={<UpdatesPage />} />
-        <Route path="/reglages" element={<Navigate to="/cles" replace />} />
+        <Route path="/reglages" element={<SettingsPage />} />
       </Route>
     </Routes>
     </Suspense>

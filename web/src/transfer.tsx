@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRightLeft } from "lucide-react";
-import { api, type Catalog, type Cluster, type DnsZone, type Project, type Secret } from "./api";
+import { ArrowRightLeft, CheckCircle2, PowerOff, XCircle } from "lucide-react";
+import { ApiError, api, type Catalog, type Cluster, type DnsZone, type Project, type Secret } from "./api";
 import { CancelDeployment } from "./deployments";
-import { knownMessage, text } from "./i18n";
+import { knownMessage, text, type MsgKey } from "./i18n";
+import { useActivity } from "./activity";
+import { useI18n } from "./lang";
 import { OfferFields, OfferStorage, cheapestOffer, chosenStorage, formatPrice } from "./offers";
 import { ProviderSelect } from "./provider-select";
 import { Spinner } from "./kit";
@@ -19,6 +21,8 @@ type Preview = {
   catalog: Catalog;
 };
 
+type PodState = { role: "myinfra" | "database"; name: string; state: string; tone: "ok" | "wait" | "bad" };
+
 type Transfer = {
   status: string;
   step?: string;
@@ -27,6 +31,12 @@ type Transfer = {
   error?: string;
   // What the waiting step waits for: the new copy, or its HTTPS certificate.
   wait?: "starting" | "certificate" | "dns";
+  phase?: string;
+  pods?: PodState[];
+  startedAt?: string;
+  stepAt?: string;
+  checkedAt?: string;
+  now?: string;
   // Why the waiting lasts: the reason Let's Encrypt gave, or a name put back.
   note?: string;
   keep?: boolean;
@@ -58,6 +68,9 @@ export function Transfer() {
   const [subdomain, setSubdomain] = useState("myinfra");
   // This copy stays, synced with the new one, and stops driving the machines.
   const [keep, setKeep] = useState(true);
+  // A transfer cut short left its namespace in the cluster: it can be removed.
+  const [leftover, setLeftover] = useState(false);
+  const [cleaning, setCleaning] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
 
@@ -190,7 +203,21 @@ export function Transfer() {
       navigate("/transfert/suivi");
     } catch (err) {
       setError(err instanceof Error ? err.message : text("common.error"));
+      setLeftover(err instanceof ApiError && err.code === "transfer_already");
       setStarting(false);
+    }
+  }
+
+  async function clean() {
+    setCleaning(true);
+    try {
+      await api(`/api/clusters/${clusterId}/transfer/clean`, { method: "POST" });
+      setLeftover(false);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : text("common.error"));
+    } finally {
+      setCleaning(false);
     }
   }
 
@@ -202,8 +229,17 @@ export function Transfer() {
     <>
       <PageTitle title={text("transfer.title")} icon={ArrowRightLeft} />
       {error ? (
-        <div className="mb-8">
+        <div className="mb-8 flex flex-col gap-3">
           <ErrorText>{error}</ErrorText>
+          {leftover ? (
+            <div className="flex flex-wrap items-center gap-4">
+              <Button type="button" variant="secondary" onClick={() => void clean()} disabled={cleaning}>
+                {cleaning ? <Spinner /> : null}
+                {text("transfer.clean")}
+              </Button>
+              <span className="text-[13px] text-muted">{text("transfer.cleanHint")}</span>
+            </div>
+          ) : null}
         </div>
       ) : null}
       {!loaded ? (
@@ -398,10 +434,20 @@ export function Transfer() {
 }
 
 export function TransferFollow() {
+  useI18n();
   const { data, error } = usePoll<Transfer>("/api/transfer", 2000, {
     stopWhen: (next) => ["done", "failed", "cancelled", "idle"].includes(next.status),
   });
+  const { activity } = useActivity();
   const transfer = data ?? { status: "idle" };
+  // The clock of the server measures the steps: this screen's own may differ.
+  const skew = transfer.now ? Date.now() - Date.parse(transfer.now) : 0;
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => tick((value) => value + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const since = (at?: string) => (at ? Math.max(0, Date.now() - skew - Date.parse(at)) : 0);
 
   const steps = transfer.method === "pod"
     ? [text("ui.preparationDuPod"), text("ui.demarrageDuPod"), text("ui.copieDesDonnees"), text("ui.arretDeCetteCopie")]
@@ -409,6 +455,8 @@ export function TransferFollow() {
   const order = ["creating", "waiting", "copying", "destroying", "done"];
   // The server names the step it failed at; each name belongs to one row.
   const index = transfer.status === "failed" ? failedStep(transfer.step || "") : order.indexOf(transfer.status);
+  const running = ["creating", "waiting", "copying", "destroying"].includes(transfer.status);
+  const quiet = since(transfer.checkedAt);
 
   return (
     <>
@@ -423,25 +471,56 @@ export function TransferFollow() {
       ) : transfer.status === "cancelled" ? (
         <p className="text-muted">{text("deploy.cancelled")}</p>
       ) : (
-        <ol className="flex max-w-[720px] flex-col gap-4">
-          {steps.map((label, step) => {
-            const state = transfer.status === "failed" && step === index ? text("status.failed") : step < index || transfer.status === "done" ? text("status.done") : step === index ? text("ui.enCours") : text("status.pending");
-            return (
-              <li key={label} className="flex items-baseline justify-between gap-4 border-b border-line py-3">
-                <span>
-                  {label}
-                  {transfer.status === "waiting" && step === index && transfer.wait ? (
-                    <span className="mt-1 block text-[13px] text-muted">
-                      {transfer.wait === "dns" ? text("transfer.waitDns") : transfer.wait === "certificate" ? text("transfer.waitCertificate") : text("transfer.waitStarting")}
-                      {transfer.note ? <span className="mt-1 block text-warn">{transfer.note}</span> : null}
-                    </span>
-                  ) : null}
+        <div className="flex max-w-[720px] flex-col gap-6">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            {running ? (
+              quiet < 45_000 ? (
+                <span className="inline-flex items-center gap-2 text-ok">
+                  <span className="relative inline-flex size-2.5">
+                    <span className="absolute inline-flex size-full animate-ping rounded-full bg-ok opacity-60" aria-hidden />
+                    <span className="relative inline-flex size-2.5 rounded-full bg-ok" aria-hidden />
+                  </span>
+                  {text("transfer.alive", { seconds: Math.round(quiet / 1000) })}
                 </span>
-                <span className="text-muted">{state}</span>
-              </li>
-            );
-          })}
-        </ol>
+              ) : (
+                <span className="inline-flex items-center gap-2 text-warn">
+                  <span className="inline-block size-2.5 rounded-full bg-warn" aria-hidden />
+                  {text("transfer.quiet", { duration: duration(quiet) })}
+                </span>
+              )
+            ) : transfer.status === "done" ? (
+              <span className="text-ok">{text("transfer.finished")}</span>
+            ) : null}
+            {transfer.startedAt ? <span className="text-muted">{text("transfer.elapsed", { duration: duration(since(transfer.startedAt)) })}</span> : null}
+          </div>
+          {running && activity?.local ? (
+            <p className="flex items-start gap-3 rounded-md border border-bad px-4 py-3">
+              <Icon icon={PowerOff} className="mt-0.5 shrink-0 text-bad" />
+              <span>{text("activity.keepOnText")}</span>
+            </p>
+          ) : null}
+          <ol className="flex flex-col">
+            {steps.map((label, step) => {
+              const state = transfer.status === "failed" && step === index ? "failed" : step < index || transfer.status === "done" ? "done" : step === index ? "running" : "pending";
+              return (
+                <li key={label} className="flex gap-4">
+                  <span className="flex flex-col items-center">
+                    <StepMark state={state} />
+                    {step < steps.length - 1 ? <span className={`min-h-6 w-px flex-1 ${state === "done" ? "bg-ok" : "bg-line"}`} /> : null}
+                  </span>
+                  <div className="min-w-0 flex-1 pb-6">
+                    <p className="flex flex-wrap items-baseline justify-between gap-x-4">
+                      <span className={state === "pending" ? "text-faint" : state === "failed" ? "text-bad" : ""}>{label}</span>
+                      {state === "running" && transfer.stepAt ? <span className="text-[13px] text-muted">{duration(since(transfer.stepAt))}</span> : null}
+                    </p>
+                    {state === "running" ? <StepDetail transfer={transfer} /> : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+          {running ? <p className="text-[13px] text-faint">{text("transfer.expected")}</p> : null}
+        </div>
       )}
       <CancelDeployment kind="transfer" id="transfer" active={transfer.status === "creating" || transfer.status === "waiting" || transfer.status === "copying"} />
       {transfer.error ? (
@@ -460,6 +539,66 @@ export function TransferFollow() {
       ) : null}
     </>
   );
+}
+
+function duration(ms: number) {
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  if (minutes === 0) return text("transfer.seconds", { seconds });
+  return text("transfer.minutes", { minutes, seconds: String(seconds % 60).padStart(2, "0") });
+}
+
+function StepMark({ state }: { state: "done" | "running" | "failed" | "pending" }) {
+  if (state === "done") return <Icon icon={CheckCircle2} className="text-ok" />;
+  if (state === "failed") return <Icon icon={XCircle} className="text-bad" />;
+  if (state === "running") return <Spinner />;
+  return <span className="mt-1.5 inline-block size-3 rounded-full border border-line" aria-hidden />;
+}
+
+const podTone: Record<PodState["tone"], string> = { ok: "bg-ok", wait: "animate-pulse bg-warn", bad: "bg-bad" };
+
+// StepDetail says what the running step does: its phase, what it waits
+// for, and where each pod of the new copy is.
+function StepDetail({ transfer }: { transfer: Transfer }) {
+  const phase = transfer.phase ? text(`transfer.phase.${transfer.phase}` as MsgKey) : "";
+  const wait =
+    transfer.status === "waiting" && transfer.wait
+      ? transfer.wait === "dns"
+        ? text("transfer.waitDns")
+        : transfer.wait === "certificate"
+          ? text("transfer.waitCertificate")
+          : text("transfer.waitStarting")
+      : "";
+  const pods = transfer.pods ?? [];
+  const allReady = pods.length > 0 && pods.every((pod) => pod.tone === "ok");
+  return (
+    <div className="mt-2 flex flex-col gap-2 text-[13px]">
+      {phase && !(transfer.status === "waiting" && transfer.phase === "pods") ? <p className="text-muted">{phase}</p> : null}
+      {wait ? <p className="text-muted">{allReady && transfer.wait === "starting" ? text("transfer.podsReadyWaiting") : wait}</p> : null}
+      {pods.length > 0 ? (
+        <ul className="flex flex-col gap-1">
+          {pods.map((pod) => (
+            <li key={pod.name} className="flex items-baseline gap-2">
+              <span className={`inline-block size-2 shrink-0 rounded-full ${podTone[pod.tone]}`} aria-hidden />
+              <span className="min-w-0">
+                <span className="text-muted">{text(pod.role === "database" ? "transfer.role.database" : "transfer.role.myinfra")}</span>{" "}
+                <span className="font-mono">{pod.name}</span>
+                {" · "}
+                <span className={pod.tone === "bad" ? "text-bad" : pod.tone === "ok" ? "text-ok" : ""}>{podStateLabel(pod.state)}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {transfer.note ? <p className="text-warn">{transfer.note}</p> : null}
+    </div>
+  );
+}
+
+function podStateLabel(state: string) {
+  if (state === "ready" || state === "starting" || state === "database") return text(`transfer.pod.${state}` as MsgKey);
+  if (state.startsWith("unschedulable: ")) return text("transfer.pod.unschedulable", { detail: state.slice("unschedulable: ".length) });
+  return state;
 }
 
 function failedStep(step: string) {

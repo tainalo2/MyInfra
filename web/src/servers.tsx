@@ -42,6 +42,7 @@ import { RemovalNotice } from "./destructions";
 import { PodActions } from "./pods";
 import { ToolInstall } from "./tools";
 import { ServerFacts, ServerUpdateNotice, UpdateBadge, UpdateJobs, useUpdate } from "./updates";
+import { UpdateLock, useActivity } from "./activity";
 
 export function ServerForm({ clusterId }: { clusterId: string }) {
   const navigate = useNavigate();
@@ -568,6 +569,7 @@ export function ServerPage() {
   const [copied, setCopied] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const serverPoll = usePoll<Server>(id ? `/api/servers/${id}` : null, 10000);
+  const { updating, transferring } = useActivity();
   const server = serverPoll.data;
   const setServer = serverPoll.setData;
   const linked = server?.status === "linked";
@@ -613,6 +615,7 @@ export function ServerPage() {
   if (!server && !serverPoll.error) return <LoadingLines lines={4} />;
   if (!server) return <ErrorText>{serverPoll.error}</ErrorText>;
   const failed = server.status === "failed";
+  const locked = updating(server.id, server.clusterId) || transferring;
   const facts: [string, ReactNode][] = [
     [text("server.status"), <StatusBadge status={server.status} />],
     [text("server.provider"), (
@@ -668,20 +671,21 @@ export function ServerPage() {
           </Link>
         ) : null}
         {failed ? (
-          <Button type="button" onClick={() => void retry()} disabled={retrying}>
+          <Button type="button" onClick={() => void retry()} disabled={retrying || locked}>
             {retrying ? <Spinner /> : <Icon icon={RotateCcw} />}
             {text("ui.relancerLeDeploiement")}
           </Button>
         ) : null}
         <CancelDeployment kind="server" id={server.id} active={deploying} />
         <ActionsMenu label={text("apps.more")}>
-          {!failed ? <MenuItem onClick={() => void retry()}>{text("ui.relancerLeDeploiement")}</MenuItem> : null}
+          {!failed && !locked ? <MenuItem onClick={() => void retry()}>{text("ui.relancerLeDeploiement")}</MenuItem> : null}
           <MenuItem tone="danger" onClick={() => setConfirm(true)}>
             {text("common.delete")}
           </MenuItem>
         </ActionsMenu>
       </div>
       <div className="max-w-[720px]">
+        <UpdateLock locked={locked && !transferring} />
         <ServerUpdateNotice server={server} onStarted={() => void serverPoll.reload()} />
       </div>
       <div className="mt-6 max-w-[720px]">

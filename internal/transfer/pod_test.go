@@ -13,7 +13,7 @@ func TestPodManifest(t *testing.T) {
 	}
 	for _, want := range []string{
 		"name: myinfra", "ghcr.io/acme/myinfra:1.2.3", "bWFzdGVy", "boot-token",
-		"kind: Cluster", "instances: 2", "podAntiAffinityType: required", "name: database-app", "key: uri", "nc -z -w 2 database-rw 5432",
+		"kind: Cluster", "instances: 2", "podAntiAffinityType: required", "name: database-app", "key: uri", "pg_isready -q -h database-rw -p 5432",
 		"https://myinfra.exemple.fr", "Host(`myinfra.exemple.fr`)", "certResolver: exemple-fr",
 		"node-role.kubernetes.io/control-plane", "DoesNotExist", "imagePullPolicy: Always",
 		"replicas: 2", "podAntiAffinity", "topologySpreadConstraints", "kind: PodDisruptionBudget", "minAvailable: 1",

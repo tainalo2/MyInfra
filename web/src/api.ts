@@ -1,6 +1,13 @@
 import { currentLang, text, textError } from "./i18n";
 
-export class ApiError extends Error {}
+export class ApiError extends Error {
+  // code is the server's name for the error, when it gives one.
+  code?: string;
+  constructor(message: string, code?: string) {
+    super(message);
+    this.code = code;
+  }
+}
 
 const authPaths = ["/api/setup", "/api/session", "/api/password"];
 
@@ -63,7 +70,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       }
       location.assign("/entree");
     }
-    throw new ApiError(textError(body.code, body.params, body.error || ""));
+    throw new ApiError(textError(body.code, body.params, body.error || ""), body.code);
   }
   if (read) answers.set(path, body);
   return body as T;

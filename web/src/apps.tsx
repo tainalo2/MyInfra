@@ -12,6 +12,7 @@ import { UsageMeters } from "./meters";
 import { podCpu, size } from "./measure";
 import { ImageEditor } from "./images";
 import { AppUpdateNotice } from "./updates";
+import { UpdateLock, useActivity } from "./activity";
 import { AppSecretLinks } from "./secrets";
 import { PodActions } from "./pods";
 import { LocalImagePicker } from "./localimages";
@@ -561,6 +562,7 @@ export function ApplicationPage() {
   const [confirm, setConfirm] = useState<"" | "delete" | "pause">("");
   const [pausing, setPausing] = useState(false);
   const [editingNames, setEditingNames] = useState(false);
+  const { updating, transferring } = useActivity();
 
   // A new version is followed closely until it answers.
   useEffect(() => {
@@ -606,6 +608,9 @@ export function ApplicationPage() {
   const pods = runtime?.pods ?? [];
   const health = appHealth(app, runtime?.status, pods);
   const failing = pods.some((pod) => podFailed(pod));
+  // During its update or that of its servers, the application only changes
+  // once it is over; it can still be removed.
+  const locked = app.rollout === "updating" || updating(app.serverId, app.clusterId) || transferring;
 
   return (
     <div className="max-w-[720px]">
@@ -623,6 +628,7 @@ export function ApplicationPage() {
           {app.source.replace(/@sha256:[a-f0-9]+$/, "")} · {where}
         </p>
       </div>
+      {app.guarded ? null : <UpdateLock locked={locked && !transferring} />}
       {app.guarded ? null : <AppUpdateNotice app={app} onStarted={() => void appPoll.reload()} />}
       {app.guarded ? null : (
         <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -632,7 +638,7 @@ export function ApplicationPage() {
               {text("apps.open")}
             </a>
           ) : null}
-          <Button type="button" variant="secondary" onClick={() => (app.paused ? void setPaused(false) : setConfirm("pause"))} disabled={pausing}>
+          <Button type="button" variant="secondary" onClick={() => (app.paused ? void setPaused(false) : setConfirm("pause"))} disabled={pausing || locked}>
             {pausing ? <Spinner /> : null}
             {app.paused ? text("home.resume") : text("apps.pauseAction")}
           </Button>
@@ -690,7 +696,7 @@ export function ApplicationPage() {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <SectionTitle>{text("apps.addresses")}</SectionTitle>
             {app.guarded ? null : (
-              <TextButton type="button" onClick={() => setEditingNames(true)}>
+              <TextButton type="button" onClick={() => setEditingNames(true)} disabled={locked}>
                 {text("names.edit")}
               </TextButton>
             )}

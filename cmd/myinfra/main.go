@@ -117,20 +117,30 @@ func serve() bool {
 		Master:       master,
 		Bootstrap:    strings.TrimSpace(os.Getenv("MYINFRA_BOOTSTRAP_TOKEN")),
 		Replica:      replicaOf(ctx, db),
+		RoleFixed:    os.Getenv("MYINFRA_REPLICA") == "0" || os.Getenv("MYINFRA_REPLICA") == "1",
 	}
 	// The versions of private images are read with the logins kept for their registries.
 	registry.Credentials = app.RegistryLogin
 	if app.Replica {
 		slog.Info("réplique, les machines restent pilotées par l'autre copie")
 	} else {
-		app.RecoverDeploys(ctx)
-		go app.Deliver(ctx)
-		go app.Publish(ctx)
-		go app.Destructions(ctx)
-		go app.Templates(ctx)
-		go app.Updates(ctx)
+		// With two copies on one database — the pods of MyInfra in a
+		// cluster — one drives the machines; the other takes over if it stops.
+		go func() {
+			if !db.Lead(ctx) {
+				return
+			}
+			slog.Info("cette copie pilote les machines")
+			app.RecoverDeploys(ctx)
+			go app.Deliver(ctx)
+			go app.Publish(ctx)
+			go app.Destructions(ctx)
+			go app.Templates(ctx)
+			go app.Updates(ctx)
+		}()
 	}
 	go app.Sync(ctx)
+	go app.WatchRole(ctx)
 	go app.WarmSamples(ctx)
 	server := &http.Server{Addr: addr, Handler: app.Handler(), ReadHeaderTimeout: 5 * time.Second}
 	app.Shutdown = server.Shutdown

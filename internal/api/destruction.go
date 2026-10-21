@@ -188,6 +188,7 @@ func (a *API) startDestruction(ctx context.Context, owner, kind, target, name st
 	if err := a.Store.CreateDestruction(ctx, owner, id, kind, target, name, raw); err != nil {
 		return store.Destruction{}, err
 	}
+	_ = a.Store.HoldNames(ctx, owner, kind, target)
 	if kind == "server" {
 		a.stopUpdateJobs(ctx, owner, target, "")
 		a.noteServer(ctx, owner, target, "server.delete", "warn", "Suppression demandée.")

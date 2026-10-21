@@ -64,7 +64,8 @@ func (a *API) syncState(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "La synchro a échoué.")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"instanceId": id, "hash": doc.Hash()})
+	role, _ := a.Store.CopyRole(r.Context())
+	writeJSON(w, http.StatusOK, peerState{InstanceID: id, Hash: doc.Hash(), Driving: !a.Replica, Epoch: role.Epoch})
 }
 
 func (a *API) syncSnapshot(w http.ResponseWriter, r *http.Request) {
@@ -109,10 +110,13 @@ func (a *API) syncStatus(w http.ResponseWriter, r *http.Request) {
 	for _, peer := range peers {
 		view = append(view, syncPeerView{URL: peer.URL, LastOK: peer.LastOK, LastError: peer.LastError})
 	}
+	role, _ := a.Store.CopyRole(r.Context())
 	writeJSON(w, http.StatusOK, map[string]any{
 		"instanceId": id,
 		"replica":    a.Replica,
+		"fixed":      a.RoleFixed,
 		"peers":      view,
+		"other":      a.otherCopy(r.Context(), role),
 	})
 }
 
@@ -174,6 +178,13 @@ func (a *API) Sync(ctx context.Context) {
 }
 
 func (a *API) syncPeers(ctx context.Context) {
+	// A replica always syncs with the copy it follows: without it, it would
+	// neither get its changes nor see it fail.
+	if a.Replica {
+		if role, err := a.Store.CopyRole(ctx); err == nil && role.MainURL != "" {
+			_ = a.Store.AddPeer(ctx, role.MainURL)
+		}
+	}
 	peers, err := a.Store.ListPeers(ctx)
 	if err != nil || len(peers) == 0 {
 		return
@@ -206,6 +217,7 @@ func (a *API) exchange(ctx context.Context, peer string, local store.SyncDoc) er
 	if state.InstanceID == id {
 		return errString("Cette adresse est cette copie.")
 	}
+	a.fence(ctx, peer, state)
 	if state.Hash == local.Hash() {
 		return nil
 	}
@@ -222,6 +234,10 @@ func (a *API) exchange(ctx context.Context, peer string, local store.SyncDoc) er
 type peerState struct {
 	InstanceID string `json:"instanceId"`
 	Hash       string `json:"hash"`
+	// Driving and Epoch tell whether that copy drives the machines, and
+	// under which term.
+	Driving bool  `json:"driving"`
+	Epoch   int64 `json:"epoch"`
 }
 
 var syncClient = &http.Client{

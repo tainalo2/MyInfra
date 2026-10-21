@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"myinfra/internal/box"
@@ -30,10 +31,14 @@ type API struct {
 	// Local is true for the executable with its own PostgreSQL.
 	Local bool
 	// Restart stops the server and starts the executable again, after an update.
-	Restart      func()
-	Master       []byte
-	Bootstrap    string
-	Replica      bool
+	Restart   func()
+	Master    []byte
+	Bootstrap string
+	Replica   bool
+	// RoleFixed is true when MYINFRA_REPLICA sets the role, whatever the
+	// database says: the lead cannot change from the screen.
+	RoleFixed    bool
+	roleChanging atomic.Bool
 	Shutdown     func(context.Context) error
 	transfer     transferState
 	deployMu     sync.Mutex
