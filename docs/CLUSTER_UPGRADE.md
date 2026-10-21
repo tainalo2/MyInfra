@@ -1,8 +1,8 @@
 # Mise à jour du cluster de test (phase 1)
 
-Checklist pour aligner toutes les copies MyInfra sur une release qui expose `POST /api/sync/yield` (à partir de **v0.1.0-rc.7** ; publier **rc.8** si des correctifs sync / lead / destruction ne sont pas encore dans rc.7).
+Checklist pour aligner toutes les copies MyInfra sur **v0.1.0-rc.8** (sync `updates` / `update_jobs`, `preparing_since`, reprise des destructions au `takeLead`, `POST /api/sync/yield` requis sur chaque copie).
 
-1. **Image** — Mettre à jour le pod ou le `compose` vers `ghcr.io/tainalo2/myinfra:v0.1.0-rc.8` (ou la rc publiée).
+1. **Image** — Mettre à jour le pod ou le `compose` vers `ghcr.io/tainalo2/myinfra:v0.1.0-rc.8`.
 2. **Toutes les copies** — Même version sur chaque instance ; une copie ancienne refuse la cession de main (`main_outdated`).
 3. **Copies** — Vérifier prise de main / rendu de main ; forcer une reprise si la principale est injoignable.
 4. **Destruction** — Lancer une suppression serveur, tuer la copie pilote, prendre la main sur l'autre : l'étape SSH doit reprendre.
