@@ -19,12 +19,12 @@ Objectif : ne plus dépendre uniquement du Garage et des bases **dans** le clust
 | Restauration guidée (upload, même format que le téléchargement) | **Fait** — UI + `POST` par scénario |
 | Alertes e-mail / **ntfy** (optionnelles au démarrage ; `internal/notify`) | **Fait** — serveur, provider, cluster, application (copie pilote) |
 
-## 3. Valider l’existant
+## 3. Valider l’existant — fait
 
-- Providers : couvrir les 6 restants sur 12 en E2E.
-- DNS Cloudflare.
-- Registre privé pour le pull d’images.
-- Revue sécurité (routes copies, reprise de main, sondes).
+- Providers : tests de contrat `Exists` + catalogue/OpenTofu pour les 6 restants (UpCloud, Akamai, Gcore, Ionos, Kamatera, Infomaniak…) — voir [VALIDATION.md](VALIDATION.md).
+- DNS Cloudflare : tests zones, écriture et liste des enregistrements.
+- Registre privé : tests login, tags, `pullConfig` et secret Kubernetes — essai réel documenté.
+- Revue sécurité copies / sync / sondes : [SECURITY_COPIES.md](SECURITY_COPIES.md) + tests `sync_auth`, `guard`, `lead`.
 
 ## 4. Fonctionnalités
 

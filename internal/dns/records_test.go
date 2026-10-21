@@ -5,8 +5,35 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
+
+func TestCloudflareRecordsListsTheAddresses(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/zones" && r.URL.Query().Get("name") == "exemple.fr":
+			fmt.Fprint(w, `{"success":true,"result":[{"id":"z1","name":"exemple.fr"}],"result_info":{"page":1,"total_pages":1}}`)
+		case strings.HasPrefix(r.URL.Path, "/zones/z1/dns_records"):
+			if r.URL.Query().Get("type") == "AAAA" {
+				fmt.Fprint(w, `{"success":true,"result":[],"result_info":{"page":1,"total_pages":1}}`)
+				return
+			}
+			fmt.Fprint(w, `{"success":true,"result":[{"name":"app.exemple.fr","content":"203.0.113.10"}],"result_info":{"page":1,"total_pages":1}}`)
+		default:
+			t.Fatalf("%s %s", r.Method, r.URL)
+		}
+	}))
+	defer server.Close()
+	client := Client{CloudflareBase: server.URL, HTTP: server.Client()}
+	records, err := client.Records(context.Background(), "cloudflare", Creds{Token: "tok"}, "exemple.fr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 || records[0].Name != "app.exemple.fr" || records[0].Target != "203.0.113.10" {
+		t.Fatalf("%+v", records)
+	}
+}
 
 func TestOVHRecordsListsTheAddresses(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

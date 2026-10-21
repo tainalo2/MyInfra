@@ -308,9 +308,9 @@ These integrations have been tried end to end. The others listed above are in th
 
 | Kind | Validated |
 | --- | --- |
-| Provider | Scaleway, Hetzner, DigitalOcean, Vultr, OVH, Exoscale |
-| DNS | OVH |
-| Registry | None yet for private pulls; logins are checked against Docker Hub and GitHub Container Registry |
+| Provider | Scaleway, Hetzner, DigitalOcean, Vultr, OVH, Exoscale (real trials); UpCloud, Akamai, Gcore, Ionos, Kamatera, Infomaniak, OpenStack, Proxmox (automated contracts — see [docs/VALIDATION.md](docs/VALIDATION.md)) |
+| DNS | OVH (real); Cloudflare (automated tests) |
+| Registry | Private pull path covered by tests (login check, tag list, pull secret); try once on your registry in production |
 
 ## Transparency
 
