@@ -347,7 +347,7 @@ const fr = {
   "err.pick_provider": "Choisissez un provider.",
   "err.pick_ssh": "Choisissez au moins une clé SSH.",
   "err.cluster_name": "Donnez un nom au cluster.",
-  "err.pick_source": "Choisissez une image, un dépôt ou un modèle.",
+  "err.pick_source": "Choisissez une image ou un modèle.",
   "err.source_required": "Indiquez la source.",
   "err.replicas": "Le nombre de copies va de 1 à 10.",
   "err.self_stays": "MyInfra reste en ligne pour piloter le cluster.",
@@ -1115,6 +1115,7 @@ const fr = {
   "starter.media.name": "Médiathèque",
   "starter.media.summary": "Films, séries, musique et livres audio à regarder et écouter partout, avec les demandes de nouveaux titres.",
   "starter.media.sizing": "4 Go de mémoire et beaucoup de disque",
+  "err.git_unsupported": "MyInfra ne construit pas encore d'image depuis un dépôt Git : publiez l'image dans un registre, ou importez-la.",
 } as const;
 
 export type MsgKey = keyof typeof fr;
@@ -1392,7 +1393,7 @@ const en: Record<MsgKey, string> = {
   "err.pick_provider": "Choose a provider.",
   "err.pick_ssh": "Choose at least one SSH key.",
   "err.cluster_name": "Give the cluster a name.",
-  "err.pick_source": "Choose an image, a repository, or a template.",
+  "err.pick_source": "Choose an image or a template.",
   "err.source_required": "Provide the source.",
   "err.replicas": "The number of copies is from 1 to 10.",
   "err.self_stays": "MyInfra stays online to drive the cluster.",
@@ -2161,6 +2162,7 @@ const en: Record<MsgKey, string> = {
   "starter.media.name": "Media library",
   "starter.media.summary": "Films, series, music and audiobooks to watch and listen to anywhere, with requests for new titles.",
   "starter.media.sizing": "4 GB of memory and plenty of disk",
+  "err.git_unsupported": "MyInfra does not build images from a Git repository yet: publish the image to a registry, or import it.",
 };
 
 const pt: Record<MsgKey, string> = {
@@ -2429,7 +2431,7 @@ const pt: Record<MsgKey, string> = {
   "err.pick_provider": "Escolha um provider.",
   "err.pick_ssh": "Escolha pelo menos uma chave SSH.",
   "err.cluster_name": "Dê um nome ao cluster.",
-  "err.pick_source": "Escolha uma imagem, um repositório ou um modelo.",
+  "err.pick_source": "Escolha uma imagem ou um modelo.",
   "err.source_required": "Indique a origem.",
   "err.replicas": "O número de cópias vai de 1 a 10.",
   "err.self_stays": "O MyInfra fica em linha para pilotar o cluster.",
@@ -3197,6 +3199,7 @@ const pt: Record<MsgKey, string> = {
   "starter.media.name": "Mediateca",
   "starter.media.summary": "Filmes, séries, música e audiolivros para ver e ouvir em qualquer lado, com pedidos de novos títulos.",
   "starter.media.sizing": "4 GB de memória e muito disco",
+  "err.git_unsupported": "O MyInfra ainda não constrói imagens a partir de um repositório Git: publique a imagem num registo, ou importe-a.",
 };
 
 const it: Record<MsgKey, string> = {
@@ -3464,7 +3467,7 @@ const it: Record<MsgKey, string> = {
   "err.pick_provider": "Scegli un provider.",
   "err.pick_ssh": "Scegli almeno una chiave SSH.",
   "err.cluster_name": "Dai un nome al cluster.",
-  "err.pick_source": "Scegli un'immagine, un repository o un modello.",
+  "err.pick_source": "Scegli un'immagine o un modello.",
   "err.source_required": "Indica l'origine.",
   "err.replicas": "Il numero di copie va da 1 a 10.",
   "err.self_stays": "MyInfra resta in linea per pilotare il cluster.",
@@ -4232,6 +4235,7 @@ const it: Record<MsgKey, string> = {
   "starter.media.name": "Mediateca",
   "starter.media.summary": "Film, serie, musica e audiolibri da guardare e ascoltare ovunque, con le richieste di nuovi titoli.",
   "starter.media.sizing": "4 GB di memoria e molto disco",
+  "err.git_unsupported": "MyInfra non costruisce ancora immagini da un repository Git: pubblica l'immagine in un registro, o importala.",
 };
 
 const de: Record<MsgKey, string> = {
@@ -4501,7 +4505,7 @@ const de: Record<MsgKey, string> = {
   "err.pick_provider": "Wählen Sie einen Provider.",
   "err.pick_ssh": "Wählen Sie mindestens einen SSH-Schlüssel.",
   "err.cluster_name": "Geben Sie dem Cluster einen Namen.",
-  "err.pick_source": "Wählen Sie ein Image, ein Depot oder eine Vorlage.",
+  "err.pick_source": "Wählen Sie ein Image oder eine Vorlage.",
   "err.source_required": "Geben Sie die Quelle an.",
   "err.replicas": "Die Zahl der Kopien liegt zwischen 1 und 10.",
   "err.self_stays": "MyInfra bleibt online, um den Cluster zu steuern.",
@@ -5269,6 +5273,7 @@ const de: Record<MsgKey, string> = {
   "starter.media.name": "Mediathek",
   "starter.media.summary": "Filme, Serien, Musik und Hörbücher überall ansehen und hören, mit Wünschen für neue Titel.",
   "starter.media.sizing": "4 GB Arbeitsspeicher und viel Speicherplatz",
+  "err.git_unsupported": "MyInfra baut noch keine Images aus einem Git-Repository: Veröffentlichen Sie das Image in einer Registry oder importieren Sie es.",
 };
 
 const tables: Record<Lang, Record<MsgKey, string>> = { fr, en, pt, it, de };

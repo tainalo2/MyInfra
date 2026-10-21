@@ -857,7 +857,8 @@ function AppFields({ app, zones, onChange }: { app: TemplateApp; zones: DnsZone[
       <Field label={text("field.source")}>
         <Select value={app.sourceKind} onChange={(e) => onChange({ ...app, sourceKind: e.target.value })}>
           <option value="image">{text("common.image")}</option>
-          <option value="git">{text("ui.depot")}</option>
+          {/* Kept for a template written before: no build from Git yet. */}
+          {app.sourceKind === "git" ? <option value="git">{text("ui.depot")}</option> : null}
         </Select>
       </Field>
       <Field label={app.sourceKind === "git" ? text("ui.depot") : text("common.image")}>

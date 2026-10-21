@@ -49,7 +49,7 @@ var errorCodes = map[string]string{
 	"Choisissez un provider.":                                                   "pick_provider",
 	"Choisissez au moins une clé SSH.":                                          "pick_ssh",
 	"Donnez un nom au cluster.":                                                 "cluster_name",
-	"Choisissez une image, un dépôt ou un modèle.":                              "pick_source",
+	"Choisissez une image ou un modèle.":                                        "pick_source",
 	"Indiquez la source.":                                                       "source_required",
 	"Le nombre de copies va de 1 à 10.":                                         "replicas",
 	"MyInfra reste en ligne pour piloter le cluster.":                           "self_stays",

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowRightLeft, Cloud, Container, GitBranch, Globe, HardDrive, KeyRound, ListTree, Lock, Settings, Shield, Waypoints, type LucideIcon } from "lucide-react";
+import { ArrowRightLeft, Cloud, Container, Globe, HardDrive, KeyRound, ListTree, Lock, Settings, Shield, Waypoints, type LucideIcon } from "lucide-react";
 import { text, type MsgKey } from "./i18n";
 import { useI18n } from "./lang";
 import { Icon, PageTitle, focus } from "./ui";
@@ -16,7 +16,6 @@ const groups: { title: MsgKey; entries: Entry[] }[] = [
       { to: "/providers", label: "nav.providers", hint: "settings.providersHint", icon: Cloud },
       { to: "/dns", label: "nav.dns", hint: "settings.dnsHint", icon: Globe },
       { to: "/dns/enregistrements", label: "nav.dnsRecords", hint: "settings.dnsRecordsHint", icon: ListTree },
-      { to: "/git", label: "nav.git", hint: "settings.gitHint", icon: GitBranch },
       { to: "/registres", label: "nav.registries", hint: "settings.registriesHint", icon: Container },
       { to: "/images", label: "nav.images", hint: "settings.imagesHint", icon: HardDrive },
     ],

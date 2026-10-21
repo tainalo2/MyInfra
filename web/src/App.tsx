@@ -24,7 +24,6 @@ const Secrets = page(() => import("./secrets"), "Secrets");
 const SecretPage = page(() => import("./secrets"), "SecretPage");
 const Providers = page(() => import("./accounts"), "Providers");
 const Dns = page(() => import("./accounts"), "Dns");
-const Git = page(() => import("./accounts"), "Git");
 const Registries = page(() => import("./accounts"), "Registries");
 const Images = page(() => import("./localimages"), "Images");
 const Clusters = page(() => import("./clusters"), "Clusters");
@@ -216,7 +215,8 @@ export function App() {
         <Route path="/providers" element={<Providers />} />
         <Route path="/dns" element={<Dns />} />
         <Route path="/dns/enregistrements" element={<DnsRecords />} />
-        <Route path="/git" element={<Git />} />
+        {/* Building from a Git repository does not exist yet: its access page waits for it. */}
+        <Route path="/git" element={<Navigate to="/reglages" replace />} />
         <Route path="/registres" element={<Registries />} />
         <Route path="/images" element={<Images />} />
         <Route path="/serveurs" element={<Navigate to="/clusters" replace />} />

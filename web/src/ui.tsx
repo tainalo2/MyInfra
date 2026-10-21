@@ -623,7 +623,6 @@ function crumbsFor(pathname: string, names: Record<string, string>): Crumb[] {
     "/secrets": "nav.secrets",
     "/providers": "nav.providers",
     "/dns": "nav.dns",
-    "/git": "nav.git",
     "/registres": "nav.registries",
     "/images": "nav.images",
     "/compte": "nav.account",

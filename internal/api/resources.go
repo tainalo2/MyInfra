@@ -643,8 +643,12 @@ func (a *API) createApplication(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Donnez un nom à l'application.")
 		return
 	}
-	if body.SourceKind != "image" && body.SourceKind != "git" && body.SourceKind != "template" {
-		writeError(w, http.StatusBadRequest, "Choisissez une image, un dépôt ou un modèle.")
+	if body.SourceKind == "git" {
+		writeCoded(w, http.StatusBadRequest, "git_unsupported", gitUnsupported, nil)
+		return
+	}
+	if body.SourceKind != "image" && body.SourceKind != "template" {
+		writeError(w, http.StatusBadRequest, "Choisissez une image ou un modèle.")
 		return
 	}
 	source := strings.TrimSpace(body.Source)
@@ -907,6 +911,10 @@ func acceptableImage(image string) bool {
 	_, err := registry.Parse(image)
 	return err == nil
 }
+
+// gitUnsupported answers an application to build from its Git repository:
+// MyInfra does not build images yet.
+const gitUnsupported = "MyInfra ne construit pas encore d'image depuis un dépôt Git : publiez l'image dans un registre, ou importez-la."
 
 func normalizeServices(appName, sourceKind, source string, replicas int, vars map[string]string, body []serviceBody) ([]store.Service, string, error) {
 	if !manifest.EnvOK(vars) {

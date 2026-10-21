@@ -59,12 +59,12 @@ On a phone, the same application, laid out for the thumb:
 
 - **Catalogue.** Ready-made applications (sites, wikis, monitoring, notes, media…). Pick one, or start from any image. Each one says which registry its image is pulled from.
 - **One machine or a cluster.** The same form. On a machine, the application is a Docker container. On a cluster, it becomes Kubernetes pods.
-- **Your own images.** Use any public image, add a private registry (Docker Hub, GitHub Container Registry, GitLab, Quay, or your own), or import an image you built: the `docker save` archive, sent from the browser or fetched from a raw URL. MyInfra loads it on the servers itself over SSH, so they never need to reach MyInfra or a registry.
+- **Your own images.** Use any public image, add a private registry (Docker Hub, GitHub Container Registry, GitLab, Quay, or your own), or import an image you built: the `docker save` archive, sent from the browser or fetched from a raw URL. MyInfra loads it on the servers itself over SSH, so they never need to reach MyInfra or a registry. Building an image from a Git repository is not available yet.
 - **Domains and certificates.** MyInfra writes the DNS record when a DNS account is linked, then gets the Let's Encrypt certificate. Addresses can be added and removed while the application runs.
 - **Redundancy.** When every pod of an application runs on one server, a button spreads it. A stateless application runs several copies on different servers. A SQLite application such as Uptime Kuma keeps one copy whose database is backed up continuously and restarts elsewhere with its data. An application that can use PostgreSQL, such as Vikunja, moves to a database replicated on two servers.
 - **Pause.** The pods stop; the disk and the data stay. Visitors see a page saying the service is paused.
 - **Logs, terminal, meters.** Pod status and logs, a terminal on the machine or in the pod, CPU, memory and disk use.
-- **Online means online.** An application is shown online only once its pods are ready and its address answers in HTTPS with a valid certificate.
+- **Online means online.** An application is shown online only once its pods are ready and its address answers in HTTPS with a valid certificate. A server that stops answering, or that its provider no longer has, shows as unreachable or gone, and so do the applications on it; a gone server is removed from MyInfra in one step.
 
 **Run servers**
 
@@ -72,13 +72,15 @@ On a phone, the same application, laid out for the thumb:
 - **Bring your own machine.** Any Linux machine you already have joins with one command to paste.
 - **Clusters.** Linked machines running k3s, Traefik at the edge, Kubernetes traffic between nodes over WireGuard only, an odd number of control planes, a name pointing at every node.
 - **Overview.** A map of every server; switch to applications or pods. Pick an application to light up the servers that run it. A panel lists what needs attention, and the hourly and monthly cost is always at the top.
-- **Templates.** Describe applications, machines and a cluster once; deploy, export or share it.
+- **Templates.** Describe applications, machines and a cluster once; deploy, export or share it. Nine ready-made templates — first steps, website, team workspace, knowledge base, development, monitoring, automation, paperwork, media — only ask for your provider, offers, keys and domain; the applications' passwords are drawn at deployment.
 
 **Keep control**
 
-- **Vault.** Provider, DNS, Git and registry tokens, SSH private keys and application secrets are sealed with AES-GCM before they are stored. A list never returns a secret in clear text.
+- **Vault.** Provider, DNS and registry tokens, SSH private keys and application secrets are sealed with AES-GCM before they are stored. A list never returns a secret in clear text.
 - **Secrets for applications.** Declare keys, then choose the applications allowed to receive them.
-- **Copies.** Several MyInfra instances of the same owner keep their databases in sync; a replica does not drive the machines.
+- **Copies.** Several MyInfra instances of the same owner keep their databases in sync; a replica does not drive the machines, but takes the lead when the main copy fails — or to act from your laptop — and gives it back afterwards.
+- **Work in progress.** A copy on your computer asks you not to switch it off while it works on machines, with a red mark in the header until it is done. During a transfer or an update, changes that could break it wait; removing stays possible.
+- **DNS records.** Every record of your zones next to what MyInfra expects, to republish a name or remove one left behind.
 - **Transfer.** Move MyInfra itself to a new machine or into a pod of the cluster, and follow the steps.
 - **Careful destruction.** Deleting an application, a machine or a cluster asks you to type its name again.
 - **Mobile.** Bottom tabs, step-by-step forms, a full-screen terminal with an Esc/Tab/Ctrl key bar.
@@ -266,7 +268,9 @@ Push a tag such as `v1.4.0`, or run the **Publication** workflow from the Action
 
 **Secrets.** Values are sealed before they are written and never returned by the API. At delivery time, MyInfra opens them and attaches them to the allowed application; if opening fails, the application is not redeployed without its secrets.
 
-**Copies.** Two MyInfra instances of the same owner exchange database rows; the newer version wins. Sessions and imported images do not travel. A replica deploys nothing.
+**Copies.** Two MyInfra instances of the same owner exchange database rows; the newer version wins. Sessions and imported images do not travel. A replica deploys nothing. Taking the lead raises a term shared by the copies: the main copy, when it answers, gets the last changes and steps aside; when it does not, it steps aside by itself once it is back and meets the later term during the sync. With two pods on one database, a PostgreSQL lock lets only one of them drive.
+
+**Reachability.** Every minute, MyInfra knocks on the SSH port of each server (without logging in) and calls the address of each application. Three misses in a row make it unreachable. Soon after, and every six hours otherwise, the provider is asked whether the machine still exists; only a clear "not found" marks it gone.
 
 **Transfer.** MyInfra can move itself: to a machine with cloud-init, or into the cluster as two pods with Postgres, under a name you choose in your zone. The data is copied; then the old copy either stops, or stays as a synced copy that no longer drives the machines — handy to keep MyInfra on a laptop. Each copy lists the other when it can reach it. In the cluster, MyInfra shows as an application that cannot be removed or changed.
 
@@ -291,7 +295,6 @@ These integrations have been tried end to end. The others listed above are in th
 | Provider | Scaleway, Hetzner, DigitalOcean, Vultr, OVH, Exoscale |
 | DNS | OVH |
 | Registry | None yet for private pulls; logins are checked against Docker Hub and GitHub Container Registry |
-| Git | None yet |
 
 ## Transparency
 

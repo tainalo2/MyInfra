@@ -247,7 +247,6 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
                     >
                       <option value="catalogue">{text("common.catalogue")}</option>
                       <option value="image">{text("common.image")}</option>
-                      <option value="git">{text("common.git")}</option>
                       <option value="template">{text("common.template")}</option>
                     </Select>
                   </Field>

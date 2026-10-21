@@ -380,6 +380,8 @@ const gitHosts = [
   { value: "gitlab", label: "GitLab" },
 ];
 
+// Git waits for the build of applications from their repository: it is not
+// reachable from the screen until then.
 export function Git() {
   return (
     <TokenPage

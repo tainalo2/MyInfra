@@ -731,6 +731,9 @@ func (a *API) createRunApp(ctx context.Context, owner string, run *blueprint.Run
 	if app.Replicas == 0 {
 		app.Replicas = 1
 	}
+	if app.SourceKind == "git" {
+		return errString(gitUnsupported)
+	}
 	source := strings.TrimSpace(app.Source)
 	vars := map[string]string{}
 	if app.Catalog != "" {
