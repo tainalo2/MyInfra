@@ -178,6 +178,8 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("GET /api/templates", a.auth(a.listTemplates))
 	mux.HandleFunc("POST /api/templates", a.auth(a.steady(a.createTemplate)))
 	mux.HandleFunc("POST /api/templates/import", a.auth(a.steady(a.importTemplate)))
+	mux.HandleFunc("GET /api/starters", a.auth(a.listStarters))
+	mux.HandleFunc("POST /api/starters/{id}", a.auth(a.steady(a.useStarter)))
 	mux.HandleFunc("POST /api/templates/from-cluster", a.auth(a.steady(a.templateFromCluster)))
 	mux.HandleFunc("GET /api/templates/{id}", a.auth(a.getTemplate))
 	mux.HandleFunc("PUT /api/templates/{id}", a.auth(a.steady(a.updateTemplate)))

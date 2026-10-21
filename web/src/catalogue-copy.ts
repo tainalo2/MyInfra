@@ -250,6 +250,12 @@ const copy: Record<string, Partial<Record<Lang, Line>>> = {
     ["Una rubrica leggera e la sua schermata.", "Una rubrica leggera e la sua schermata, per gestire utenti e gruppi. La rubrica è conservata."],
     ["Ein leichtes Verzeichnis und sein Bildschirm.", "Ein leichtes Verzeichnis und sein Bildschirm, um Benutzer und Gruppen zu verwalten. Das Verzeichnis bleibt erhalten."],
   ),
+  openldap: L(
+    ["An LDAP directory.", "An LDAP directory for services that connect to it, with phpLDAPadmin for administration. Data and configuration are kept."],
+    ["Um diretório LDAP.", "Um diretório LDAP para os serviços que se ligam a ele, com phpLDAPadmin para a administração. Os dados e a configuração são conservados."],
+    ["Una rubrica LDAP.", "Una rubrica LDAP per i servizi che vi si collegano, con phpLDAPadmin per l'amministrazione. Dati e configurazione sono conservati."],
+    ["Ein LDAP-Verzeichnis.", "Ein LDAP-Verzeichnis für Dienste, die sich daran anbinden, mit phpLDAPadmin zur Verwaltung. Daten und Konfiguration bleiben erhalten."],
+  ),
   filebrowser: L(
     ["The files of a folder, in the browser.", "The files of a folder, browsed and uploaded from the browser. The folder is kept."],
     ["Os ficheiros de uma pasta, no navegador.", "Os ficheiros de uma pasta, percorridos e depositados a partir do navegador. A pasta é conservada."],
@@ -405,6 +411,54 @@ const copy: Record<string, Partial<Record<Lang, Line>>> = {
     ["Filmes, séries e música.", "Filmes, séries e música, lidos no navegador ou numa aplicação. A configuração e a mediateca declarada são conservadas."],
     ["Film, serie e musica.", "Film, serie e musica, letti nel browser o in un'applicazione. La configurazione e la mediateca dichiarata sono conservate."],
     ["Filme, Serien und Musik.", "Filme, Serien und Musik, im Browser oder in einer Anwendung. Die Konfiguration und die erklärte Mediathek bleiben erhalten."],
+  ),
+  jellyseerr: L(
+    ["Requests for Jellyfin.", "Film and series requests for Jellyfin or Plex: approval, queue, and notifications. The configuration is kept."],
+    ["Pedidos para o Jellyfin.", "Pedidos de filmes e séries para Jellyfin ou Plex: aprovação, fila e notificações. A configuração é conservada."],
+    ["Richieste per Jellyfin.", "Richieste di film e serie per Jellyfin o Plex: approvazione, coda e notifiche. La configurazione è conservata."],
+    ["Anfragen für Jellyfin.", "Film- und Serienwünsche für Jellyfin oder Plex: Freigabe, Warteschlange und Benachrichtigungen. Die Konfiguration bleibt erhalten."],
+  ),
+  sonarr: L(
+    ["TV series.", "TV series: indexers, qualities, downloads, and library. The configuration and history are kept."],
+    ["Séries de televisão.", "Séries de televisão: indexadores, qualidades, descarregamentos e biblioteca. A configuração e o histórico são conservados."],
+    ["Serie TV.", "Serie TV: indexer, qualità, download e libreria. La configurazione e la cronologia sono conservate."],
+    ["Fernsehserien.", "Fernsehserien: Indexer, Qualitäten, Downloads und Bibliothek. Konfiguration und Verlauf bleiben erhalten."],
+  ),
+  radarr: L(
+    ["Movies.", "Movies: indexers, qualities, downloads, and library. The configuration and history are kept."],
+    ["Filmes.", "Filmes: indexadores, qualidades, descarregamentos e biblioteca. A configuração e o histórico são conservados."],
+    ["Film.", "Film: indexer, qualità, download e libreria. La configurazione e la cronologia sono conservate."],
+    ["Filme.", "Filme: Indexer, Qualitäten, Downloads und Bibliothek. Konfiguration und Verlauf bleiben erhalten."],
+  ),
+  lidarr: L(
+    ["Music.", "Music: artists, albums, downloads, and library. The configuration and history are kept."],
+    ["Música.", "Música: artistas, álbuns, descarregamentos e biblioteca. A configuração e o histórico são conservados."],
+    ["Musica.", "Musica: artisti, album, download e libreria. La configurazione e la cronologia sono conservate."],
+    ["Musik.", "Musik: Künstler, Alben, Downloads und Bibliothek. Konfiguration und Verlauf bleiben erhalten."],
+  ),
+  readarr: L(
+    ["Books.", "Books and authors: indexers, formats, and library. The configuration and history are kept."],
+    ["Livros.", "Livros e autores: indexadores, formatos e biblioteca. A configuração e o histórico são conservados."],
+    ["Libri.", "Libri e autori: indexer, formati e libreria. La configurazione e la cronologia sono conservate."],
+    ["Bücher.", "Bücher und Autoren: Indexer, Formate und Bibliothek. Konfiguration und Verlauf bleiben erhalten."],
+  ),
+  prowlarr: L(
+    ["Indexers for Servarr.", "Shared indexer management for Sonarr, Radarr, and the rest of the Servarr family. The configuration is kept."],
+    ["Indexadores Servarr.", "A gestão partilhada de indexadores entre Sonarr, Radarr e o resto da família Servarr. A configuração é conservada."],
+    ["Indexer Servarr.", "La gestione condivisa degli indexer per Sonarr, Radarr e il resto della famiglia Servarr. La configurazione è conservata."],
+    ["Indexer für Servarr.", "Gemeinsame Indexer-Verwaltung für Sonarr, Radarr und die übrigen Servarr-Anwendungen. Die Konfiguration bleibt erhalten."],
+  ),
+  bazarr: L(
+    ["Subtitles.", "Subtitle search and matching for films and series managed by Radarr and Sonarr. The configuration is kept."],
+    ["Legendas.", "A pesquisa e a associação de legendas para filmes e séries geridos por Radarr e Sonarr. A configuração é conservada."],
+    ["Sottotitoli.", "Ricerca e abbinamento dei sottotitoli per film e serie gestiti da Radarr e Sonarr. La configurazione è conservata."],
+    ["Untertitel.", "Untertitel suchen und zuordnen für Filme und Serien aus Radarr und Sonarr. Die Konfiguration bleibt erhalten."],
+  ),
+  whisparr: L(
+    ["Adult video.", "Adult video tracking on the same model as Sonarr and Radarr. The configuration and history are kept."],
+    ["Vídeo para adultos.", "O seguimento de vídeos para adultos no mesmo modelo que Sonarr e Radarr. A configuração e o histórico são conservados."],
+    ["Video per adulti.", "Il monitoraggio di video per adulti sullo stesso modello di Sonarr e Radarr. La configurazione e la cronologia sono conservate."],
+    ["Erwachsenenvideo.", "Verfolgung von Videos für Erwachsene nach demselben Modell wie Sonarr und Radarr. Konfiguration und Verlauf bleiben erhalten."],
   ),
   navidrome: L(
     ["A record collection.", "A record collection from the browser and compatible applications. The music and the listening are kept."],

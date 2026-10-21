@@ -20,6 +20,9 @@ import { text, knownMessage } from "./i18n";
 import { OfferFields, OfferStorage, formatPrice } from "./offers";
 import { ConfirmDialog, Spinner, Steps, useToast } from "./kit";
 import { usePoll } from "./poll";
+import { AppLogo } from "./app-logo";
+import { useI18n } from "./lang";
+import type { MsgKey } from "./i18n";
 import { NameList } from "./names";
 import { ProviderSelect } from "./provider-select";
 import { ToolInstall } from "./tools";
@@ -145,6 +148,7 @@ export function Templates() {
           ))}
         </ul>
       )}
+      <Starters />
       {removing ? (
         <ConfirmDialog
           title={text("server.removeNamed", { name: removing.name })}
@@ -1094,3 +1098,82 @@ async function download(row: Template) {
   URL.revokeObjectURL(url);
 }
 
+
+type Starter = {
+  id: string;
+  servers: number;
+  controlPlanes: number;
+  apps: { id: string; name: string; logo?: string }[];
+};
+
+// Starters are ready-made templates: a cluster and catalogue applications
+// that go well together. Using one creates a template to complete with a
+// provider, offers, keys and the zone of the names.
+function Starters() {
+  useI18n();
+  const navigate = useNavigate();
+  const { data, error } = usePoll<Starter[]>("/api/starters", 0);
+  const [busy, setBusy] = useState("");
+  const [failure, setFailure] = useState("");
+
+  async function use(starter: Starter) {
+    setBusy(starter.id);
+    setFailure("");
+    try {
+      const created = await api<Template>(`/api/starters/${starter.id}`, {
+        method: "POST",
+        body: JSON.stringify({ name: text(`starter.${starter.id}.name` as MsgKey) }),
+      });
+      navigate(`/templates/${created.id}`);
+    } catch (err) {
+      setFailure(err instanceof Error ? err.message : text("common.error"));
+      setBusy("");
+    }
+  }
+
+  if (error && !data) return null;
+  return (
+    <section className="mt-12">
+      <h2 className="mb-2 text-lg">{text("starter.title")}</h2>
+      <p className="mb-6 max-w-[720px] text-muted">{text("starter.intro")}</p>
+      {failure ? (
+        <div className="mb-6">
+          <ErrorText>{failure}</ErrorText>
+        </div>
+      ) : null}
+      {!data ? (
+        <LoadingLines lines={3} />
+      ) : (
+        <ul className="grid gap-4 md:grid-cols-2">
+          {data.map((starter) => (
+            <li key={starter.id} className="flex flex-col gap-3 rounded-md border border-line p-4">
+              <div>
+                <p className="font-medium">{text(`starter.${starter.id}.name` as MsgKey)}</p>
+                <p className="mt-1 text-muted">{text(`starter.${starter.id}.summary` as MsgKey)}</p>
+              </div>
+              <ul className="flex flex-wrap gap-x-4 gap-y-2" aria-label={text("starter.apps")}>
+                {starter.apps.map((app) => (
+                  <li key={app.id} className="flex items-center gap-2 text-[13px]">
+                    <AppLogo slug={app.logo ?? ""} name={app.name} size={24} />
+                    {app.name}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-[13px] text-faint">
+                {starter.servers > 1 ? text("starter.servers", { count: String(starter.servers) }) : text("starter.server")}
+                {" · "}
+                {text(`starter.${starter.id}.sizing` as MsgKey)}
+              </p>
+              <div className="mt-auto">
+                <Button type="button" variant="secondary" onClick={() => void use(starter)} disabled={busy !== ""}>
+                  {busy === starter.id ? <Spinner /> : null}
+                  {text("starter.use")}
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}

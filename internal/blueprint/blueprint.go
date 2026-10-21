@@ -25,13 +25,16 @@ type Server struct {
 }
 
 type App struct {
-	Name       string            `json:"name"`
-	SourceKind string            `json:"sourceKind"`
-	Source     string            `json:"source"`
-	Replicas   int               `json:"replicas,omitempty"`
-	Variables  map[string]string `json:"variables,omitempty"`
-	Services   []Service         `json:"services,omitempty"`
-	Names      []Name            `json:"names,omitempty"`
+	Name       string `json:"name"`
+	SourceKind string `json:"sourceKind"`
+	Source     string `json:"source"`
+	// Catalog is the catalogue article the app comes from: its variables,
+	// passwords included, are only drawn when the template runs.
+	Catalog   string            `json:"catalog,omitempty"`
+	Replicas  int               `json:"replicas,omitempty"`
+	Variables map[string]string `json:"variables,omitempty"`
+	Services  []Service         `json:"services,omitempty"`
+	Names     []Name            `json:"names,omitempty"`
 }
 
 type Service struct {

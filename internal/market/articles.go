@@ -210,6 +210,13 @@ var articles = []Article{
 	one("lldap", "LLDAP", "Un annuaire léger et son écran.", Identity, "lldap/lldap:v0.6.1", 17170, "/data", 1, map[string]string{
 		"LLDAP_JWT_SECRET": "{{secret:JWT}}", "LLDAP_LDAP_USER_PASS": "{{secret:ADMIN}}", "LLDAP_LDAP_BASE_DN": "dc=myinfra,dc=local",
 	}),
+	stack("openldap", "OpenLDAP", "Un annuaire LDAP et son écran d'administration.", Identity, map[string]string{
+		"LDAP_ORGANISATION": "MyInfra", "LDAP_DOMAIN": "myinfra.local", "LDAP_ADMIN_PASSWORD": "{{secret:ADMIN}}", "LDAP_TLS": "false",
+		"PHPLDAPADMIN_LDAP_HOSTS": "openldap", "PHPLDAPADMIN_HTTPS": "false", "PHPLDAPADMIN_LDAP_CLIENT_TLS": "false",
+	}, []Service{
+		pub("web", "osixia/phpldapadmin:0.9.0", 80, "", 0),
+		side("openldap", "osixia/openldap:1.5.0", 389, "/var/lib/ldap", 8),
+	}),
 
 	one("filebrowser", "File Browser", "Les fichiers d'un dossier, dans le navigateur.", Files, "filebrowser/filebrowser:v2.32.0", 80, "/srv", 16, nil),
 	stack("directus", "Directus", "Une base de contenu.", Files, merge(pgEnv("directus", "directus"), map[string]string{
@@ -297,6 +304,14 @@ var articles = []Article{
 	}, []Service{pub("web", "invoiceninja/invoiceninja:5.11.78", 80, "/var/www/app/public/storage", 4), maria()}, contact),
 
 	one("jellyfin", "Jellyfin", "Films, séries et musique.", Media, "jellyfin/jellyfin:10.10.7", 8096, "/config", 32, nil),
+	one("jellyseerr", "Jellyseerr", "Des demandes de films et de séries pour Jellyfin.", Media, "fallenbagel/jellyseerr:2.7.3", 5055, "/app/config", 4, nil),
+	one("sonarr", "Sonarr", "Le suivi des séries télévisées.", Media, "linuxserver/sonarr:4.0.20", 8989, "/config", 8, nil),
+	one("radarr", "Radarr", "Le suivi des films.", Media, "linuxserver/radarr:5.28.0", 7878, "/config", 8, nil),
+	one("lidarr", "Lidarr", "Le suivi de la musique.", Media, "linuxserver/lidarr:2.12.4", 8686, "/config", 8, nil),
+	one("readarr", "Readarr", "Le suivi des livres et des auteurs.", Media, "linuxserver/readarr:0.4.19-nightly", 8787, "/config", 8, nil),
+	one("prowlarr", "Prowlarr", "Les indexeurs pour la famille Servarr.", Media, "linuxserver/prowlarr:1.32.2", 9696, "/config", 4, nil),
+	one("bazarr", "Bazarr", "Les sous-titres pour Radarr et Sonarr.", Media, "linuxserver/bazarr:1.6.2", 6767, "/config", 4, nil),
+	one("whisparr", "Whisparr", "Le suivi des vidéos pour adultes.", Media, "linuxserver/whisparr:2.7.3", 6969, "/config", 8, nil),
 	one("navidrome", "Navidrome", "Une discothèque.", Media, "deluan/navidrome:0.55.2", 4533, "/data", 16, map[string]string{
 		"ND_MUSICFOLDER": "/data/music", "ND_DATAFOLDER": "/data",
 	}),

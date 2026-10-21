@@ -15,6 +15,7 @@ import (
 	"myinfra/internal/catalog"
 	"myinfra/internal/deploy"
 	"myinfra/internal/dns"
+	"myinfra/internal/market"
 	"myinfra/internal/store"
 )
 
@@ -732,6 +733,24 @@ func (a *API) createRunApp(ctx context.Context, owner string, run *blueprint.Run
 	}
 	source := strings.TrimSpace(app.Source)
 	vars := map[string]string{}
+	if app.Catalog != "" {
+		// An app from the catalogue draws its variables, passwords included,
+		// now: the template never holds them.
+		publicHost := slug(name) + "." + appsDomain(a.AppsDomain)
+		for _, item := range app.Names {
+			if host, err := dns.Join(item.Subdomain, item.Zone); err == nil && strings.TrimSpace(item.Subdomain) != "" {
+				publicHost = host
+				break
+			}
+		}
+		_, env, err := market.Expand(app.Catalog, publicHost, nil)
+		if err != nil {
+			return err
+		}
+		for key, value := range env {
+			vars[key] = value
+		}
+	}
 	for key, value := range app.Variables {
 		vars[key] = value
 	}

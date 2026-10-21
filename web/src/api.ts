@@ -383,6 +383,8 @@ export type TemplateServer = {
 export type TemplateName = { subdomain: string; zone: string };
 
 export type TemplateApp = {
+  // catalog is the catalogue article the app comes from.
+  catalog?: string;
   name: string;
   sourceKind: string;
   source: string;
