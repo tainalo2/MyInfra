@@ -20,8 +20,51 @@ Le Garage local reste la copie utilisée au démarrage sur le cluster ; le S3 ex
 
 ## PostgreSQL (CloudNativePG)
 
-Pas encore exporté vers S3 externe : les bases répliquées CNPG et leurs dumps de migration restent liés au stockage du cluster. Prévu en phase 2 (plugin Barman / object store CNPG).
+Quand les mêmes variables `MYINFRA_OFFSITE_S3_*` sont définies sur la copie **pilote**, chaque cluster PostgreSQL CNPG d’une application reçoit :
 
-## Alertes
+- un secret `myinfra-cnpg-offsite` (clés S3) ;
+- une section `backup.barmanObjectStore` sur la ressource `Cluster` ;
+- un `ScheduledBackup` (cron par défaut `0 4 * * *`, surcharge `MYINFRA_CNPG_BACKUP_CRON`).
 
-Non implémentées : voir point 2 de [ROADMAP.md](ROADMAP.md).
+Les sauvegardes WAL et de base sont rangées sous `clusters/<id-cluster>/cnpg/<nom-db>/` dans le bucket externe. Une **relivraison** de l’application applique la config. La restauration depuis ce dépôt se fait avec les outils CNPG / Barman (pas encore d’assistant dans l’UI).
+
+## Téléchargement local
+
+Sur la page d’une application, section **Sauvegardes** : une entrée par service et par source disponible.
+
+| Source | Quand |
+|--------|--------|
+| **Stockage du cluster** | SQLite avec sauvegarde continue active (`backup` = prêt) |
+| **S3 externe** | Même cas + variables `MYINFRA_OFFSITE_S3_*` sur la copie pilote |
+| **Disque** | Migration en cours, disque seul, ou fichiers non reconnus |
+| **PostgreSQL** | Service passé sur CNPG (`database` = prêt) |
+| **Machine seule** | Application sur un serveur sans cluster |
+
+API :
+
+- `GET /api/applications/{id}/backups` — sources disponibles (téléchargement et restauration)
+- `GET /api/applications/{id}/backups/{service}?source=…` — téléchargement
+- `POST /api/applications/{id}/backups/{service}?source=…` — restauration (corps = fichier, max 1 Go ; copie **pilote** uniquement)
+
+| Source restaurée | Fichier attendu |
+|------------------|-----------------|
+| `garage`, `offsite` | archive `.tar.gz` produite par le téléchargement |
+| `postgres` | dump `pg_restore` (format custom) |
+| `disk`, `machine` | archive `.tar.gz` du répertoire de données |
+
+## Alertes (optionnelles)
+
+MyInfra **démarre sans** e-mail ni ntfy. Pour activer des notifications plus tard :
+
+- `MYINFRA_ALERT_NTFY_URL` — URL de publication ntfy
+- `MYINFRA_ALERT_SMTP_HOST`, `MYINFRA_ALERT_SMTP_PORT`, `MYINFRA_ALERT_SMTP_USER`, `MYINFRA_ALERT_SMTP_PASSWORD`
+- `MYINFRA_ALERT_EMAIL_FROM`, `MYINFRA_ALERT_EMAIL_TO`
+
+Le paquet `internal/notify` n’envoie rien tant qu’aucune de ces variables n’est définie.
+
+La copie **pilote** envoie une alerte à la **première** détection (puis au retour à la normale, sans message de rétablissement) pour :
+
+- serveur SSH injoignable après plusieurs échecs ;
+- machine signalée absente chez le provider ;
+- cluster sans aucun serveur joignable ;
+- application publiée dont l’URL ne répond plus.

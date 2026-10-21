@@ -99,6 +99,7 @@ func (a *API) checkReach(ctx context.Context) {
 	_ = a.Store.PruneHealth(ctx)
 	a.loadReach(ctx, servers)
 	a.knockApps(ctx, servers)
+	a.emitReachAlerts(ctx, servers)
 }
 
 // knockApps calls the address of each published application: the servers

@@ -140,6 +140,23 @@ func TestStorageIsNotAnApplicationNamespace(t *testing.T) {
 	}
 }
 
+func TestDatabaseOffsiteCNPG(t *testing.T) {
+	app := App{ID: "app-2", Databases: []Database{{
+		Name: "vikunja-db", Database: "vikunja", Instances: 2,
+		Offsite:        &S3Replica{Endpoint: "https://s3.example.com", Bucket: "off", Path: "clusters/c1/cnpg/vikunja-db", KeyID: "key", Secret: "sec"},
+		BackupSchedule: "0 5 * * *",
+	}}}
+	raw := Render(app)
+	for _, want := range []string{
+		"name: myinfra-cnpg-offsite", "barmanObjectStore", "destinationPath: \"s3://off/clusters/c1/cnpg/vikunja-db\"",
+		"kind: ScheduledBackup", "schedule: \"0 5 * * *\"", "backup-vikunja-db",
+	} {
+		if !strings.Contains(raw, want) {
+			t.Fatalf("manque %q\n%s", want, raw)
+		}
+	}
+}
+
 func TestDatabaseServiceAndMigration(t *testing.T) {
 	svc := Service{Name: "vikunja", Image: "vikunja/vikunja:latest", Published: true, Listen: 3456, Replicas: 3,
 		Env:       map[string]string{"VIKUNJA_DATABASE_TYPE": "postgres", "VIKUNJA_DATABASE_HOST": "vikunja-db-rw"},

@@ -28,7 +28,13 @@ type Database struct {
 	Database  string
 	Instances int
 	SizeGi    int
+	// Offsite sends WAL and base backups to an external S3-compatible store.
+	Offsite *S3Replica
+	// BackupSchedule is the cron for ScheduledBackup when Offsite is set.
+	BackupSchedule string
 }
+
+const cnpgOffsiteSecret = "myinfra-cnpg-offsite"
 
 func writeDatabase(b *strings.Builder, ns string, db Database) {
 	instances := db.Instances
@@ -39,6 +45,10 @@ func writeDatabase(b *strings.Builder, ns string, db Database) {
 	if size < 1 {
 		size = 2
 	}
+	if db.Offsite != nil {
+		writeCNPGOffsiteSecret(b, ns, db.Offsite)
+	}
+	backup := cnpgBackupBlock(db.Offsite)
 	fmt.Fprintf(b, `---
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
@@ -71,7 +81,71 @@ spec:
   resources:
     requests:
       memory: 128Mi
-`, db.Name, ns, instances, size, db.Database, db.Database, failover)
+%[8]s`, db.Name, ns, instances, size, db.Database, db.Database, failover, backup)
+	if db.Offsite != nil {
+		schedule := strings.TrimSpace(db.BackupSchedule)
+		if schedule == "" {
+			schedule = "0 4 * * *"
+		}
+		fmt.Fprintf(b, `---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: backup-%s
+  namespace: %s
+  labels:
+    myinfra.io/managed: "true"
+spec:
+  schedule: %q
+  backupOwnerReference: self
+  cluster:
+    name: %s
+`, db.Name, ns, schedule, db.Name)
+	}
+}
+
+func writeCNPGOffsiteSecret(b *strings.Builder, ns string, off *S3Replica) {
+	if off == nil || off.Bucket == "" || off.Endpoint == "" {
+		return
+	}
+	fmt.Fprintf(b, `---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: %s
+  namespace: %s
+  labels:
+    myinfra.io/managed: "true"
+type: Opaque
+stringData:
+  ACCESS_KEY_ID: %q
+  SECRET_ACCESS_KEY: %q
+`, cnpgOffsiteSecret, ns, off.KeyID, off.Secret)
+}
+
+func cnpgBackupBlock(off *S3Replica) string {
+	if off == nil || off.Bucket == "" || off.Endpoint == "" {
+		return ""
+	}
+	path := strings.TrimSuffix(strings.TrimPrefix(off.Path, "/"), "/")
+	dest := fmt.Sprintf("s3://%s/%s", off.Bucket, path)
+	return fmt.Sprintf(`  backup:
+    retentionPolicy: 30d
+    barmanObjectStore:
+      destinationPath: %q
+      endpointURL: %q
+      s3Credentials:
+        accessKeyId:
+          name: %s
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: %s
+          key: SECRET_ACCESS_KEY
+      wal:
+        compression: gzip
+      data:
+        compression: gzip
+`, dest, off.Endpoint, cnpgOffsiteSecret, cnpgOffsiteSecret)
 }
 
 // Migration renders the Job that moves a service's data from its disk to

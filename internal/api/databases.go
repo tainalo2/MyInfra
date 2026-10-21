@@ -69,7 +69,12 @@ func (a *API) serviceDatabase(ctx context.Context, host deploy.Host, owner, clus
 	if err != nil {
 		return err
 	}
-	parts.Databases = append(parts.Databases, manifest.Database{Name: databaseName(svc.Name), Database: pg.Database, Instances: 2, SizeGi: svc.DiskGi})
+	db := manifest.Database{Name: databaseName(svc.Name), Database: pg.Database, Instances: 2, SizeGi: svc.DiskGi}
+	if off := offsiteCNPG(clusterID, databaseName(svc.Name)); off != nil {
+		db.Offsite = off
+		db.BackupSchedule = cnpgBackupCron()
+	}
+	parts.Databases = append(parts.Databases, db)
 	parts.Secrets = append(parts.Secrets, manifest.SharedSecret{Name: filesSecret(svc.Name), Data: map[string]string{"accessKey": keyID, "secretKey": secret}})
 	if svc.Database == "migrating" {
 		// Stopped on its disk until the data has moved.

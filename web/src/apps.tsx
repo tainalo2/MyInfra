@@ -19,6 +19,7 @@ import { LocalImagePicker } from "./localimages";
 import { NameList, namesOf, type AppName } from "./names";
 import { ImageOrigin } from "./registries";
 import { TofuFiles } from "./tofu";
+import { AppBackups } from "./backups";
 import { ActionsMenu, Button, ErrorText, Field, Fold, Group, Icon, IconButton, Input, LoadingLines, MenuItem, PageTitle, SectionTitle, Select, TextArea, TextButton, focus, podFailed, podHealth, statusLabel, useTrail } from "./ui";
 
 type RedundancyPreview = {
@@ -732,6 +733,7 @@ export function ApplicationPage() {
           </ul>
         </section>
       ) : null}
+      {app.guarded ? null : <AppBackups app={app} locked={locked} />}
       {app.guarded ? null : <AppVariables app={app} onSaved={() => void appPoll.reload()} />}
       {app.guarded ? null : <AppSecretLinks appId={app.id} />}
       {app.guarded ? (

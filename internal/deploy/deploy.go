@@ -478,6 +478,129 @@ func sshRun(ctx context.Context, host Host, command string, input io.Reader) (st
 	return strings.TrimSpace(stdout.String()), nil
 }
 
+// SSHPipe runs a command and copies its standard output to dst without holding
+// the whole stream in memory.
+func SSHPipe(ctx context.Context, host Host, command string, dst io.Writer) error {
+	if strings.TrimSpace(host.PrivateKey) == "" {
+		return fmt.Errorf("Aucune clé privée pour ouvrir la session SSH.")
+	}
+	signer, err := ssh.ParsePrivateKey([]byte(host.PrivateKey))
+	if err != nil {
+		return fmt.Errorf("SSH n'a pas pu préparer la connexion.")
+	}
+	config := &ssh.ClientConfig{
+		User: "root",
+		Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)},
+		HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {
+			return checkHostKey(host.Address, key)
+		},
+		Timeout: 10 * time.Second,
+	}
+	dialer := net.Dialer{Timeout: 10 * time.Second}
+	tcp, err := dialer.DialContext(ctx, "tcp", sshAddr(host.Address))
+	if err != nil {
+		return err
+	}
+	conn, chans, reqs, err := ssh.NewClientConn(tcp, sshAddr(host.Address), config)
+	if err != nil {
+		_ = tcp.Close()
+		return err
+	}
+	client := ssh.NewClient(conn, chans, reqs)
+	defer client.Close()
+	session, err := client.NewSession()
+	if err != nil {
+		return err
+	}
+	defer session.Close()
+	session.Stdout = dst
+	var stderr bytes.Buffer
+	session.Stderr = &stderr
+	run := make(chan error, 1)
+	go func() { run <- session.Run(command) }()
+	select {
+	case <-ctx.Done():
+		_ = session.Close()
+		return ctx.Err()
+	case err = <-run:
+	}
+	if err != nil {
+		text := strings.TrimSpace(stderr.String())
+		if len(text) > 400 {
+			text = text[len(text)-400:]
+		}
+		if text == "" {
+			text = err.Error()
+		}
+		if _, ok := err.(*ssh.ExitError); ok {
+			return &CommandError{Text: text}
+		}
+		return fmt.Errorf("%s", text)
+	}
+	return nil
+}
+
+// SSHPipeStdin runs a command and copies src into its standard input.
+func SSHPipeStdin(ctx context.Context, host Host, command string, src io.Reader) error {
+	if strings.TrimSpace(host.PrivateKey) == "" {
+		return fmt.Errorf("Aucune clé privée pour ouvrir la session SSH.")
+	}
+	signer, err := ssh.ParsePrivateKey([]byte(host.PrivateKey))
+	if err != nil {
+		return fmt.Errorf("SSH n'a pas pu préparer la connexion.")
+	}
+	config := &ssh.ClientConfig{
+		User: "root",
+		Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)},
+		HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {
+			return checkHostKey(host.Address, key)
+		},
+		Timeout: 10 * time.Second,
+	}
+	dialer := net.Dialer{Timeout: 10 * time.Second}
+	tcp, err := dialer.DialContext(ctx, "tcp", sshAddr(host.Address))
+	if err != nil {
+		return err
+	}
+	conn, chans, reqs, err := ssh.NewClientConn(tcp, sshAddr(host.Address), config)
+	if err != nil {
+		_ = tcp.Close()
+		return err
+	}
+	client := ssh.NewClient(conn, chans, reqs)
+	defer client.Close()
+	session, err := client.NewSession()
+	if err != nil {
+		return err
+	}
+	defer session.Close()
+	session.Stdin = src
+	var stderr bytes.Buffer
+	session.Stderr = &stderr
+	run := make(chan error, 1)
+	go func() { run <- session.Run(command) }()
+	select {
+	case <-ctx.Done():
+		_ = session.Close()
+		return ctx.Err()
+	case err = <-run:
+	}
+	if err != nil {
+		text := strings.TrimSpace(stderr.String())
+		if len(text) > 400 {
+			text = text[len(text)-400:]
+		}
+		if text == "" {
+			text = err.Error()
+		}
+		if _, ok := err.(*ssh.ExitError); ok {
+			return &CommandError{Text: text}
+		}
+		return fmt.Errorf("%s", text)
+	}
+	return nil
+}
+
 // CommandError is a command that ran on the machine and exited with an error,
 // as opposed to a machine that could not be reached.
 type CommandError struct {
