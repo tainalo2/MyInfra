@@ -66,10 +66,14 @@ func (a *API) serviceBackup(ctx context.Context, host deploy.Host, owner, cluste
 	if err != nil {
 		return nil, err
 	}
-	return &manifest.Backup{
+	b := &manifest.Backup{
 		Databases: profile.SQLite, Env: profile.Env, Bucket: bucket, KeyID: keyID, Secret: secret,
 		Copying: svc.Backup == "migrating",
-	}, nil
+	}
+	if off := offsiteS3(clusterID, appID); off != nil {
+		b.Offsite = off
+	}
+	return b, nil
 }
 
 // advanceBackups moves the services still copying to the store once their

@@ -22,8 +22,13 @@ func writeBackedUp(b *strings.Builder, ns, appID string, svc Service, replicas i
 		replicas = 1
 	}
 	name := "backup-" + svc.Name
-	fmt.Fprintf(b, "---\napiVersion: v1\nkind: Secret\nmetadata:\n  name: %s\n  namespace: %s\ntype: Opaque\nstringData:\n  LITESTREAM_ACCESS_KEY_ID: %q\n  LITESTREAM_SECRET_ACCESS_KEY: %q\n",
-		name, ns, svc.Backup.KeyID, svc.Backup.Secret)
+	if svc.Backup.Offsite != nil {
+		fmt.Fprintf(b, "---\napiVersion: v1\nkind: Secret\nmetadata:\n  name: %s\n  namespace: %s\ntype: Opaque\nstringData:\n  LITESTREAM_ACCESS_KEY_ID: %q\n  LITESTREAM_SECRET_ACCESS_KEY: %q\n  LITESTREAM_OFFSITE_ACCESS_KEY_ID: %q\n  LITESTREAM_OFFSITE_SECRET_ACCESS_KEY: %q\n",
+			name, ns, svc.Backup.KeyID, svc.Backup.Secret, svc.Backup.Offsite.KeyID, svc.Backup.Offsite.Secret)
+	} else {
+		fmt.Fprintf(b, "---\napiVersion: v1\nkind: Secret\nmetadata:\n  name: %s\n  namespace: %s\ntype: Opaque\nstringData:\n  LITESTREAM_ACCESS_KEY_ID: %q\n  LITESTREAM_SECRET_ACCESS_KEY: %q\n",
+			name, ns, svc.Backup.KeyID, svc.Backup.Secret)
+	}
 	fmt.Fprintf(b, "---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: %s\n  namespace: %s\ndata:\n  litestream.yml: |\n    dbs:\n", name, ns)
 	for _, db := range svc.Backup.Databases {
 		fmt.Fprintf(b, `      - path: %s
@@ -36,6 +41,18 @@ func writeBackedUp(b *strings.Builder, ns, appID string, svc Service, replicas i
             force-path-style: true
             sync-interval: 1s
 `, db, svc.Backup.Bucket, svc.Name, path.Base(db), StorageEndpoint, StorageRegion)
+		if o := svc.Backup.Offsite; o != nil {
+			fmt.Fprintf(b, `          - type: s3
+            bucket: %s
+            path: %s/%s/%s
+            endpoint: %s
+            region: %s
+            force-path-style: true
+            sync-interval: 30s
+            access-key-id: ${LITESTREAM_OFFSITE_ACCESS_KEY_ID}
+            secret-access-key: ${LITESTREAM_OFFSITE_SECRET_ACCESS_KEY}
+`, o.Bucket, o.Path, svc.Name, path.Base(db), o.Endpoint, o.Region)
+		}
 	}
 	state := "ready"
 	if svc.Backup.Copying {

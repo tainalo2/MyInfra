@@ -112,6 +112,17 @@ func TestBackedUpServiceRestartsAnywhere(t *testing.T) {
 	if strings.Contains(raw, "PersistentVolumeClaim") {
 		t.Fatal("prête, la copie ne doit plus dépendre d'un disque de nœud")
 	}
+	offsite := svc
+	offsite.Backup = &Backup{
+		Databases: svc.Backup.Databases, Bucket: svc.Backup.Bucket, KeyID: svc.Backup.KeyID, Secret: svc.Backup.Secret,
+		Offsite: &S3Replica{Endpoint: "https://s3.example.com", Bucket: "offsite", Region: "eu", Path: "clusters/c1/apps/a1", KeyID: "AKIAOFFSITE", Secret: strings.Repeat("cd", 32)},
+	}
+	rawOff := Render(App{ID: "app-1", Services: []Service{offsite}})
+	for _, want := range []string{"LITESTREAM_OFFSITE_ACCESS_KEY_ID", "bucket: offsite", "path: clusters/c1/apps/a1/uptime-kuma/kuma.db", "endpoint: https://s3.example.com"} {
+		if !strings.Contains(rawOff, want) {
+			t.Fatalf("hors cluster : manque %q\n%s", want, rawOff)
+		}
+	}
 	svc.Backup.Copying = true
 	raw = Render(App{ID: "app-1", Services: []Service{svc}})
 	if !strings.Contains(raw, "claimName: uptime-kuma") || strings.Contains(raw, "restore-0") {

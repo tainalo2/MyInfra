@@ -256,6 +256,10 @@ cd web && E2E_URL=http://127.0.0.1:8080 npm run screenshots
 
 Copies sharing the same master key exchange applications, destructions, template runs, and update state. The **peer list** in the UI is local to each copy: set `MYINFRA_PEERS` to the same comma-separated URLs on every copy at startup; each successful sync also adds the remote copy as a peer. Only one copy drives SSH and deployments at a time; a running destruction resumes on the copy that **takes the lead**. See [docs/CLUSTER_UPGRADE.md](docs/CLUSTER_UPGRADE.md) for a deployment checklist.
 
+### Roadmap and backups
+
+Priorities and status: [docs/ROADMAP.md](docs/ROADMAP.md). Optional **off-site S3** replicas for SQLite apps: [docs/BACKUPS.md](docs/BACKUPS.md) (`MYINFRA_OFFSITE_S3_*`).
+
 ### Release
 
 Push a tag such as `v1.4.0`, or run the **Publication** workflow from the Actions tab with a version. It checks the code, builds the `./build` executables for the six targets (each one is checked, and the Linux one is started with its embedded PostgreSQL), builds the multi-architecture image on `ghcr.io`, and publishes a GitHub release with the executables, a `compose.yaml` pinned to that image, and `SHA256SUMS`. A version with a suffix such as `1.4.0-rc.1` is a pre-release and leaves the `latest` image alone.

@@ -146,12 +146,25 @@ type SecretKey struct {
 	Key    string
 }
 
+// S3Replica is a Litestream destination outside the cluster's Garage.
+type S3Replica struct {
+	Endpoint string
+	Bucket   string
+	Region   string
+	// Path is the prefix inside the bucket (cluster and application).
+	Path   string
+	KeyID  string
+	Secret string
+}
+
 // Backup describes how Litestream replicates a service's SQLite files.
 type Backup struct {
 	Databases []string
 	Bucket    string
 	KeyID     string
 	Secret    string
+	// Offsite adds a second S3 replica (external object store).
+	Offsite *S3Replica
 	// Copying keeps the node disk while the first copy is made from it.
 	Copying bool
 	// Env is set on the application's container.
