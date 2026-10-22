@@ -112,6 +112,30 @@ func clientIP(r *http.Request) string {
 	return peer.String()
 }
 
+// announcedIP is an address the machine reports as its own.
+func announcedIP(raw string) string {
+	ip := net.ParseIP(strings.TrimSpace(raw))
+	if ip == nil || ip.IsLoopback() || ip.IsUnspecified() || ip.IsMulticast() || ip.IsLinkLocalUnicast() {
+		return ""
+	}
+	return ip.String()
+}
+
+// publicClientIP is the caller when the proxy preserved a public address.
+// A pod address is not where MyInfra can open SSH.
+func publicClientIP(r *http.Request) string {
+	ip := net.ParseIP(clientIP(r))
+	if ip == nil || ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() || ip.IsLinkLocalUnicast() {
+		return ""
+	}
+	return ip.String()
+}
+
+func routableIP(raw string) bool {
+	ip := net.ParseIP(strings.TrimSpace(raw))
+	return ip != nil && !ip.IsPrivate() && !ip.IsLoopback() && !ip.IsUnspecified() && !ip.IsLinkLocalUnicast()
+}
+
 // machineToken is the join secret: an Authorization header, or the legacy path.
 func machineToken(r *http.Request) string {
 	if rest, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {

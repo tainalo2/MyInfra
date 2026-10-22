@@ -96,4 +96,13 @@ func TestClientIPTrustsOnlyLocalProxies(t *testing.T) {
 	if got := clientIP(proxied); got != "198.51.100.4" {
 		t.Fatal(got)
 	}
+	pod := httptest.NewRequest(http.MethodPost, "/api/join", nil)
+	pod.RemoteAddr = "10.42.0.7:4000"
+	pod.Header.Set("X-Forwarded-For", "10.42.1.2")
+	if publicClientIP(pod) != "" {
+		t.Fatal(publicClientIP(pod))
+	}
+	if announcedIP("78.232.61.31") != "78.232.61.31" || !routableIP("78.232.61.31") || routableIP("10.42.1.2") {
+		t.Fatal("adresse")
+	}
 }

@@ -694,8 +694,8 @@ func (s *Store) ListServers(ctx context.Context, ownerID string) ([]Server, erro
 func (s *Store) ServerByToken(ctx context.Context, token string) (Server, []string, error) {
 	var srv Server
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, name, origin, status, address, COALESCE(cluster_id, ''), join_token
-		FROM servers WHERE join_token = $1`, token).Scan(&srv.ID, &srv.Name, &srv.Origin, &srv.Status, &srv.Address, &srv.ClusterID, &srv.JoinToken)
+		SELECT id, name, origin, status, address, COALESCE(cluster_id, ''), join_token, deploy
+		FROM servers WHERE join_token = $1`, token).Scan(&srv.ID, &srv.Name, &srv.Origin, &srv.Status, &srv.Address, &srv.ClusterID, &srv.JoinToken, &srv.Deploy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Server{}, nil, ErrNotFound
 	}
@@ -1037,10 +1037,23 @@ func (s *Store) WireGuardIndexes(ctx context.Context, clusterID string) (map[str
 	return out, rows.Err()
 }
 
-// RememberAddress records the address a pasted command called from.
+// RememberAddress records the address a pasted command called from, when none
+// is known yet.
 func (s *Store) RememberAddress(ctx context.Context, token, address string) error {
 	_, err := s.pool.Exec(ctx, `UPDATE servers SET address = $2 WHERE join_token = $1 AND address = ''`, token, address)
 	return err
+}
+
+// SetJoinAddress replaces the address announced by the machine itself.
+func (s *Store) SetJoinAddress(ctx context.Context, token, address string) error {
+	tag, err := s.pool.Exec(ctx, `UPDATE servers SET address = $2 WHERE join_token = $1`, token, address)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *Store) ServerOwner(ctx context.Context, id string) (string, error) {

@@ -250,8 +250,8 @@ func (a *API) createServer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, a.toServer(row))
 }
 
-// machineScript is the first boot of a machine. A cluster node only receives
-// the SSH keys; a machine alone also gets Docker, the proxy and the agent.
+// machineScript is the first boot of a machine: the SSH key and the address
+// MyInfra should call. Docker or Kubernetes come afterwards over SSH.
 func stepsFor(cloud bool, clusterID string) []deploy.Step {
 	if clusterID == "" {
 		return deploy.AloneSteps(cloud)
@@ -497,7 +497,8 @@ func (a *API) dropName(ctx context.Context, owner string, name store.Name) error
 
 func (a *API) join(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Token string `json:"token"`
+		Token   string `json:"token"`
+		Address string `json:"address"`
 	}
 	_ = json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body)
 	token := machineToken(r)
@@ -514,24 +515,38 @@ func (a *API) join(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// A machine bought by MyInfra is already being deployed: its call changes nothing.
-	if row.Status != "pending" {
+	if row.Status == "deploying" {
 		writeJSON(w, http.StatusOK, map[string]string{"status": row.Status})
 		return
 	}
-	if row.Address == "" {
-		if ip := clientIP(r); ip != "" {
-			_ = a.Store.RememberAddress(r.Context(), token, ip)
-		}
+	if row.Status != "pending" && row.Status != "linked" && row.Status != "failed" {
+		writeJSON(w, http.StatusOK, map[string]string{"status": row.Status})
+		return
 	}
-	if row.ClusterID == "" {
-		if err := a.Store.MarkLinked(r.Context(), token); err != nil {
+	announced := announcedIP(body.Address)
+	if announced == "" {
+		announced = publicClientIP(r)
+	}
+	if announced != "" && announced != row.Address && (row.Address == "" || (!routableIP(row.Address) && routableIP(announced))) {
+		if err := a.Store.SetJoinAddress(r.Context(), token, announced); err != nil {
 			a.mapErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"status": "linked"})
+		row.Address = announced
+	}
+	if row.Address == "" {
+		writeError(w, http.StatusConflict, "MyInfra n'a pas pu lire l'adresse de cette machine.")
 		return
 	}
-	// A pasted command on a future cluster node: Kubernetes is installed over SSH from here.
+	done := "docker"
+	if row.ClusterID != "" {
+		done = "cluster"
+	}
+	if row.Status == "linked" && deploy.Done(stepsOf(row.Deploy), done) {
+		writeJSON(w, http.StatusOK, map[string]string{"status": row.Status})
+		return
+	}
+	// The pasted command only opened SSH. Docker or Kubernetes continue from here.
 	owner, err := a.Store.ServerOwner(r.Context(), row.ID)
 	if err == nil && !a.Replica {
 		err = a.restartDeploy(context.Background(), owner, row.ID, false)

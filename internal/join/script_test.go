@@ -14,13 +14,11 @@ func TestScriptIncludesKeyAndToken(t *testing.T) {
 	if !strings.Contains(script, "chage -d 99999 root") || !strings.Contains(script, "ssh-ed25519 AAAAC3 test") || !strings.Contains(script, "Authorization: Bearer abc") || !strings.Contains(script, "PermitRootLogin prohibit-password") {
 		t.Fatal(script)
 	}
-	if !strings.Contains(script, "https://get.docker.com") || !strings.Contains(script, "/agent/sync") || strings.Contains(script, "/agent/abc/sync") {
+	if !strings.Contains(script, "/api/join") || !strings.Contains(script, "ip -4 route get") || strings.Contains(script, "https://get.docker.com") || strings.Contains(script, "/agent/sync") {
 		t.Fatal(script)
 	}
-	for _, line := range strings.Split(script, "\n") {
-		if strings.HasPrefix(strings.TrimSpace(line), "echo") && (strings.Contains(line, "Docker") || strings.Contains(line, "Traefik") || strings.Contains(line, "443")) {
-			t.Fatal(line)
-		}
+	if out, err := exec.Command("sh", "-n", "-c", script).CombinedOutput(); err != nil {
+		t.Fatalf("%s %v", out, err)
 	}
 }
 

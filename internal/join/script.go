@@ -3,29 +3,21 @@ package join
 import (
 	"fmt"
 	"strings"
-
-	"myinfra/internal/agent"
 )
 
-// Script prepares a machine that runs alone: SSH keys, then Docker, the proxy
-// and the agent that pulls the applications.
+// Script prepares a machine that runs alone: the SSH key, then a call home
+// with the address MyInfra should use. Docker and the proxy come over SSH.
 func Script(baseURL, token string, publicKeys []string) (string, error) {
-	b, err := access(token, publicKeys)
-	if err != nil {
-		return "", err
-	}
-	boot, err := agent.Bootstrap(baseURL, token)
-	if err != nil {
-		return "", err
-	}
-	b.WriteString(boot)
-	b.WriteString("echo\necho \"Machine déclarée dans MyInfra.\"\n")
-	return b.String(), nil
+	return callHome(baseURL, token, publicKeys)
 }
 
-// NodeScript prepares a future cluster node: SSH keys only. Kubernetes and its
+// NodeScript prepares a future cluster node the same way. Kubernetes and its
 // proxy come later over SSH, so nothing may hold ports 80 and 443 before them.
 func NodeScript(baseURL, token string, publicKeys []string) (string, error) {
+	return callHome(baseURL, token, publicKeys)
+}
+
+func callHome(baseURL, token string, publicKeys []string) (string, error) {
 	b, err := access(token, publicKeys)
 	if err != nil {
 		return "", err
@@ -35,7 +27,13 @@ func NodeScript(baseURL, token string, publicKeys []string) (string, error) {
 		return "", fmt.Errorf("adresse illisible")
 	}
 	if base != "" {
-		fmt.Fprintf(b, "curl -fsS -m 20 -X POST '%s/api/join' -H 'Authorization: Bearer %s' -H 'content-type: application/json' -d '{}' >/dev/null 2>&1 || true\n", base, token)
+		// The source of the route toward the internet is the address of this
+		// machine. The address seen by MyInfra is a pod address when the
+		// request crosses the cluster proxy.
+		fmt.Fprintf(b, `addr=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{ for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit } }')
+printf '%%s' "$addr" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' || addr=
+curl -fsS -m 20 -X POST '%s/api/join' -H 'Authorization: Bearer %s' -H 'content-type: application/json' -d "{\"address\":\"$addr\"}"
+`, base, token)
 	}
 	b.WriteString("echo\necho \"Machine déclarée dans MyInfra.\"\n")
 	return b.String(), nil
