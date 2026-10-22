@@ -14,7 +14,8 @@ func TestBootstrapInstallsRuntime(t *testing.T) {
 	for _, part := range []string{
 		"https://get.docker.com",
 		"traefik:v3.6.2",
-		"http://127.0.0.1:8080/agent/tok_en/sync",
+		"http://127.0.0.1:8080/agent/sync",
+		"Authorization: Bearer tok_en",
 		"/api/join",
 		"LLMNR=no",
 		"tcp dport { 22, 80, 443 } accept",

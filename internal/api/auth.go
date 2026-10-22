@@ -112,6 +112,33 @@ func clientIP(r *http.Request) string {
 	return peer.String()
 }
 
+// machineToken is the join secret: an Authorization header, or the legacy path.
+func machineToken(r *http.Request) string {
+	if rest, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
+		if token := strings.TrimSpace(rest); token != "" {
+			return token
+		}
+	}
+	return strings.TrimSpace(r.PathValue("token"))
+}
+
+// machineCaller reports whether this request may read what the join token
+// unlocks. Once the server address is an IP, only that address may continue.
+func machineCaller(address, ip string) bool {
+	address = strings.TrimSpace(address)
+	if address == "" {
+		return true
+	}
+	host := address
+	if h, _, err := net.SplitHostPort(address); err == nil {
+		host = h
+	}
+	if net.ParseIP(host) == nil {
+		return true
+	}
+	return host == ip
+}
+
 const sessionCookie = "myinfra"
 
 func (a *API) routes() http.Handler {
@@ -135,6 +162,7 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("PUT /api/account/totp", a.auth(a.steady(a.confirmTOTP)))
 	mux.HandleFunc("POST /api/account/totp/confirm", a.auth(a.steady(a.confirmTOTP)))
 	mux.HandleFunc("DELETE /api/account/totp", a.auth(a.steady(a.disableTOTP)))
+	mux.HandleFunc("POST /api/webhooks/git/{id}", a.gitWebhook)
 	mux.HandleFunc("POST /api/webhooks/git/{id}/{secret}", a.gitWebhook)
 
 	mux.HandleFunc("GET /api/tools", a.auth(a.hostTools))
@@ -219,11 +247,11 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("POST /api/images", a.adminAuth(a.steady(a.uploadLocalImage)))
 	mux.HandleFunc("POST /api/images/fetch", a.adminAuth(a.steady(a.fetchLocalImage)))
 	mux.HandleFunc("DELETE /api/images/{id}", a.adminAuth(a.steady(a.deleteLocalImage)))
-	mux.HandleFunc("GET /api/applications/{id}/variables/{name}", a.auth(a.revealVariable))
+	mux.HandleFunc("GET /api/applications/{id}/variables/{name}", a.adminAuth(a.revealVariable))
 	mux.HandleFunc("PUT /api/applications/{id}/variables", a.deployAuth(a.appSteady(a.setVariables)))
 	mux.HandleFunc("GET /api/applications/{id}/runtime", a.auth(a.applicationRuntime))
 	mux.HandleFunc("GET /api/applications/{id}/backups", a.auth(a.listApplicationBackups))
-	mux.HandleFunc("GET /api/applications/{id}/backups/{service}", a.auth(a.downloadApplicationBackup))
+	mux.HandleFunc("GET /api/applications/{id}/backups/{service}", a.adminAuth(a.downloadApplicationBackup))
 	mux.HandleFunc("POST /api/applications/{id}/backups/{service}", a.deployAuth(a.restoreApplicationBackup))
 	mux.HandleFunc("GET /api/applications/{id}/releases", a.auth(a.applicationReleases))
 	mux.HandleFunc("POST /api/applications/{id}/images", a.deployAuth(a.appSteady(a.replaceImages)))
@@ -267,8 +295,11 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("POST /api/copies/handover", a.requireRole(store.RoleAdmin)(a.steady(a.handOver)))
 
 	mux.HandleFunc("POST /api/join", a.join)
+	mux.HandleFunc("GET /join", a.joinScript)
 	mux.HandleFunc("GET /join/{token}", a.joinScript)
+	mux.HandleFunc("GET /agent/sync", a.agentSync)
 	mux.HandleFunc("GET /agent/{token}/sync", a.agentSync)
+	mux.HandleFunc("POST /api/agent", a.agentReport)
 	mux.HandleFunc("POST /api/agent/{token}", a.agentReport)
 
 	deploy.UseHostKeys(
@@ -341,17 +372,7 @@ func (a *API) setupState(w http.ResponseWriter, r *http.Request) {
 		a.mapErr(w, err)
 		return
 	}
-	out := map[string]any{"needed": n == 0, "users": n}
-	if n > 0 {
-		owner, err := a.Store.InfrastructureOwner(r.Context())
-		if err == nil {
-			acc, err := a.Store.UserAccount(r.Context(), owner)
-			if err == nil && acc.Login != "" {
-				out["primaryLogin"] = acc.Login
-			}
-		}
-	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, http.StatusOK, map[string]any{"needed": n == 0, "users": n})
 }
 
 func (a *API) setup(w http.ResponseWriter, r *http.Request) {

@@ -35,7 +35,7 @@ func NodeScript(baseURL, token string, publicKeys []string) (string, error) {
 		return "", fmt.Errorf("adresse illisible")
 	}
 	if base != "" {
-		fmt.Fprintf(b, "curl -fsS -m 20 -X POST '%s/api/join' -H 'content-type: application/json' -d '{\"token\":\"%s\"}' >/dev/null 2>&1 || true\n", base, token)
+		fmt.Fprintf(b, "curl -fsS -m 20 -X POST '%s/api/join' -H 'Authorization: Bearer %s' -H 'content-type: application/json' -d '{}' >/dev/null 2>&1 || true\n", base, token)
 	}
 	b.WriteString("echo\necho \"Machine déclarée dans MyInfra.\"\n")
 	return b.String(), nil
@@ -127,5 +127,5 @@ func access(token string, publicKeys []string) (*strings.Builder, error) {
 }
 
 func Command(baseURL, token string) string {
-	return fmt.Sprintf("curl -fsSL %s/join/%s | sudo sh", strings.TrimRight(baseURL, "/"), token)
+	return fmt.Sprintf("curl -fsSL -H 'Authorization: Bearer %s' %s/join | sudo sh", token, strings.TrimRight(baseURL, "/"))
 }

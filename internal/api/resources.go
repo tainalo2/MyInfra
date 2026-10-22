@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"strings"
@@ -498,11 +499,16 @@ func (a *API) join(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Token string `json:"token"`
 	}
-	if err := readJSON(w, r, &body); err != nil {
+	_ = json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body)
+	token := machineToken(r)
+	if token == "" {
+		token = strings.TrimSpace(body.Token)
+	}
+	if token == "" {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
 		return
 	}
-	row, _, err := a.Store.ServerByToken(r.Context(), body.Token)
+	row, _, err := a.Store.ServerByToken(r.Context(), token)
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -514,11 +520,11 @@ func (a *API) join(w http.ResponseWriter, r *http.Request) {
 	}
 	if row.Address == "" {
 		if ip := clientIP(r); ip != "" {
-			_ = a.Store.RememberAddress(r.Context(), body.Token, ip)
+			_ = a.Store.RememberAddress(r.Context(), token, ip)
 		}
 	}
 	if row.ClusterID == "" {
-		if err := a.Store.MarkLinked(r.Context(), body.Token); err != nil {
+		if err := a.Store.MarkLinked(r.Context(), token); err != nil {
 			a.mapErr(w, err)
 			return
 		}
@@ -538,7 +544,7 @@ func (a *API) join(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) joinScript(w http.ResponseWriter, r *http.Request) {
-	row, keys, err := a.Store.ServerByToken(r.Context(), r.PathValue("token"))
+	row, keys, err := a.Store.ServerByToken(r.Context(), machineToken(r))
 	if err != nil {
 		http.Error(w, "Introuvable.\n", http.StatusNotFound)
 		return

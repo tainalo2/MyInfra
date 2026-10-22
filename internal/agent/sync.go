@@ -76,7 +76,7 @@ func Bootstrap(baseURL, token string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	syncURL := base + "/agent/" + token + "/sync"
+	syncURL := base + "/agent/sync"
 	report := base + "/api/join"
 	var b strings.Builder
 	install, err := Install()
@@ -84,15 +84,15 @@ func Bootstrap(baseURL, token string) (string, error) {
 		return "", err
 	}
 	b.WriteString(install)
-	fmt.Fprintf(&b, "curl -fsS -X POST '%s' -H 'content-type: application/json' -d '{\"token\":\"%s\"}'\n", report, token)
+	fmt.Fprintf(&b, "curl -fsS -X POST '%s' -H 'Authorization: Bearer %s' -H 'content-type: application/json' -d '{}'\n", report, token)
 	fmt.Fprintf(&b, "if command -v systemctl >/dev/null 2>&1; then\n")
 	fmt.Fprintf(&b, "cat > /etc/systemd/system/myinfra-sync.service <<'EOF'\n")
 	b.WriteString("[Unit]\nDescription=MyInfra\nAfter=docker.service\nRequires=docker.service\n\n[Service]\n")
-	fmt.Fprintf(&b, "ExecStart=/bin/sh -c \"while true; do curl -fsS '%s' | sh; sleep 15; done\"\n", syncURL)
+	fmt.Fprintf(&b, "ExecStart=/bin/sh -c \"while true; do curl -fsS -H 'Authorization: Bearer %s' '%s' | sh; sleep 15; done\"\n", token, syncURL)
 	b.WriteString("Restart=always\n\n[Install]\nWantedBy=multi-user.target\nEOF\n")
 	b.WriteString("systemctl daemon-reload\nsystemctl enable --now myinfra-sync\n")
 	b.WriteString("else\n")
-	fmt.Fprintf(&b, "  (while true; do curl -fsS '%s' | sh; sleep 15; done) >/var/log/myinfra-sync.log 2>&1 &\n", syncURL)
+	fmt.Fprintf(&b, "  (while true; do curl -fsS -H 'Authorization: Bearer %s' '%s' | sh; sleep 15; done) >/var/log/myinfra-sync.log 2>&1 &\n", token, syncURL)
 	b.WriteString("fi\n")
 	return b.String(), nil
 }
@@ -102,9 +102,13 @@ func Sync(baseURL, token string, apps []Workload) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	report := base + "/api/agent/" + token
+	report := base + "/api/agent"
 	var b strings.Builder
 	b.WriteString("#!/bin/sh\nset -eu\n")
+	// Machines installed with the token in the URL rewrite their unit once.
+	fmt.Fprintf(&b, "if [ -f /etc/systemd/system/myinfra-sync.service ] && grep -q '/agent/.*/sync' /etc/systemd/system/myinfra-sync.service; then\n")
+	fmt.Fprintf(&b, "  printf '%%s\\n' '[Unit]' 'Description=MyInfra' 'After=docker.service' 'Requires=docker.service' '' '[Service]' 'ExecStart=/bin/sh -c \"while true; do curl -fsS -H '\\''Authorization: Bearer %s'\\'' '\\''%s'\\'' | sh; sleep 15; done\"' 'Restart=always' '' '[Install]' 'WantedBy=multi-user.target' > /etc/systemd/system/myinfra-sync.service\n", token, base+"/agent/sync")
+	b.WriteString("  systemctl daemon-reload || true\nfi\n")
 	// The agent pulls this script and the control plane may push it over SSH:
 	// one run at a time.
 	b.WriteString("if command -v flock >/dev/null 2>&1; then exec 9>/run/myinfra-sync.lock; flock -w 120 9 || exit 0; fi\n")
@@ -116,7 +120,7 @@ func Sync(baseURL, token string, apps []Workload) (string, error) {
 	b.WriteString(guard)
 	// report prints the state for a delivery over SSH, and sends it to the
 	// control plane when the machine can reach it.
-	fmt.Fprintf(&b, "report() {\n  echo \"myinfra-status $1 $2\"\n  curl -fsS -m 10 -X POST '%s' -H 'content-type: application/json' -d \"{\\\"id\\\":\\\"$1\\\",\\\"status\\\":\\\"$2\\\"}\" >/dev/null 2>&1 || true\n}\n", report)
+	fmt.Fprintf(&b, "report() {\n  echo \"myinfra-status $1 $2\"\n  curl -fsS -m 10 -X POST '%s' -H 'Authorization: Bearer %s' -H 'content-type: application/json' -d \"{\\\"id\\\":\\\"$1\\\",\\\"status\\\":\\\"$2\\\"}\" >/dev/null 2>&1 || true\n}\n", report, token)
 	b.WriteString(readyFunc)
 	b.WriteString(ensureProxy(proxyZones(apps)))
 	wanted := " "

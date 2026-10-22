@@ -11,10 +11,10 @@ func TestScriptIncludesKeyAndToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(script, "chage -d 99999 root") || !strings.Contains(script, "ssh-ed25519 AAAAC3 test") || !strings.Contains(script, `"token":"abc"`) || !strings.Contains(script, "PermitRootLogin prohibit-password") {
+	if !strings.Contains(script, "chage -d 99999 root") || !strings.Contains(script, "ssh-ed25519 AAAAC3 test") || !strings.Contains(script, "Authorization: Bearer abc") || !strings.Contains(script, "PermitRootLogin prohibit-password") {
 		t.Fatal(script)
 	}
-	if !strings.Contains(script, "https://get.docker.com") || !strings.Contains(script, "/agent/abc/sync") {
+	if !strings.Contains(script, "https://get.docker.com") || !strings.Contains(script, "/agent/sync") || strings.Contains(script, "/agent/abc/sync") {
 		t.Fatal(script)
 	}
 	for _, line := range strings.Split(script, "\n") {
@@ -35,7 +35,7 @@ func TestNodeScriptLeavesTheWebPortsFree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(script, "ssh-ed25519 AAAAC3 test") || !strings.Contains(script, `"token":"abc"`) {
+	if !strings.Contains(script, "ssh-ed25519 AAAAC3 test") || !strings.Contains(script, "Authorization: Bearer abc") {
 		t.Fatal(script)
 	}
 	if strings.Contains(script, "docker") || strings.Contains(script, "/agent/abc/sync") {

@@ -67,6 +67,8 @@ func TestReadOnlyCanBrowseNotMutate(t *testing.T) {
 		{http.MethodDelete, "/api/secrets/deadbeef", ""},
 		{http.MethodPost, "/api/templates", `{"name":"t","body":""}`},
 		{http.MethodPost, "/api/catalogue/nope", `{}`},
+		{http.MethodGet, "/api/applications/deadbeef/variables/SECRET", ""},
+		{http.MethodGet, "/api/applications/deadbeef/backups/db", ""},
 	}
 	for _, call := range forbidden {
 		rec := httptest.NewRecorder()

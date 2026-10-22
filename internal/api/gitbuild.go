@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"io"
@@ -167,9 +168,9 @@ func (a *API) buildGitImage(ctx context.Context, owner string, host deploy.Host,
 
 func (a *API) gitWebhook(w http.ResponseWriter, r *http.Request) {
 	appID := r.PathValue("id")
-	secret := r.PathValue("secret")
+	secret := webhookSecret(r)
 	app, err := a.Store.ApplicationByID(r.Context(), appID)
-	if err != nil || gitWebhookSecret(a.Master, app.ID) != secret {
+	if err != nil || !secretEqual(secret, gitWebhookSecret(a.Master, app.ID)) {
 		writeError(w, http.StatusNotFound, "Introuvable.")
 		return
 	}
@@ -216,10 +217,29 @@ func gitWebhookSecret(master []byte, appID string) string {
 	return hex.EncodeToString(mac.Sum(nil))[:32]
 }
 
+func webhookSecret(r *http.Request) string {
+	if header := strings.TrimSpace(r.Header.Get("X-Myinfra-Webhook")); header != "" {
+		return header
+	}
+	if rest, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
+		if token := strings.TrimSpace(rest); token != "" {
+			return token
+		}
+	}
+	return r.PathValue("secret")
+}
+
+func secretEqual(got, want string) bool {
+	if len(got) != len(want) || want == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
+}
+
 func (a *API) gitWebhookURL(appID string) string {
 	if len(a.Master) == 0 {
 		return ""
 	}
 	base := strings.TrimRight(a.PublicURL, "/")
-	return base + "/api/webhooks/git/" + url.PathEscape(appID) + "/" + gitWebhookSecret(a.Master, appID)
+	return base + "/api/webhooks/git/" + url.PathEscape(appID)
 }

@@ -120,7 +120,6 @@ function PasswordForm({
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [multiUser, setMultiUser] = useState(false);
-  const [primaryLogin, setPrimaryLogin] = useState("");
   const [again, setAgain] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -129,11 +128,10 @@ function PasswordForm({
 
   useEffect(() => {
     let cancel = false;
-    api<{ needed: boolean; users?: number; primaryLogin?: string }>("/api/setup")
+    api<{ needed: boolean; users?: number }>("/api/setup")
       .then(async (setup) => {
         if (cancel) return;
         if (!choosing && typeof setup.users === "number") setMultiUser(setup.users > 1);
-        if (!choosing && setup.primaryLogin) setPrimaryLogin(setup.primaryLogin);
         if (setup.needed && !choosing) navigate("/depart", { replace: true });
         if (!setup.needed && choosing) navigate("/", { replace: true });
         if (!setup.needed && !choosing) {
@@ -198,18 +196,6 @@ function PasswordForm({
               required
             />
           </Field>
-        ) : null}
-        {signingIn && !multiUser && primaryLogin ? (
-          <input
-            type="text"
-            name="username"
-            autoComplete="username"
-            value={primaryLogin}
-            readOnly
-            tabIndex={-1}
-            aria-hidden="true"
-            className="pointer-events-none absolute h-0 w-0 opacity-0"
-          />
         ) : null}
         <Field label={text("auth.password")} hint={signingIn ? text("auth.passwordLoginHint") : undefined}>
           <Input

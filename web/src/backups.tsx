@@ -3,6 +3,7 @@ import { Download, Upload } from "lucide-react";
 import { api, type Application } from "./api";
 import { text, type MsgKey } from "./i18n";
 import { Spinner } from "./kit";
+import { useSession } from "./session";
 import { Button, ErrorText, Icon, LoadingLines, SectionTitle } from "./ui";
 
 type BackupSource = { id: string; label: string; available: boolean; restore?: boolean; detail?: string };
@@ -10,6 +11,7 @@ type BackupService = { name: string; sources: BackupSource[] };
 type BackupList = { services: BackupService[] };
 
 export function AppBackups({ app, locked }: { app: Application; locked?: boolean }) {
+  const { canAdmin } = useSession();
   const [list, setList] = useState<BackupList | null>(null);
   const [error, setError] = useState("");
   const [restoring, setRestoring] = useState("");
@@ -98,6 +100,7 @@ export function AppBackups({ app, locked }: { app: Application; locked?: boolean
                       {source.detail ? <p className="text-[13px] text-faint">{source.detail}</p> : null}
                     </div>
                     <div className="flex flex-wrap gap-2">
+                      {canAdmin ? (
                       <Button
                         type="button"
                         variant="secondary"
@@ -109,6 +112,7 @@ export function AppBackups({ app, locked }: { app: Application; locked?: boolean
                         <Icon icon={Download} />
                         {text("backup.download")}
                       </Button>
+                      ) : null}
                       {source.restore ? (
                         <Button
                           type="button"

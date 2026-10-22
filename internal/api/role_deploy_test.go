@@ -57,6 +57,8 @@ func TestDeployRoleCredentialsAndTransfer(t *testing.T) {
 		{http.MethodPost, "/api/dns/records/publish", `{"zone":"z","name":"a"}`},
 		{http.MethodPost, "/api/images/fetch", `{"url":"http://example.com/x.tar"}`},
 		{http.MethodPost, "/api/transfer", `{}`},
+		{http.MethodGet, "/api/applications/deadbeef/variables/SECRET", ""},
+		{http.MethodGet, "/api/applications/deadbeef/backups/db", ""},
 	}
 	for _, call := range forbidden {
 		rec := httptest.NewRecorder()

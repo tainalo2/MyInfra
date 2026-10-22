@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"myinfra/internal/agent"
 	"myinfra/internal/store"
@@ -36,15 +37,20 @@ func (a *API) workloads(ctx context.Context, token string) ([]agent.Workload, er
 }
 
 func (a *API) agentSync(w http.ResponseWriter, r *http.Request) {
-	token := r.PathValue("token")
-	work, err := a.workloads(r.Context(), token)
-	if errors.Is(err, store.ErrNotFound) {
+	token := machineToken(r)
+	server, _, err := a.Store.ServerByToken(r.Context(), token)
+	if err != nil || !machineCaller(server.Address, clientIP(r)) {
 		http.Error(w, "Introuvable.\n", http.StatusNotFound)
 		return
 	}
-	if err != nil {
-		http.Error(w, "Une erreur est survenue.\n", http.StatusInternalServerError)
-		return
+	// No plaintext variables until this machine has called home from its address.
+	var work []agent.Workload
+	if strings.TrimSpace(server.Address) != "" {
+		work, err = a.workloads(r.Context(), token)
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			http.Error(w, "Une erreur est survenue.\n", http.StatusInternalServerError)
+			return
+		}
 	}
 	script, err := agent.Sync(a.PublicURL, token, work)
 	if err != nil {
@@ -66,13 +72,19 @@ func (a *API) agentReport(w http.ResponseWriter, r *http.Request) {
 	}
 	// A machine reachable over SSH is declared online by the delivery, once
 	// its address answers in HTTPS. The agent only reports a failure then.
+	token := machineToken(r)
+	server, _, err := a.Store.ServerByToken(r.Context(), token)
+	if err != nil || !machineCaller(server.Address, clientIP(r)) {
+		writeError(w, http.StatusNotFound, "Introuvable.")
+		return
+	}
 	if body.Status == "running" {
-		if server, _, err := a.Store.ServerByToken(r.Context(), r.PathValue("token")); err == nil && server.Address != "" {
+		if server.Address != "" {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 	}
-	if err := a.Store.ReportRun(r.Context(), r.PathValue("token"), body.ID, body.Status); err != nil {
+	if err := a.Store.ReportRun(r.Context(), token, body.ID, body.Status); err != nil {
 		a.mapErr(w, err)
 		return
 	}

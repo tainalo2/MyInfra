@@ -802,6 +802,7 @@ const masked = "••••••••";
 // AppVariables lists the variables of an application. A sealed value stays
 // hidden until its owner asks for it.
 function AppVariables({ app, onSaved }: { app: Application; onSaved: () => void }) {
+  const { canAdmin } = useSession();
   const [shown, setShown] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
@@ -826,7 +827,7 @@ function AppVariables({ app, onSaved }: { app: Application; onSaved: () => void 
               <span className="font-mono text-[13px]">{name}</span>
               <span className="flex min-w-0 items-center gap-3">
                 <span className="truncate font-mono text-[13px] text-muted">{shown[name] ?? value}</span>
-                {value === masked && shown[name] === undefined ? (
+                {canAdmin && value === masked && shown[name] === undefined ? (
                   <TextButton type="button" onClick={() => reveal(name)}>
                     {text("app.reveal")}
                   </TextButton>
