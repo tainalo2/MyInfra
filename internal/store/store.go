@@ -206,6 +206,26 @@ func (s *Store) DeleteSession(ctx context.Context, tokenHash string) error {
 	return err
 }
 
+func (s *Store) CreateLoginChallenge(ctx context.Context, tokenHash, userID string, expires time.Time) error {
+	if _, err := s.pool.Exec(ctx, `DELETE FROM login_challenges WHERE expires_at <= now()`); err != nil {
+		return err
+	}
+	_, err := s.pool.Exec(ctx, `INSERT INTO login_challenges (token_hash, user_id, expires_at) VALUES ($1, $2, $3)`, tokenHash, userID, expires)
+	return err
+}
+
+func (s *Store) TakeLoginChallenge(ctx context.Context, tokenHash string) (string, error) {
+	var userID string
+	err := s.pool.QueryRow(ctx, `
+		DELETE FROM login_challenges
+		WHERE token_hash = $1 AND expires_at > now()
+		RETURNING user_id`, tokenHash).Scan(&userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return userID, err
+}
+
 func (s *Store) UserBySession(ctx context.Context, tokenHash string) (string, error) {
 	var userID string
 	err := s.pool.QueryRow(ctx, `SELECT user_id FROM sessions WHERE token_hash = $1 AND expires_at > now()`, tokenHash).Scan(&userID)

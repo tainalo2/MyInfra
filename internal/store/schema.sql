@@ -26,6 +26,14 @@ CREATE TABLE IF NOT EXISTS sessions (
     expires_at timestamptz NOT NULL
 );
 
+-- Shared by every replica: a login that asks for 2FA and the code check
+-- often land on different processes.
+CREATE TABLE IF NOT EXISTS login_challenges (
+    token_hash text PRIMARY KEY,
+    user_id text NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    expires_at timestamptz NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS secrets (
     id text PRIMARY KEY,
     owner_id text NOT NULL REFERENCES users (id) ON DELETE CASCADE,

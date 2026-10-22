@@ -62,10 +62,8 @@ type API struct {
 	destructionMu      sync.Mutex
 	syncMu             sync.Mutex
 	destructionBusy    map[string]bool
-	authGates          gateSet
-	loginMu            sync.Mutex
-	loginChallenges    map[string]loginChallenge
-	alerts             *alertState
+	authGates gateSet
+	alerts    *alertState
 }
 
 func (a *API) Handler() http.Handler { return a.routes() }

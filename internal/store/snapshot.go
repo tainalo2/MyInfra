@@ -337,6 +337,7 @@ func (s *Store) ImportSnapshot(ctx context.Context, snap Snapshot) error {
 		`DELETE FROM servers`,
 		`DELETE FROM clusters`,
 		`DELETE FROM sessions`,
+		`DELETE FROM login_challenges`,
 		`DELETE FROM secrets`,
 		`DELETE FROM app_secrets`,
 		`DELETE FROM users`,

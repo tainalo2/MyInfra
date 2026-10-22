@@ -141,7 +141,9 @@ func TestLoginRequiresTOTPWithoutCodeOnSingleUser(t *testing.T) {
 	}
 	okBody, _ := json.Marshal(map[string]string{"challenge": step2["challenge"].(string), "totp": goodCode})
 	ok := httptest.NewRecorder()
-	handler.ServeHTTP(ok, httptest.NewRequest(http.MethodPost, "/api/session/totp", bytes.NewReader(okBody)))
+	// The password check and the code check can hit two replicas.
+	other := &API{Store: a.Store}
+	other.Handler().ServeHTTP(ok, httptest.NewRequest(http.MethodPost, "/api/session/totp", bytes.NewReader(okBody)))
 	if ok.Code != http.StatusOK {
 		t.Fatalf("good totp %d %s", ok.Code, ok.Body.String())
 	}

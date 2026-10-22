@@ -419,38 +419,21 @@ func (a *API) setup(w http.ResponseWriter, r *http.Request) {
 	a.startSession(w, r, id)
 }
 
-type loginChallenge struct {
-	userID string
-	until  time.Time
-}
-
-func (a *API) issueLoginChallenge(userID string) string {
+func (a *API) issueLoginChallenge(ctx context.Context, userID string) (string, error) {
 	token := randomToken()
-	a.loginMu.Lock()
-	if a.loginChallenges == nil {
-		a.loginChallenges = map[string]loginChallenge{}
+	err := a.Store.CreateLoginChallenge(ctx, hashToken(token), userID, time.Now().Add(5*time.Minute))
+	if err != nil {
+		return "", err
 	}
-	now := time.Now()
-	for key, row := range a.loginChallenges {
-		if now.After(row.until) {
-			delete(a.loginChallenges, key)
-		}
-	}
-	a.loginChallenges[token] = loginChallenge{userID: userID, until: now.Add(5 * time.Minute)}
-	a.loginMu.Unlock()
-	return token
+	return token, nil
 }
 
-func (a *API) takeLoginChallenge(token string) (string, bool) {
-	a.loginMu.Lock()
-	defer a.loginMu.Unlock()
-	row, ok := a.loginChallenges[token]
-	if !ok || time.Now().After(row.until) {
-		delete(a.loginChallenges, token)
+func (a *API) takeLoginChallenge(ctx context.Context, token string) (string, bool) {
+	if strings.TrimSpace(token) == "" {
 		return "", false
 	}
-	delete(a.loginChallenges, token)
-	return row.userID, true
+	userID, err := a.Store.TakeLoginChallenge(ctx, hashToken(token))
+	return userID, err == nil
 }
 
 func (a *API) accountForLogin(ctx context.Context, login string) (store.UserAccount, error) {
@@ -502,9 +485,14 @@ func (a *API) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if account.TOTPSecret != "" {
+		challenge, err := a.issueLoginChallenge(r.Context(), account.ID)
+		if err != nil {
+			a.mapErr(w, err)
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"totpRequired": true,
-			"challenge":    a.issueLoginChallenge(account.ID),
+			"challenge":    challenge,
 		})
 		return
 	}
@@ -520,7 +508,7 @@ func (a *API) loginTOTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
 		return
 	}
-	userID, ok := a.takeLoginChallenge(strings.TrimSpace(body.Challenge))
+	userID, ok := a.takeLoginChallenge(r.Context(), strings.TrimSpace(body.Challenge))
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "Cette vérification a expiré. Reconnectez-vous.")
 		return
