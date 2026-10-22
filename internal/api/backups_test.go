@@ -30,6 +30,15 @@ func TestBackupSourcesPostgres(t *testing.T) {
 	}
 }
 
+func TestBackupSourcesStatelessIsEmpty(t *testing.T) {
+	a := &API{}
+	app := store.Application{ID: "a1", ServerID: "s1", Services: []store.Service{{Name: "excalidraw", Image: "excalidraw/excalidraw:latest"}}}
+	sources := a.backupSources(app, app.Services[0])
+	if sources == nil || len(sources) != 0 {
+		t.Fatalf("%+v", sources)
+	}
+}
+
 func TestBackupSourcesAloneMachine(t *testing.T) {
 	a := &API{}
 	app := store.Application{ID: "a1", ServerID: "s1", Services: []store.Service{{Name: "web", Image: "nginx:latest", Disk: true}}}

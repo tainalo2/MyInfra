@@ -40,7 +40,7 @@ func (a *API) listApplicationBackups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if app.ID == selfAppID {
-		writeJSON(w, http.StatusOK, backupListView{})
+		writeJSON(w, http.StatusOK, backupListView{Services: []backupServiceView{}})
 		return
 	}
 	out := backupListView{Services: make([]backupServiceView, 0, len(app.Services))}
@@ -92,6 +92,9 @@ func (a *API) backupSources(app store.Application, svc store.Service) []backupSo
 	}
 	if len(out) == 0 && svc.Disk && profile.Kind != market.Stateless {
 		add("disk", "Disque", "fichiers non reconnus par MyInfra", true)
+	}
+	if out == nil {
+		out = []backupSourceView{}
 	}
 	return out
 }

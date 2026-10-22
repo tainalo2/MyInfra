@@ -58,7 +58,9 @@ export function AppBackups({ app, locked }: { app: Application; locked?: boolean
     }
   }
 
-  const rows = (list?.services ?? []).filter((svc) => svc.sources.some((s) => s.available));
+  const rows = (list?.services ?? [])
+    .map((svc) => ({ ...svc, sources: svc.sources ?? [] }))
+    .filter((svc) => svc.sources.some((s) => s.available));
   if (!list && !error) return <LoadingLines lines={1} label={text("backup.loading")} />;
   if (error) {
     return (
