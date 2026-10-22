@@ -8,6 +8,17 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarded boolean;
 UPDATE users SET onboarded = true WHERE onboarded IS NULL;
 ALTER TABLE users ALTER COLUMN onboarded SET DEFAULT false;
 ALTER TABLE users ALTER COLUMN onboarded SET NOT NULL;
+-- Comptes ajoutés après la mise en route : même parcours que le propriétaire.
+UPDATE users u SET onboarded = true
+WHERE NOT u.onboarded
+  AND u.id <> (SELECT id FROM users ORDER BY created_at ASC LIMIT 1)
+  AND EXISTS (SELECT 1 FROM users p WHERE p.onboarded ORDER BY p.created_at ASC LIMIT 1);
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS login text NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT 'admin';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret text NOT NULL DEFAULT '';
+UPDATE users SET login = left(id, 12) WHERE login = '';
+CREATE UNIQUE INDEX IF NOT EXISTS users_login_unique ON users (lower(login)) WHERE login <> '';
 
 CREATE TABLE IF NOT EXISTS sessions (
     token_hash text PRIMARY KEY,

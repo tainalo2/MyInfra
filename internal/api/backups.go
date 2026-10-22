@@ -34,7 +34,7 @@ type backupListView struct {
 }
 
 func (a *API) listApplicationBackups(w http.ResponseWriter, r *http.Request) {
-	app, err := a.Store.Application(r.Context(), userID(r.Context()), r.PathValue("id"))
+	app, err := a.Store.Application(r.Context(), ownerID(r.Context()), r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -122,7 +122,7 @@ func diskBackupAvailable(profile market.Profile, svc store.Service) bool {
 }
 
 func (a *API) downloadApplicationBackup(w http.ResponseWriter, r *http.Request) {
-	app, err := a.Store.Application(r.Context(), userID(r.Context()), r.PathValue("id"))
+	app, err := a.Store.Application(r.Context(), ownerID(r.Context()), r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -162,7 +162,7 @@ func (a *API) downloadApplicationBackup(w http.ResponseWriter, r *http.Request) 
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Hour)
 	defer cancel()
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	filename, command, host, contentType, err := a.backupCommand(ctx, owner, app, svc, source)
 	if err != nil {
 		a.mapErr(w, err)

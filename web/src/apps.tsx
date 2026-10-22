@@ -13,6 +13,7 @@ import { podCpu, size } from "./measure";
 import { ImageEditor } from "./images";
 import { AppUpdateNotice } from "./updates";
 import { UpdateLock, useActivity } from "./activity";
+import { useSession } from "./session";
 import { AppSecretLinks } from "./secrets";
 import { PodActions } from "./pods";
 import { LocalImagePicker } from "./localimages";
@@ -248,6 +249,7 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
                     >
                       <option value="catalogue">{text("common.catalogue")}</option>
                       <option value="image">{text("common.image")}</option>
+                      <option value="git">{text("common.git")}</option>
                       <option value="template">{text("common.template")}</option>
                     </Select>
                   </Field>
@@ -318,7 +320,13 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
                           required
                           autoCapitalize="off"
                           spellCheck={false}
-                          placeholder={sourceKind === "image" ? "ghcr.io/organisation/app:1.0.0" : undefined}
+                          placeholder={
+                            sourceKind === "git"
+                              ? "https://github.com/org/app@main"
+                              : sourceKind === "image"
+                                ? "ghcr.io/organisation/app:1.0.0"
+                                : undefined
+                          }
                         />
                       </Field>
                       {sourceKind === "image" ? (
@@ -563,6 +571,7 @@ export function ApplicationPage() {
   const [pausing, setPausing] = useState(false);
   const [editingNames, setEditingNames] = useState(false);
   const { updating, transferring } = useActivity();
+  const { canDeploy, canAdmin } = useSession();
 
   // A new version is followed closely until it answers.
   useEffect(() => {
@@ -611,6 +620,7 @@ export function ApplicationPage() {
   // During its update or that of its servers, the application only changes
   // once it is over; it can still be removed.
   const locked = app.rollout === "updating" || updating(app.serverId, app.clusterId) || transferring;
+  const mutable = canDeploy && !app.guarded;
 
   return (
     <div className="max-w-[720px]">
@@ -628,9 +638,9 @@ export function ApplicationPage() {
           {app.source.replace(/@sha256:[a-f0-9]+$/, "")} · {where}
         </p>
       </div>
-      {app.guarded ? null : <UpdateLock locked={locked && !transferring} />}
-      {app.guarded ? null : <AppUpdateNotice app={app} onStarted={() => void appPoll.reload()} />}
-      {app.guarded ? null : (
+      {mutable ? <UpdateLock locked={locked && !transferring} /> : null}
+      {mutable ? <AppUpdateNotice app={app} onStarted={() => void appPoll.reload()} /> : null}
+      {mutable ? (
         <div className="mt-6 flex flex-wrap items-center gap-3">
           {address ? (
             <a href={`https://${address}`} target="_blank" rel="noreferrer" className={`inline-flex min-h-11 items-center gap-2 rounded-md bg-ink px-4 py-2 text-canvas sm:min-h-0 ${focus}`}>
@@ -648,7 +658,7 @@ export function ApplicationPage() {
             </MenuItem>
           </ActionsMenu>
         </div>
-      )}
+      ) : null}
       <div className="mt-8">
         <UsageMeters sample={runtime} />
       </div>
@@ -664,7 +674,15 @@ export function ApplicationPage() {
             ))}
           </div>
         ) : app.services && app.services.length > 0 ? (
-          <ImageEditor app={app} onChange={setApp} />
+          mutable ? <ImageEditor app={app} onChange={setApp} /> : (
+            <ul className="mt-4 flex flex-col gap-2">
+              {app.services.map((service) => (
+                <li key={service.name} className="font-mono text-[13px] text-muted">
+                  {service.name} · {service.image}
+                </li>
+              ))}
+            </ul>
+          )
         ) : (
           <p className="mt-4 text-muted">{text("apps.noService")}</p>
         )}
@@ -691,15 +709,15 @@ export function ApplicationPage() {
           {!runtime ? <LoadingLines lines={2} label={text("apps.instances")} /> : pods.length === 0 ? <p className="text-muted">{runtime.measured ? text("common.noPod") : text("common.noMeasure")}</p> : null}
         </Fold>
       </div>
-      {(app.domains && app.domains.length > 0) || !app.guarded ? (
+      {(app.domains && app.domains.length > 0) || mutable ? (
         <section className="mt-10">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <SectionTitle>{text("apps.addresses")}</SectionTitle>
-            {app.guarded ? null : (
+            {mutable ? (
               <TextButton type="button" onClick={() => setEditingNames(true)} disabled={locked}>
                 {text("names.edit")}
               </TextButton>
-            )}
+            ) : null}
           </div>
           <ul className="mt-2 flex flex-col">
             {(app.domains ?? []).filter((domain) => domain.kind === "custom").length === 0 ? (
@@ -724,7 +742,7 @@ export function ApplicationPage() {
                 {domain.zone ? (
                   <div className="mt-3">
                     <Fold title={text("common.advanced")}>
-                      <TofuFiles path={`/api/dns/${domain.hostname}/tofu`} />
+                      <TofuFiles path={`/api/dns/${domain.hostname}/tofu`} readOnly={!canAdmin} />
                     </Fold>
                   </div>
                 ) : null}
@@ -733,10 +751,10 @@ export function ApplicationPage() {
           </ul>
         </section>
       ) : null}
-      {app.guarded ? null : <AppBackups app={app} locked={locked} />}
-      {app.guarded ? null : <AppVariables app={app} onSaved={() => void appPoll.reload()} />}
-      {app.guarded ? null : <AppSecretLinks appId={app.id} />}
-      {app.guarded ? (
+      {mutable ? <AppBackups app={app} locked={locked} /> : null}
+      {mutable ? <AppVariables app={app} onSaved={() => void appPoll.reload()} /> : null}
+      {mutable ? <AppSecretLinks appId={app.id} /> : null}
+      {app.guarded && canDeploy ? (
         <div className="mt-10">
           <TextButton type="button" tone="danger" onClick={() => setConfirm("delete")}>
             <Icon icon={Trash2} />

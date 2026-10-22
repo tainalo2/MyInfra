@@ -258,7 +258,7 @@ Copies sharing the same master key exchange applications, destructions, template
 
 ### Roadmap and backups
 
-Priorities and status: [docs/ROADMAP.md](docs/ROADMAP.md). Optional **off-site S3** replicas for SQLite apps: [docs/BACKUPS.md](docs/BACKUPS.md) (`MYINFRA_OFFSITE_S3_*`).
+Short roadmap: [docs/ROADMAP.md](docs/ROADMAP.md). Optional **off-site S3** replicas for SQLite apps: [docs/BACKUPS.md](docs/BACKUPS.md) (`MYINFRA_OFFSITE_S3_*`).
 
 ### Release
 

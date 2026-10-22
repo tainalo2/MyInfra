@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -49,7 +51,7 @@ func (a *API) advanceRuns(ctx context.Context) {
 }
 
 func (a *API) listTemplates(w http.ResponseWriter, r *http.Request) {
-	rows, err := a.Store.ListTemplates(r.Context(), userID(r.Context()))
+	rows, err := a.Store.ListTemplates(r.Context(), ownerID(r.Context()))
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -62,7 +64,7 @@ func (a *API) listTemplates(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) getTemplate(w http.ResponseWriter, r *http.Request) {
-	row, err := a.Store.Template(r.Context(), userID(r.Context()), r.PathValue("id"))
+	row, err := a.Store.Template(r.Context(), ownerID(r.Context()), r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -82,11 +84,11 @@ func (a *API) createTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := newID()
-	if err := a.Store.CreateTemplate(r.Context(), userID(r.Context()), id, name, raw); err != nil {
+	if err := a.Store.CreateTemplate(r.Context(), ownerID(r.Context()), id, name, raw); err != nil {
 		a.mapErr(w, err)
 		return
 	}
-	row, err := a.Store.Template(r.Context(), userID(r.Context()), id)
+	row, err := a.Store.Template(r.Context(), ownerID(r.Context()), id)
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -105,7 +107,7 @@ func (a *API) updateTemplate(w http.ResponseWriter, r *http.Request) {
 		a.mapErr(w, err)
 		return
 	}
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	if err := a.Store.UpdateTemplate(r.Context(), owner, r.PathValue("id"), name, raw); err != nil {
 		a.mapErr(w, err)
 		return
@@ -119,7 +121,7 @@ func (a *API) updateTemplate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) deleteTemplate(w http.ResponseWriter, r *http.Request) {
-	if err := a.Store.DeleteTemplate(r.Context(), userID(r.Context()), r.PathValue("id")); err != nil {
+	if err := a.Store.DeleteTemplate(r.Context(), ownerID(r.Context()), r.PathValue("id")); err != nil {
 		a.mapErr(w, err)
 		return
 	}
@@ -127,7 +129,7 @@ func (a *API) deleteTemplate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) exportTemplate(w http.ResponseWriter, r *http.Request) {
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	row, err := a.Store.Template(r.Context(), owner, r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
@@ -149,13 +151,105 @@ func (a *API) exportTemplate(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(append(raw, '\n'))
 }
 
+func (a *API) importTemplateURL(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		URL string `json:"url"`
+	}
+	if err := readJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "Requête illisible.")
+		return
+	}
+	target, err := url.Parse(strings.TrimSpace(body.URL))
+	if err != nil || target.Scheme != "https" || target.Host == "" {
+		writeError(w, http.StatusBadRequest, "Indiquez une URL https:// vers un fichier JSON.")
+		return
+	}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target.String(), nil)
+	if err != nil {
+		a.mapErr(w, err)
+		return
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "Le fichier est injoignable.")
+		return
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		writeError(w, http.StatusBadGateway, "Le fichier répond "+res.Status+".")
+		return
+	}
+	raw, err := io.ReadAll(io.LimitReader(res.Body, 2<<20))
+	if err != nil {
+		a.mapErr(w, err)
+		return
+	}
+	var doc blueprint.Document
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		writeError(w, http.StatusBadRequest, "Le fichier n'est pas un template JSON valide.")
+		return
+	}
+	owner := ownerID(r.Context())
+	secrets, err := a.Store.ListSecrets(r.Context(), owner)
+	if err != nil {
+		a.mapErr(w, err)
+		return
+	}
+	var providers, keys []blueprint.Account
+	var zones []string
+	for _, sec := range secrets {
+		switch sec.Kind {
+		case "provider_token":
+			providers = append(providers, blueprint.Account{ID: sec.ID, Name: sec.Name, Provider: sec.Provider})
+		case "ssh_key":
+			keys = append(keys, blueprint.Account{ID: sec.ID, Name: sec.Name})
+		case "dns_token":
+			names, zoneErr := a.zonesOf(r.Context(), owner, sec.ID)
+			if zoneErr != nil {
+				continue
+			}
+			zones = append(zones, names...)
+		}
+	}
+	bodyTpl, message := blueprint.Bind(doc, providers, keys, zones)
+	if message != "" {
+		writeError(w, http.StatusBadRequest, message)
+		return
+	}
+	name, ok := cleanName(doc.Name)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "Donnez un nom au template.")
+		return
+	}
+	if message = blueprint.Validate(bodyTpl); message != "" {
+		writeError(w, http.StatusBadRequest, message)
+		return
+	}
+	encoded, err := json.Marshal(bodyTpl)
+	if err != nil {
+		a.mapErr(w, err)
+		return
+	}
+	id := newID()
+	if err := a.Store.CreateTemplate(r.Context(), owner, id, name, encoded); err != nil {
+		a.mapErr(w, err)
+		return
+	}
+	row, err := a.Store.Template(r.Context(), owner, id)
+	if err != nil {
+		a.mapErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, toTemplate(row))
+}
+
 func (a *API) importTemplate(w http.ResponseWriter, r *http.Request) {
 	var doc blueprint.Document
 	if err := readJSON(w, r, &doc); err != nil {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
 		return
 	}
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	secrets, err := a.Store.ListSecrets(r.Context(), owner)
 	if err != nil {
 		a.mapErr(w, err)
@@ -217,7 +311,7 @@ func (a *API) templateFromCluster(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
 		return
 	}
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	cluster, err := a.Store.Cluster(r.Context(), owner, strings.TrimSpace(input.ClusterID))
 	if err != nil {
 		a.mapErr(w, err)
@@ -336,7 +430,7 @@ func (a *API) startTemplateRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
 		return
 	}
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	if _, err := a.Store.Template(r.Context(), owner, r.PathValue("id")); err != nil {
 		a.mapErr(w, err)
 		return
@@ -433,7 +527,7 @@ func (a *API) startTemplateRun(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) getTemplateRun(w http.ResponseWriter, r *http.Request) {
-	row, err := a.Store.TemplateRun(r.Context(), userID(r.Context()), r.PathValue("id"))
+	row, err := a.Store.TemplateRun(r.Context(), ownerID(r.Context()), r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -442,7 +536,7 @@ func (a *API) getTemplateRun(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) resumeTemplateRun(w http.ResponseWriter, r *http.Request) {
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	row, err := a.Store.TemplateRun(r.Context(), owner, r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
@@ -731,11 +825,27 @@ func (a *API) createRunApp(ctx context.Context, owner string, run *blueprint.Run
 	if app.Replicas == 0 {
 		app.Replicas = 1
 	}
-	if app.SourceKind == "git" {
-		return errString(gitUnsupported)
-	}
-	source := strings.TrimSpace(app.Source)
 	vars := map[string]string{}
+	source := strings.TrimSpace(app.Source)
+	if app.SourceKind == "git" {
+		services := make([]serviceBody, 0, len(app.Services))
+		for _, svc := range app.Services {
+			services = append(services, serviceBody{Name: svc.Name, Image: svc.Image, Published: svc.Published, Disk: svc.Disk, Replicas: svc.Replicas, Listen: svc.Listen, DiskPath: svc.DiskPath, DiskGi: svc.DiskGi, Args: svc.Args})
+		}
+		built, imageRef, gitVars, err := a.materializeGitApp(ctx, owner, "", clusterID, name, source, services)
+		if err != nil {
+			return err
+		}
+		for key, value := range gitVars {
+			vars[key] = value
+		}
+		app.SourceKind = "image"
+		source = imageRef
+		app.Services = make([]blueprint.Service, len(built))
+		for i, svc := range built {
+			app.Services[i] = blueprint.Service{Name: svc.Name, Image: svc.Image, Published: svc.Published, Disk: svc.Disk, Replicas: svc.Replicas, Listen: svc.Listen, DiskPath: svc.DiskPath, DiskGi: svc.DiskGi, Args: svc.Args}
+		}
+	}
 	if app.Catalog != "" {
 		// An app from the catalogue draws its variables, passwords included,
 		// now: the template never holds them.

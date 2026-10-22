@@ -59,7 +59,7 @@ func (a *API) resumeDestructions() {
 }
 
 func (a *API) listDestructions(w http.ResponseWriter, r *http.Request) {
-	rows, err := a.Store.ListRunningDestructions(r.Context(), userID(r.Context()))
+	rows, err := a.Store.ListRunningDestructions(r.Context(), ownerID(r.Context()))
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -72,7 +72,7 @@ func (a *API) listDestructions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) getDestruction(w http.ResponseWriter, r *http.Request) {
-	row, err := a.Store.Destruction(r.Context(), userID(r.Context()), r.PathValue("id"))
+	row, err := a.Store.Destruction(r.Context(), ownerID(r.Context()), r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -85,7 +85,7 @@ func (a *API) resumeDestruction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, replicaAlone)
 		return
 	}
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	row, err := a.Store.Destruction(r.Context(), owner, r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
@@ -126,7 +126,7 @@ func (a *API) deleteApplication(w http.ResponseWriter, r *http.Request) {
 		a.deleteSelf(w, r)
 		return
 	}
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	app, err := a.Store.Application(r.Context(), owner, r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)

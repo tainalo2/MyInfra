@@ -4,27 +4,29 @@ import { Search } from "lucide-react";
 import { api, type Application, type Cluster, type Server } from "./api";
 import { text, type MsgKey } from "./i18n";
 import { useI18n } from "./lang";
+import { useSession } from "./session";
 import { Icon, focus } from "./ui";
 
 const openEvent = "myinfra:palette";
 
 type Entry = { key: string; kind: MsgKey; label: string; note?: string; to: string };
 
-const pages: { label: MsgKey; to: string }[] = [
+const pages: { label: MsgKey; to: string; deployOnly?: boolean; adminOnly?: boolean }[] = [
   { label: "nav.overview", to: "/" },
   { label: "nav.apps", to: "/applications" },
-  { label: "crumb.newApp", to: "/nouveau" },
+  { label: "crumb.newApp", to: "/nouveau", deployOnly: true },
   { label: "nav.clusters", to: "/clusters" },
   { label: "nav.history", to: "/historique" },
   { label: "nav.templates", to: "/templates" },
-  { label: "nav.providers", to: "/providers" },
-  { label: "nav.dns", to: "/dns" },
-  { label: "nav.registries", to: "/registres" },
-  { label: "nav.images", to: "/images" },
-  { label: "nav.ssh", to: "/cles" },
-  { label: "nav.secrets", to: "/secrets" },
-  { label: "nav.transfer", to: "/transfert" },
-  { label: "nav.copies", to: "/copies" },
+  { label: "nav.providers", to: "/providers", deployOnly: true },
+  { label: "nav.dns", to: "/dns", deployOnly: true },
+  { label: "nav.registries", to: "/registres", deployOnly: true },
+  { label: "nav.images", to: "/images", deployOnly: true },
+  { label: "nav.ssh", to: "/cles", deployOnly: true },
+  { label: "nav.secrets", to: "/secrets", deployOnly: true },
+  { label: "nav.transfer", to: "/transfert", adminOnly: true },
+  { label: "nav.copies", to: "/copies", adminOnly: true },
+  { label: "nav.users", to: "/utilisateurs", adminOnly: true },
   { label: "nav.account", to: "/compte" },
 ];
 
@@ -51,8 +53,15 @@ export function SearchButton() {
 }
 
 // Palette jumps to an app, a server, a cluster or a page from anywhere.
+function pageVisible(page: (typeof pages)[number], canDeploy: boolean, canAdmin: boolean) {
+  if (page.adminOnly && !canAdmin) return false;
+  if (page.deployOnly && !canDeploy) return false;
+  return true;
+}
+
 export function Palette() {
   useI18n();
+  const { canDeploy, canAdmin } = useSession();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -86,7 +95,9 @@ export function Palette() {
     setActive(0);
     input.current?.focus();
     let stop = false;
-    const fixed: Entry[] = pages.map((page) => ({ key: `page:${page.to}`, kind: "palette.page", label: text(page.label), to: page.to }));
+    const fixed: Entry[] = pages
+      .filter((page) => pageVisible(page, canDeploy, canAdmin))
+      .map((page) => ({ key: `page:${page.to}`, kind: "palette.page", label: text(page.label), to: page.to }));
     setEntries(fixed);
     Promise.all([
       api<Application[]>("/api/applications").catch(() => []),
@@ -104,7 +115,7 @@ export function Palette() {
     return () => {
       stop = true;
     };
-  }, [open]);
+  }, [open, canDeploy, canAdmin]);
 
   function close() {
     setOpen(false);

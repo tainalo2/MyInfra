@@ -67,7 +67,7 @@ func (a *API) managedNames(ctx context.Context, owner string) (map[string]manage
 }
 
 func (a *API) listDNSRecords(w http.ResponseWriter, r *http.Request) {
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	managed, err := a.managedNames(r.Context(), owner)
 	if err != nil {
 		a.mapErr(w, err)
@@ -216,7 +216,7 @@ func (a *API) dropDNSName(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	managed, err := a.managedNames(r.Context(), owner)
 	if err != nil {
 		a.mapErr(w, err)
@@ -246,7 +246,7 @@ func (a *API) publishDNSName(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	managed, err := a.managedNames(r.Context(), owner)
 	if err != nil {
 		a.mapErr(w, err)

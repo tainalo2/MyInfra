@@ -20,6 +20,8 @@ import { useTheme } from "./theme";
 import { Icon, focus } from "./ui";
 import { settingsMatch } from "./navmap";
 import { urgent, useUpdates } from "./updates";
+import { userDisplayName, userInitials } from "./account-nav";
+import { useSession } from "./session";
 
 type Tab = { to: string; label: MsgKey; icon: LucideIcon; end?: boolean; match?: string[] };
 
@@ -30,7 +32,9 @@ const tabs: Tab[] = [
   { to: "/historique", label: "nav.activity", icon: History, match: ["/historique", "/deploiements", "/suppressions", "/destructions"] },
 ];
 
-const more: Tab[] = [
+type MoreTab = Tab & { deployOnly?: boolean; adminOnly?: boolean };
+
+const more: MoreTab[] = [
   { to: "/templates", label: "nav.templates", icon: LayoutTemplate },
   { to: "/mises-a-jour", label: "nav.updates", icon: ArrowUpCircle },
   { to: "/reglages", label: "nav.settings", icon: Settings, match: settingsMatch },
@@ -93,16 +97,36 @@ export function BottomTabs({ deployments, removals }: { deployments: number; rem
 }
 
 function MoreSheet({ onClose }: { onClose: () => void }) {
+  const { canDeploy, canAdmin, login, role } = useSession();
   const { lang, setLang } = useI18n();
   const { theme, toggle } = useTheme();
   const navigate = useNavigate();
   const { view } = useUpdates();
   const updates = view?.updates.length ?? 0;
   const hot = view?.updates.some(urgent) ?? false;
-  const items: Tab[] = more;
+  const items = more.filter((item) => {
+    if (item.adminOnly && !canAdmin) return false;
+    if (item.deployOnly && !canDeploy) return false;
+    return true;
+  });
   return (
     <Sheet title={text("nav.more")} onClose={onClose}>
       <ul className="-mx-2 flex flex-col">
+        <li>
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              navigate("/compte");
+            }}
+            className={`flex min-h-12 w-full items-center gap-3 rounded-md px-2 text-left ${focus}`}
+          >
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-ink text-[12px] font-medium text-canvas">
+              {userInitials(login || userDisplayName(login, role))}
+            </span>
+            <span className="flex-1 truncate">{userDisplayName(login, role)}</span>
+          </button>
+        </li>
         {items.map((item) => (
           <li key={item.to}>
             <button

@@ -35,7 +35,7 @@ func toSecretView(sec store.Secret) secretView {
 }
 
 func (a *API) listSecrets(w http.ResponseWriter, r *http.Request) {
-	rows, err := a.Store.ListSecrets(r.Context(), userID(r.Context()))
+	rows, err := a.Store.ListSecrets(r.Context(), ownerID(r.Context()))
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -71,7 +71,7 @@ func (a *API) generateSSHKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sealed.ID = newID()
-	sealed.OwnerID = userID(r.Context())
+	sealed.OwnerID = ownerID(r.Context())
 	sealed.Kind = "ssh_key"
 	sealed.Name = name
 	sealed.Fingerprint = pair.Fingerprint
@@ -114,7 +114,7 @@ func (a *API) importSSHKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sealed.ID = newID()
-	sealed.OwnerID = userID(r.Context())
+	sealed.OwnerID = ownerID(r.Context())
 	sealed.Kind = "ssh_key"
 	sealed.Name = name
 	sealed.Fingerprint = fingerprint
@@ -132,7 +132,7 @@ func (a *API) importSSHKey(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) downloadSSHKey(w http.ResponseWriter, r *http.Request) {
-	sec, err := a.Store.Secret(r.Context(), userID(r.Context()), r.PathValue("id"))
+	sec, err := a.Store.Secret(r.Context(), ownerID(r.Context()), r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -150,7 +150,7 @@ func (a *API) downloadSSHKey(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) deleteSecret(w http.ResponseWriter, r *http.Request) {
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	sec, err := a.Store.Secret(r.Context(), owner, r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
@@ -221,7 +221,7 @@ func (a *API) createToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sealed.ID = newID()
-	sealed.OwnerID = userID(r.Context())
+	sealed.OwnerID = ownerID(r.Context())
 	sealed.Kind = body.Kind
 	sealed.Name = name
 	sealed.Provider = body.Provider
@@ -444,7 +444,7 @@ func publicKeyID(provider string, tok storedToken) string {
 }
 
 func (a *API) replaceToken(w http.ResponseWriter, r *http.Request) {
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	sec, err := a.Store.Secret(r.Context(), owner, r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
@@ -494,7 +494,7 @@ func (a *API) replaceToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) probeSecret(w http.ResponseWriter, r *http.Request) {
-	sec, err := a.Store.Secret(r.Context(), userID(r.Context()), r.PathValue("id"))
+	sec, err := a.Store.Secret(r.Context(), ownerID(r.Context()), r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
 		return

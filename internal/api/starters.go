@@ -63,7 +63,7 @@ func (a *API) useStarter(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Donnez un nom au template.")
 		return
 	}
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	body := blueprint.Body{ClusterName: starter.Cluster}
 	for _, server := range starter.Servers {
 		body.Servers = append(body.Servers, blueprint.Server{Name: server.Name, ControlPlane: server.ControlPlane})

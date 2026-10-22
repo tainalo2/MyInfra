@@ -49,7 +49,7 @@ func redundancyPlan(services []store.Service) redundancy {
 
 // redundancyOptions tells the dialog what each service would become.
 func (a *API) redundancyOptions(w http.ResponseWriter, r *http.Request) {
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	app, err := a.Store.Application(r.Context(), owner, r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
@@ -81,7 +81,7 @@ func (a *API) setRedundancy(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
 		return
 	}
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	if r.PathValue("id") == selfAppID {
 		writeError(w, http.StatusConflict, "Les copies de MyInfra se règlent depuis Transfert.")
 		return
@@ -317,7 +317,7 @@ func (a *API) redundancyPreview(w http.ResponseWriter, r *http.Request) {
 	nodes := 0
 	if body.ClusterID != "" {
 		var err error
-		if nodes, err = a.linkedNodes(r.Context(), userID(r.Context()), body.ClusterID); err != nil {
+		if nodes, err = a.linkedNodes(r.Context(), ownerID(r.Context()), body.ClusterID); err != nil {
 			a.mapErr(w, err)
 			return
 		}

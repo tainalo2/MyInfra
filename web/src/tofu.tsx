@@ -4,7 +4,7 @@ import { Spinner } from "./kit";
 import { Button, ErrorText, TextButton } from "./ui";
 import { text } from "./i18n";
 
-export function TofuFiles({ path }: { path: string }) {
+export function TofuFiles({ path, readOnly = false }: { path: string; readOnly?: boolean }) {
   const [files, setFiles] = useState<Record<string, string> | null>(null);
   const [name, setName] = useState("main.tf.json");
   const [draft, setDraft] = useState("");
@@ -51,6 +51,15 @@ export function TofuFiles({ path }: { path: string }) {
       setName(chosen);
       setDraft(next[chosen] ?? "");
     });
+  }
+
+  if (readOnly) {
+    return (
+      <div className="mb-8 flex flex-col gap-3">
+        <a className="text-muted underline" href={`${path}?export=1`}>{text("template.export")}</a>
+        <pre className="min-h-48 overflow-auto border border-line bg-transparent p-3 font-mono text-[13px] whitespace-pre-wrap">{draft}</pre>
+      </div>
+    );
   }
 
   return (

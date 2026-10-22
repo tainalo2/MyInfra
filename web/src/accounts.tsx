@@ -7,7 +7,8 @@ import { ConfirmDialog, Spinner, useToast } from "./kit";
 import { ProviderLogo } from "./logos";
 import { ProviderGuide, hasGuide } from "./provider-guide";
 import { ProviderSelect, type ProviderOption } from "./provider-select";
-import { ActionsMenu, Button, EmptyList, ErrorText, Field, Icon, Input, ItemList, ListActions, LoadingCards, LoadingLines, PageTitle, MenuItem, Skeleton, TextButton, entryClass, focus, useListMode } from "./ui";
+import { useSession } from "./session";
+import { ActionsMenu, Button, EmptyList, ErrorText, Field, Icon, Input, ItemList, ListActions, ListModeButton, LoadingCards, LoadingLines, PageTitle, MenuItem, Skeleton, TextButton, entryClass, focus, useListMode } from "./ui";
 
 export const providerOptions = [
   { value: "hetzner", label: "Hetzner" },
@@ -105,6 +106,7 @@ function TokenPage({
   const [guideOpen, setGuideOpen] = useState(false);
   const [removing, setRemoving] = useState<Secret | null>(null);
   const toast = useToast();
+  const { canAdmin } = useSession();
   const [mode, toggleMode] = useListMode();
   const chosen = provider !== "";
 
@@ -193,7 +195,7 @@ function TokenPage({
             <TextButton type="button" onClick={close}>
               {text("common.cancel")}
             </TextButton>
-          ) : loaded && secrets.length > 0 ? (
+          ) : canAdmin && loaded && secrets.length > 0 ? (
             <ListActions
               mode={mode}
               onToggle={toggleMode}
@@ -203,6 +205,10 @@ function TokenPage({
                 setCreating(true);
               }}
             />
+          ) : loaded && secrets.length > 0 ? (
+            <span className="hidden md:inline-flex">
+              <ListModeButton mode={mode} onToggle={toggleMode} />
+            </span>
           ) : null
         }
       />
@@ -211,7 +217,7 @@ function TokenPage({
           <ErrorText>{error}</ErrorText>
         </div>
       ) : null}
-      {creating || editing ? (
+      {canAdmin && (creating || editing) ? (
       <form onSubmit={save} className="flex max-w-[720px] flex-col gap-6">
         {editing ? (
           <p className="flex items-center gap-2">
@@ -259,7 +265,11 @@ function TokenPage({
       ) : !loaded ? (
         <LoadingCards />
       ) : secrets.length === 0 ? (
-        <EmptyList message={empty} label={createLabel} onCreate={() => setCreating(true)} />
+        canAdmin ? (
+          <EmptyList message={empty} label={createLabel} onCreate={() => setCreating(true)} />
+        ) : (
+          <p className="text-muted">{empty}</p>
+        )
       ) : (
       <ItemList mode={mode}>
         {secrets.map((secret) => (
@@ -285,31 +295,33 @@ function TokenPage({
                   )}
                 </span>
               </span>
-              {kind === "provider_token" ? (
-                <ProviderMenu
-                  onChangeKey={() => {
-                    setCreating(false);
-                    setEditing(secret);
-                    setProvider(secret.provider ?? "");
-                    setName(secret.name);
-                    setCreds(emptyCredentials);
-                    setError("");
-                  }}
-                  onDelete={() => setRemoving(secret)}
-                />
-              ) : (
-                <TextButton type="button" tone="danger" onClick={() => setRemoving(secret)}>
-                  <Icon icon={Trash2} />
-                  {text("common.delete")}
-                </TextButton>
-              )}
+              {canAdmin ? (
+                kind === "provider_token" ? (
+                  <ProviderMenu
+                    onChangeKey={() => {
+                      setCreating(false);
+                      setEditing(secret);
+                      setProvider(secret.provider ?? "");
+                      setName(secret.name);
+                      setCreds(emptyCredentials);
+                      setError("");
+                    }}
+                    onDelete={() => setRemoving(secret)}
+                  />
+                ) : (
+                  <TextButton type="button" tone="danger" onClick={() => setRemoving(secret)}>
+                    <Icon icon={Trash2} />
+                    {text("common.delete")}
+                  </TextButton>
+                )
+              ) : null}
             </span>
           </li>
         ))}
       </ItemList>
       )}
       {guideOpen && chosen ? <ProviderGuide kind={kind} provider={provider} onClose={() => setGuideOpen(false)} /> : null}
-      {removing ? (
+      {canAdmin && removing ? (
         <ConfirmDialog
           title={text("server.removeNamed", { name: removing.name })}
           confirmLabel={text("common.delete")}

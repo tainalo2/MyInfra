@@ -121,7 +121,7 @@ const (
 )
 
 func (a *API) clusterUsage(w http.ResponseWriter, r *http.Request) {
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	id := r.PathValue("id")
 	if _, ok := a.ownedCluster(r.Context(), owner, id); !ok {
 		writeError(w, http.StatusNotFound, "Introuvable.")
@@ -132,7 +132,7 @@ func (a *API) clusterUsage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) serverRuntime(w http.ResponseWriter, r *http.Request) {
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	server, err := a.Store.Server(r.Context(), owner, r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
@@ -190,7 +190,7 @@ func (a *API) applicationRuntime(w http.ResponseWriter, r *http.Request) {
 		a.selfRuntime(w, r)
 		return
 	}
-	app, err := a.Store.Application(r.Context(), userID(r.Context()), r.PathValue("id"))
+	app, err := a.Store.Application(r.Context(), ownerID(r.Context()), r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -198,14 +198,14 @@ func (a *API) applicationRuntime(w http.ResponseWriter, r *http.Request) {
 	view := runtimeView{Pods: []podView{}, Status: app.RunStatus}
 	if app.ClusterID == "" {
 		if app.ServerID != "" {
-			view.Pods, view.Measured = a.machineContainers(r.Context(), userID(r.Context()), app.ServerID, app.ID)
+			view.Pods, view.Measured = a.machineContainers(r.Context(), ownerID(r.Context()), app.ServerID, app.ID)
 		}
 		writeJSON(w, http.StatusOK, view)
 		return
 	}
-	sample, measured := a.clusterSample(r.Context(), userID(r.Context()), app.ClusterID)
+	sample, measured := a.clusterSample(r.Context(), ownerID(r.Context()), app.ClusterID)
 	view.Measured = measured
-	servers, _ := a.Store.ListServers(r.Context(), userID(r.Context()))
+	servers, _ := a.Store.ListServers(r.Context(), ownerID(r.Context()))
 	ns := manifest.Namespace(app.ID)
 	nodes := map[string]bool{}
 	for _, pod := range sample.Pods {

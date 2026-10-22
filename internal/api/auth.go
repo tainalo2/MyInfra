@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+
+	"myinfra/internal/auth"
 	"myinfra/internal/deploy"
 	"myinfra/internal/store"
 	"myinfra/internal/ui"
@@ -120,138 +122,149 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("GET /api/setup", a.setupState)
 	mux.HandleFunc("POST /api/setup", a.setup)
 	mux.HandleFunc("POST /api/session", a.login)
+	mux.HandleFunc("POST /api/session/totp", a.loginTOTP)
 	mux.HandleFunc("DELETE /api/session", a.logout)
 	mux.HandleFunc("GET /api/session", a.auth(a.session))
 	mux.HandleFunc("POST /api/onboarding", a.auth(a.steady(a.finishOnboarding)))
 	mux.HandleFunc("POST /api/password", a.auth(a.steady(a.changePassword)))
+	mux.HandleFunc("GET /api/users", a.requireRole(store.RoleAdmin)(a.listUsers))
+	mux.HandleFunc("POST /api/users", a.requireRole(store.RoleAdmin)(a.steady(a.createUser)))
+	mux.HandleFunc("DELETE /api/users/{id}", a.requireRole(store.RoleAdmin)(a.steady(a.deleteUser)))
+	mux.HandleFunc("PATCH /api/account", a.auth(a.steady(a.updateAccount)))
+	mux.HandleFunc("POST /api/account/totp", a.auth(a.steady(a.prepareTOTP)))
+	mux.HandleFunc("PUT /api/account/totp", a.auth(a.steady(a.confirmTOTP)))
+	mux.HandleFunc("POST /api/account/totp/confirm", a.auth(a.steady(a.confirmTOTP)))
+	mux.HandleFunc("DELETE /api/account/totp", a.auth(a.steady(a.disableTOTP)))
+	mux.HandleFunc("POST /api/webhooks/git/{id}/{secret}", a.gitWebhook)
 
 	mux.HandleFunc("GET /api/tools", a.auth(a.hostTools))
-	mux.HandleFunc("POST /api/tools/{name}", a.auth(a.installTool))
+	mux.HandleFunc("POST /api/tools/{name}", a.deployAuth(a.installTool))
 
 	mux.HandleFunc("GET /api/secrets", a.auth(a.listSecrets))
-	mux.HandleFunc("POST /api/secrets/ssh-keys", a.auth(a.steady(a.generateSSHKey)))
-	mux.HandleFunc("POST /api/secrets/ssh-keys/import", a.auth(a.steady(a.importSSHKey)))
-	mux.HandleFunc("GET /api/secrets/{id}/private", a.auth(a.downloadSSHKey))
-	mux.HandleFunc("POST /api/secrets/tokens", a.auth(a.steady(a.createToken)))
-	mux.HandleFunc("PUT /api/secrets/{id}", a.auth(a.steady(a.replaceToken)))
+	mux.HandleFunc("POST /api/secrets/ssh-keys", a.adminAuth(a.steady(a.generateSSHKey)))
+	mux.HandleFunc("POST /api/secrets/ssh-keys/import", a.adminAuth(a.steady(a.importSSHKey)))
+	mux.HandleFunc("GET /api/secrets/{id}/private", a.adminAuth(a.downloadSSHKey))
+	mux.HandleFunc("POST /api/secrets/tokens", a.adminAuth(a.steady(a.createToken)))
+	mux.HandleFunc("PUT /api/secrets/{id}", a.adminAuth(a.steady(a.replaceToken)))
 	mux.HandleFunc("POST /api/secrets/{id}/check", a.auth(a.probeSecret))
 	mux.HandleFunc("GET /api/secrets/{id}/zones", a.auth(a.secretZones))
 	mux.HandleFunc("GET /api/dns/zones", a.auth(a.listZones))
 	mux.HandleFunc("GET /api/dns/records", a.auth(a.listDNSRecords))
-	mux.HandleFunc("POST /api/dns/records/drop", a.auth(a.drives(a.steady(a.dropDNSName))))
-	mux.HandleFunc("POST /api/dns/records/publish", a.auth(a.drives(a.steady(a.publishDNSName))))
+	mux.HandleFunc("POST /api/dns/records/drop", a.adminAuth(a.steady(a.dropDNSName)))
+	mux.HandleFunc("POST /api/dns/records/publish", a.adminAuth(a.steady(a.publishDNSName)))
 	mux.HandleFunc("GET /api/dns/{host}/tofu", a.auth(a.dnsTofu))
-	mux.HandleFunc("PUT /api/dns/{host}/tofu", a.auth(a.steady(a.saveDNSTofu)))
-	mux.HandleFunc("DELETE /api/secrets/{id}", a.auth(a.steady(a.deleteSecret)))
+	mux.HandleFunc("PUT /api/dns/{host}/tofu", a.adminAuth(a.steady(a.saveDNSTofu)))
+	mux.HandleFunc("DELETE /api/secrets/{id}", a.adminAuth(a.steady(a.deleteSecret)))
 	mux.HandleFunc("GET /api/app-secrets", a.auth(a.listAppSecrets))
-	mux.HandleFunc("POST /api/app-secrets", a.auth(a.steady(a.createAppSecret)))
+	mux.HandleFunc("POST /api/app-secrets", a.adminAuth(a.steady(a.createAppSecret)))
 	mux.HandleFunc("GET /api/app-secrets/{id}", a.auth(a.getAppSecret))
-	mux.HandleFunc("PUT /api/app-secrets/{id}", a.auth(a.steady(a.updateAppSecret)))
-	mux.HandleFunc("DELETE /api/app-secrets/{id}", a.auth(a.steady(a.deleteAppSecret)))
+	mux.HandleFunc("PUT /api/app-secrets/{id}", a.adminAuth(a.steady(a.updateAppSecret)))
+	mux.HandleFunc("DELETE /api/app-secrets/{id}", a.adminAuth(a.steady(a.deleteAppSecret)))
 
 	mux.HandleFunc("GET /api/providers/{id}/offers", a.auth(a.providerOffers))
 	mux.HandleFunc("GET /api/providers/{id}/projects", a.auth(a.providerProjects))
 	mux.HandleFunc("GET /api/overview", a.auth(a.overview))
 	mux.HandleFunc("GET /api/servers", a.auth(a.listServers))
 	mux.HandleFunc("GET /api/events", a.auth(a.listEvents))
-	mux.HandleFunc("POST /api/servers", a.auth(a.steady(a.createServer)))
+	mux.HandleFunc("POST /api/servers", a.deployAuth(a.steady(a.createServer)))
 	mux.HandleFunc("GET /api/servers/{id}", a.auth(a.getServer))
 	mux.HandleFunc("GET /api/servers/{id}/tofu", a.auth(a.serverTofu))
-	mux.HandleFunc("PUT /api/servers/{id}/tofu", a.auth(a.serverSteady(a.saveServerTofu)))
+	mux.HandleFunc("PUT /api/servers/{id}/tofu", a.deployAuth(a.serverSteady(a.saveServerTofu)))
 	mux.HandleFunc("GET /api/servers/{id}/runtime", a.auth(a.serverRuntime))
-	mux.HandleFunc("GET /api/servers/{id}/terminal", a.auth(a.serverTerminal))
-	mux.HandleFunc("POST /api/servers/{id}/deploy", a.auth(a.drives(a.serverSteady(a.retryDeploy))))
-	mux.HandleFunc("DELETE /api/servers/{id}", a.auth(a.steady(a.deleteServer)))
+	mux.HandleFunc("GET /api/servers/{id}/terminal", a.deployAuth(a.serverTerminal))
+	mux.HandleFunc("POST /api/servers/{id}/deploy", a.deployAuth(a.serverSteady(a.retryDeploy)))
+	mux.HandleFunc("DELETE /api/servers/{id}", a.deployAuth(a.steady(a.deleteServer)))
 	mux.HandleFunc("GET /api/deployments", a.auth(a.listDeployments))
-	mux.HandleFunc("POST /api/deployments/cancel", a.auth(a.cancelDeployment))
+	mux.HandleFunc("POST /api/deployments/cancel", a.deployAuth(a.cancelDeployment))
 	mux.HandleFunc("GET /api/destructions", a.auth(a.listDestructions))
 	mux.HandleFunc("GET /api/destructions/{id}", a.auth(a.getDestruction))
-	mux.HandleFunc("POST /api/destructions/{id}/resume", a.auth(a.resumeDestruction))
-	mux.HandleFunc("POST /api/servers/{id}/cluster", a.auth(a.serverSteady(a.attachCluster)))
+	mux.HandleFunc("POST /api/destructions/{id}/resume", a.deployAuth(a.resumeDestruction))
+	mux.HandleFunc("POST /api/servers/{id}/cluster", a.deployAuth(a.serverSteady(a.attachCluster)))
 	mux.HandleFunc("GET /api/clusters", a.auth(a.listClusters))
-	mux.HandleFunc("POST /api/clusters", a.auth(a.steady(a.createCluster)))
-	mux.HandleFunc("DELETE /api/clusters/{id}", a.auth(a.steady(a.deleteCluster)))
-	mux.HandleFunc("POST /api/clusters/import", a.auth(a.steady(a.importCluster)))
+	mux.HandleFunc("POST /api/clusters", a.deployAuth(a.steady(a.createCluster)))
+	mux.HandleFunc("DELETE /api/clusters/{id}", a.deployAuth(a.steady(a.deleteCluster)))
+	mux.HandleFunc("POST /api/clusters/import", a.deployAuth(a.steady(a.importCluster)))
 	mux.HandleFunc("GET /api/clusters/{id}/argo", a.auth(a.argoApps))
 	mux.HandleFunc("GET /api/clusters/{id}/usage", a.auth(a.clusterUsage))
 
 	mux.HandleFunc("GET /api/templates", a.auth(a.listTemplates))
-	mux.HandleFunc("POST /api/templates", a.auth(a.steady(a.createTemplate)))
-	mux.HandleFunc("POST /api/templates/import", a.auth(a.steady(a.importTemplate)))
+	mux.HandleFunc("POST /api/templates", a.deployAuth(a.steady(a.createTemplate)))
+	mux.HandleFunc("POST /api/templates/import", a.deployAuth(a.steady(a.importTemplate)))
+	mux.HandleFunc("POST /api/templates/import-url", a.deployAuth(a.steady(a.importTemplateURL)))
 	mux.HandleFunc("GET /api/starters", a.auth(a.listStarters))
-	mux.HandleFunc("POST /api/starters/{id}", a.auth(a.steady(a.useStarter)))
-	mux.HandleFunc("POST /api/templates/from-cluster", a.auth(a.steady(a.templateFromCluster)))
+	mux.HandleFunc("POST /api/starters/{id}", a.deployAuth(a.steady(a.useStarter)))
+	mux.HandleFunc("POST /api/templates/from-cluster", a.deployAuth(a.steady(a.templateFromCluster)))
 	mux.HandleFunc("GET /api/templates/{id}", a.auth(a.getTemplate))
-	mux.HandleFunc("PUT /api/templates/{id}", a.auth(a.steady(a.updateTemplate)))
-	mux.HandleFunc("DELETE /api/templates/{id}", a.auth(a.steady(a.deleteTemplate)))
+	mux.HandleFunc("PUT /api/templates/{id}", a.deployAuth(a.steady(a.updateTemplate)))
+	mux.HandleFunc("DELETE /api/templates/{id}", a.deployAuth(a.steady(a.deleteTemplate)))
 	mux.HandleFunc("GET /api/templates/{id}/export", a.auth(a.exportTemplate))
-	mux.HandleFunc("POST /api/templates/{id}/runs", a.auth(a.steady(a.startTemplateRun)))
+	mux.HandleFunc("POST /api/templates/{id}/runs", a.deployAuth(a.steady(a.startTemplateRun)))
 	mux.HandleFunc("GET /api/template-runs/{id}", a.auth(a.getTemplateRun))
-	mux.HandleFunc("POST /api/template-runs/{id}/resume", a.auth(a.drives(a.steady(a.resumeTemplateRun))))
+	mux.HandleFunc("POST /api/template-runs/{id}/resume", a.deployAuth(a.steady(a.resumeTemplateRun)))
 
 	mux.HandleFunc("GET /api/catalogue", a.auth(a.listCatalogue))
 	mux.HandleFunc("GET /api/catalogue/{id}", a.auth(a.getCatalogue))
 	mux.HandleFunc("GET /api/catalogue/{id}/versions", a.auth(a.catalogueVersions))
-	mux.HandleFunc("POST /api/catalogue/{id}", a.auth(a.steady(a.installCatalogue)))
+	mux.HandleFunc("POST /api/catalogue/{id}", a.deployAuth(a.steady(a.installCatalogue)))
 
 	mux.HandleFunc("GET /api/applications", a.auth(a.listApplications))
-	mux.HandleFunc("POST /api/applications", a.auth(a.steady(a.createApplication)))
+	mux.HandleFunc("POST /api/applications", a.deployAuth(a.steady(a.createApplication)))
 	mux.HandleFunc("GET /api/applications/{id}", a.auth(a.getApplication))
-	mux.HandleFunc("POST /api/applications/{id}/pause", a.auth(a.appSteady(a.pauseApplication)))
+	mux.HandleFunc("POST /api/applications/{id}/pause", a.deployAuth(a.appSteady(a.pauseApplication)))
 	mux.HandleFunc("GET /api/applications/{id}/redundancy", a.auth(a.redundancyOptions))
 	mux.HandleFunc("POST /api/redundancy/preview", a.auth(a.redundancyPreview))
-	mux.HandleFunc("POST /api/applications/{id}/redundancy", a.auth(a.drives(a.appSteady(a.setRedundancy))))
-	mux.HandleFunc("PUT /api/applications/{id}/names", a.auth(a.drives(a.appSteady(a.setNames))))
+	mux.HandleFunc("POST /api/applications/{id}/redundancy", a.deployAuth(a.appSteady(a.setRedundancy)))
+	mux.HandleFunc("PUT /api/applications/{id}/names", a.deployAuth(a.appSteady(a.setNames)))
 	mux.HandleFunc("GET /api/images", a.auth(a.listLocalImages))
-	mux.HandleFunc("POST /api/images", a.auth(a.drives(a.steady(a.uploadLocalImage))))
-	mux.HandleFunc("POST /api/images/fetch", a.auth(a.drives(a.steady(a.fetchLocalImage))))
-	mux.HandleFunc("DELETE /api/images/{id}", a.auth(a.drives(a.steady(a.deleteLocalImage))))
+	mux.HandleFunc("POST /api/images", a.adminAuth(a.steady(a.uploadLocalImage)))
+	mux.HandleFunc("POST /api/images/fetch", a.adminAuth(a.steady(a.fetchLocalImage)))
+	mux.HandleFunc("DELETE /api/images/{id}", a.adminAuth(a.steady(a.deleteLocalImage)))
 	mux.HandleFunc("GET /api/applications/{id}/variables/{name}", a.auth(a.revealVariable))
-	mux.HandleFunc("PUT /api/applications/{id}/variables", a.auth(a.drives(a.appSteady(a.setVariables))))
+	mux.HandleFunc("PUT /api/applications/{id}/variables", a.deployAuth(a.appSteady(a.setVariables)))
 	mux.HandleFunc("GET /api/applications/{id}/runtime", a.auth(a.applicationRuntime))
 	mux.HandleFunc("GET /api/applications/{id}/backups", a.auth(a.listApplicationBackups))
 	mux.HandleFunc("GET /api/applications/{id}/backups/{service}", a.auth(a.downloadApplicationBackup))
-	mux.HandleFunc("POST /api/applications/{id}/backups/{service}", a.auth(a.drives(a.restoreApplicationBackup)))
+	mux.HandleFunc("POST /api/applications/{id}/backups/{service}", a.deployAuth(a.restoreApplicationBackup))
 	mux.HandleFunc("GET /api/applications/{id}/releases", a.auth(a.applicationReleases))
-	mux.HandleFunc("POST /api/applications/{id}/images", a.auth(a.drives(a.appSteady(a.replaceImages))))
+	mux.HandleFunc("POST /api/applications/{id}/images", a.deployAuth(a.appSteady(a.replaceImages)))
 	mux.HandleFunc("GET /api/applications/{id}/pods/{pod}/logs", a.auth(a.podLogs))
-	mux.HandleFunc("POST /api/applications/{id}/pods/{pod}/reset", a.auth(a.drives(a.appSteady(a.resetPod))))
-	mux.HandleFunc("GET /api/applications/{id}/pods/{pod}/terminal", a.auth(a.podTerminal))
-	mux.HandleFunc("DELETE /api/applications/{id}", a.auth(a.steady(a.deleteApplication)))
+	mux.HandleFunc("POST /api/applications/{id}/pods/{pod}/reset", a.deployAuth(a.appSteady(a.resetPod)))
+	mux.HandleFunc("GET /api/applications/{id}/pods/{pod}/terminal", a.deployAuth(a.podTerminal))
+	mux.HandleFunc("DELETE /api/applications/{id}", a.deployAuth(a.steady(a.deleteApplication)))
 
 	mux.HandleFunc("GET /api/version", a.auth(a.getVersion))
 	mux.HandleFunc("GET /api/activity", a.auth(a.activity))
 	mux.HandleFunc("GET /api/updates", a.auth(a.listUpdates))
 	mux.HandleFunc("POST /api/updates/check", a.auth(a.checkUpdatesNow))
-	mux.HandleFunc("POST /api/updates/myinfra", a.auth(a.drives(a.steady(a.updateMyInfra))))
+	mux.HandleFunc("POST /api/updates/myinfra", a.deployAuth(a.steady(a.updateMyInfra)))
 	mux.HandleFunc("GET /api/applications/{id}/update/impact", a.auth(a.applicationUpdateImpact))
-	mux.HandleFunc("POST /api/applications/{id}/update", a.auth(a.drives(a.appSteady(a.updateApplication))))
+	mux.HandleFunc("POST /api/applications/{id}/update", a.deployAuth(a.appSteady(a.updateApplication)))
 
 	mux.HandleFunc("GET /api/servers/{id}/update/impact", a.auth(a.serverUpdateImpact))
-	mux.HandleFunc("POST /api/servers/{id}/update", a.auth(a.drives(a.steady(a.updateServer))))
+	mux.HandleFunc("POST /api/servers/{id}/update", a.deployAuth(a.steady(a.updateServer)))
 	mux.HandleFunc("GET /api/clusters/{id}/update/impact", a.auth(a.clusterUpdateImpact))
-	mux.HandleFunc("POST /api/clusters/{id}/update", a.auth(a.drives(a.steady(a.updateCluster))))
+	mux.HandleFunc("POST /api/clusters/{id}/update", a.deployAuth(a.steady(a.updateCluster)))
 	mux.HandleFunc("GET /api/update-jobs", a.auth(a.listUpdateJobs))
 	mux.HandleFunc("GET /api/update-jobs/{id}", a.auth(a.getUpdateJob))
-	mux.HandleFunc("POST /api/update-jobs/{id}/resume", a.auth(a.drives(a.steady(a.resumeUpdateJob))))
-	mux.HandleFunc("POST /api/update-jobs/{id}/cancel", a.auth(a.drives(a.cancelUpdateJob)))
+	mux.HandleFunc("POST /api/update-jobs/{id}/resume", a.deployAuth(a.steady(a.resumeUpdateJob)))
+	mux.HandleFunc("POST /api/update-jobs/{id}/cancel", a.deployAuth(a.cancelUpdateJob))
 
 	mux.HandleFunc("GET /api/transfer", a.auth(a.transferStatus))
 	mux.HandleFunc("GET /api/transfer/preview", a.auth(a.transferPreview))
-	mux.HandleFunc("POST /api/transfer", a.auth(a.drives(a.startTransfer)))
-	mux.HandleFunc("POST /api/clusters/{id}/transfer", a.auth(a.drives(a.startPodTransfer)))
-	mux.HandleFunc("POST /api/clusters/{id}/transfer/clean", a.auth(a.drives(a.cleanPodTransfer)))
+	mux.HandleFunc("POST /api/transfer", a.adminDrive(a.startTransfer))
+	mux.HandleFunc("POST /api/clusters/{id}/transfer", a.adminDrive(a.startPodTransfer))
+	mux.HandleFunc("POST /api/clusters/{id}/transfer/clean", a.adminDrive(a.cleanPodTransfer))
 	mux.HandleFunc("POST /api/bootstrap", a.bootstrap)
 	mux.HandleFunc("GET /api/sync", a.auth(a.syncStatus))
-	mux.HandleFunc("POST /api/sync/peers", a.auth(a.steady(a.addSyncPeer)))
-	mux.HandleFunc("DELETE /api/sync/peers", a.auth(a.steady(a.deleteSyncPeer)))
+	mux.HandleFunc("POST /api/sync/peers", a.requireRole(store.RoleAdmin)(a.steady(a.addSyncPeer)))
+	mux.HandleFunc("DELETE /api/sync/peers", a.requireRole(store.RoleAdmin)(a.steady(a.deleteSyncPeer)))
 	mux.HandleFunc("GET /api/sync/state", a.syncState)
 	mux.HandleFunc("POST /api/sync/snapshot", a.syncSnapshot)
 	mux.HandleFunc("POST /api/sync/yield", a.syncYield)
 	mux.HandleFunc("POST /api/sync/lead", a.syncLead)
-	mux.HandleFunc("POST /api/copies/lead", a.auth(a.takeLead))
+	mux.HandleFunc("POST /api/copies/lead", a.requireRole(store.RoleAdmin)(a.takeLead))
 	mux.HandleFunc("POST /api/servers/{id}/check", a.auth(a.checkServerNow))
-	mux.HandleFunc("POST /api/copies/handover", a.auth(a.steady(a.handOver)))
+	mux.HandleFunc("POST /api/copies/handover", a.requireRole(store.RoleAdmin)(a.steady(a.handOver)))
 
 	mux.HandleFunc("POST /api/join", a.join)
 	mux.HandleFunc("GET /join/{token}", a.joinScript)
@@ -328,7 +341,17 @@ func (a *API) setupState(w http.ResponseWriter, r *http.Request) {
 		a.mapErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"needed": n == 0})
+	out := map[string]any{"needed": n == 0, "users": n}
+	if n > 0 {
+		owner, err := a.Store.InfrastructureOwner(r.Context())
+		if err == nil {
+			acc, err := a.Store.UserAccount(r.Context(), owner)
+			if err == nil && acc.Login != "" {
+				out["primaryLogin"] = acc.Login
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (a *API) setup(w http.ResponseWriter, r *http.Request) {
@@ -375,21 +398,75 @@ func (a *API) setup(w http.ResponseWriter, r *http.Request) {
 	a.startSession(w, r, id)
 }
 
-func (a *API) login(w http.ResponseWriter, r *http.Request) {
-	id, hash, err := a.Store.User(r.Context())
-	if err == store.ErrNotFound {
-		writeError(w, http.StatusConflict, "Choisissez d'abord un mot de passe.")
-		return
+type loginChallenge struct {
+	userID string
+	until  time.Time
+}
+
+func (a *API) issueLoginChallenge(userID string) string {
+	token := randomToken()
+	a.loginMu.Lock()
+	if a.loginChallenges == nil {
+		a.loginChallenges = map[string]loginChallenge{}
 	}
+	now := time.Now()
+	for key, row := range a.loginChallenges {
+		if now.After(row.until) {
+			delete(a.loginChallenges, key)
+		}
+	}
+	a.loginChallenges[token] = loginChallenge{userID: userID, until: now.Add(5 * time.Minute)}
+	a.loginMu.Unlock()
+	return token
+}
+
+func (a *API) takeLoginChallenge(token string) (string, bool) {
+	a.loginMu.Lock()
+	defer a.loginMu.Unlock()
+	row, ok := a.loginChallenges[token]
+	if !ok || time.Now().After(row.until) {
+		delete(a.loginChallenges, token)
+		return "", false
+	}
+	delete(a.loginChallenges, token)
+	return row.userID, true
+}
+
+func (a *API) accountForLogin(ctx context.Context, login string) (store.UserAccount, error) {
+	if strings.TrimSpace(login) != "" {
+		account, err := a.Store.UserByLogin(ctx, login)
+		if err != nil {
+			return store.UserAccount{}, err
+		}
+		return account, nil
+	}
+	id, _, err := a.Store.User(ctx)
 	if err != nil {
-		a.mapErr(w, err)
-		return
+		return store.UserAccount{}, err
 	}
+	return a.Store.UserAccount(ctx, id)
+}
+
+func (a *API) login(w http.ResponseWriter, r *http.Request) {
 	var body struct {
+		Login    string `json:"login"`
 		Password string `json:"password"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
+		return
+	}
+	account, err := a.accountForLogin(r.Context(), body.Login)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			if strings.TrimSpace(body.Login) == "" {
+				writeError(w, http.StatusConflict, "Choisissez d'abord un mot de passe.")
+				return
+			}
+			writeError(w, http.StatusUnauthorized, "Identifiant ou mot de passe incorrect.")
+			return
+		}
+		a.mapErr(w, err)
 		return
 	}
 	gate := a.authGates.of(clientIP(r))
@@ -397,13 +474,57 @@ func (a *API) login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusTooManyRequests, "Trop de tentatives. Réessayez dans un instant.")
 		return
 	}
-	match := bcrypt.CompareHashAndPassword([]byte(hash), []byte(body.Password)) == nil
+	match := bcrypt.CompareHashAndPassword([]byte(account.PasswordHash), []byte(body.Password)) == nil
 	gate.end(match)
 	if !match {
-		writeError(w, http.StatusUnauthorized, "Mot de passe incorrect.")
+		writeError(w, http.StatusUnauthorized, "Identifiant ou mot de passe incorrect.")
 		return
 	}
-	a.startSession(w, r, id)
+	if account.TOTPSecret != "" {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"totpRequired": true,
+			"challenge":    a.issueLoginChallenge(account.ID),
+		})
+		return
+	}
+	a.startSession(w, r, account.ID)
+}
+
+func (a *API) loginTOTP(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Challenge string `json:"challenge"`
+		TOTP      string `json:"totp"`
+	}
+	if err := readJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "Requête illisible.")
+		return
+	}
+	userID, ok := a.takeLoginChallenge(strings.TrimSpace(body.Challenge))
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "Cette vérification a expiré. Reconnectez-vous.")
+		return
+	}
+	account, err := a.Store.UserAccount(r.Context(), userID)
+	if err != nil {
+		a.mapErr(w, err)
+		return
+	}
+	if account.TOTPSecret == "" {
+		writeError(w, http.StatusBadRequest, "La double authentification n'est pas active sur ce compte.")
+		return
+	}
+	gate := a.authGates.of(clientIP(r))
+	if !gate.begin() {
+		writeError(w, http.StatusTooManyRequests, "Trop de tentatives. Réessayez dans un instant.")
+		return
+	}
+	match := auth.Validate(account.TOTPSecret, body.TOTP)
+	gate.end(match)
+	if !match {
+		writeError(w, http.StatusUnauthorized, "Code à deux facteurs incorrect.")
+		return
+	}
+	a.startSession(w, r, account.ID)
 }
 
 func (a *API) changePassword(w http.ResponseWriter, r *http.Request) {
@@ -471,12 +592,30 @@ func (a *API) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) session(w http.ResponseWriter, r *http.Request) {
-	done, err := a.Store.Onboarded(r.Context(), userID(r.Context()))
+	actor := userID(r.Context())
+	done, err := a.Store.Onboarded(r.Context(), actor)
 	if err != nil {
 		a.mapErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true, "start": !done})
+	if !done {
+		owner, err := a.Store.InfrastructureOwner(r.Context())
+		if err == nil && owner != actor {
+			done, _ = a.Store.Onboarded(r.Context(), owner)
+		}
+	}
+	account, err := a.Store.UserAccount(r.Context(), actor)
+	if err != nil {
+		a.mapErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":    true,
+		"start": !done,
+		"role":  account.Role,
+		"login": account.Login,
+		"totp":  account.TOTPSecret != "",
+	})
 }
 
 func (a *API) finishOnboarding(w http.ResponseWriter, r *http.Request) {
@@ -518,7 +657,12 @@ func (a *API) auth(next http.HandlerFunc) http.HandlerFunc {
 			writeError(w, http.StatusUnauthorized, "Connexion requise.")
 			return
 		}
-		next(w, r.WithContext(withUser(r.Context(), userID)))
+		owner, err := a.Store.InfrastructureOwner(r.Context())
+		if err != nil {
+			owner = userID
+		}
+		ctx := withOwner(withUser(r.Context(), userID), owner)
+		next(w, r.WithContext(ctx))
 	}
 }
 

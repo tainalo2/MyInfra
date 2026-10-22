@@ -57,7 +57,7 @@ func (a *API) catalogueVersions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) applicationReleases(w http.ResponseWriter, r *http.Request) {
-	app, err := a.Store.Application(r.Context(), userID(r.Context()), r.PathValue("id"))
+	app, err := a.Store.Application(r.Context(), ownerID(r.Context()), r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -80,7 +80,7 @@ func (a *API) applicationReleases(w http.ResponseWriter, r *http.Request) {
 			var tagErr error
 			if imagefile.IsLocal(svc.Image) {
 				// The versions are the ones brought to MyInfra under this name.
-				tags = registry.Choose(a.localTags(r.Context(), userID(r.Context()), svc.Image))
+				tags = registry.Choose(a.localTags(r.Context(), ownerID(r.Context()), svc.Image))
 			} else {
 				tags, tagErr = registry.Tags(r.Context(), svc.Image)
 			}
@@ -115,7 +115,7 @@ func (a *API) replaceImages(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
 		return
 	}
-	app, err := a.Store.Application(r.Context(), userID(r.Context()), r.PathValue("id"))
+	app, err := a.Store.Application(r.Context(), ownerID(r.Context()), r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -171,7 +171,7 @@ func (a *API) rollImages(w http.ResponseWriter, r *http.Request, app store.Appli
 	for _, image := range images {
 		wanted = append(wanted, image)
 	}
-	if err := a.checkLocalImages(r.Context(), userID(r.Context()), wanted); err != nil {
+	if err := a.checkLocalImages(r.Context(), ownerID(r.Context()), wanted); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -194,7 +194,7 @@ func (a *API) rollImages(w http.ResponseWriter, r *http.Request, app store.Appli
 		a.mapErr(w, err)
 		return
 	}
-	a.note(r.Context(), userID(r.Context()), newID(), "app.update", "info", "Mise à jour de "+app.Name+" lancée.", "", app.ClusterID)
+	a.note(r.Context(), ownerID(r.Context()), newID(), "app.update", "info", "Mise à jour de "+app.Name+" lancée.", "", app.ClusterID)
 	a.startRollout(app.ID)
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "updating"})
 }

@@ -4,7 +4,8 @@ import { Plus, Shield, Trash2 } from "lucide-react";
 import { api, type AppSecret, type Application } from "./api";
 import { text } from "./i18n";
 import { ConfirmDialog, Spinner, useToast } from "./kit";
-import { Button, EmptyList, ErrorText, Field, Icon, Input, ItemList, ListActions, LoadingCards, PageTitle, SectionTitle, TextArea, TextButton, entryClass, useListMode, useTrail } from "./ui";
+import { useSession } from "./session";
+import { Button, EmptyList, ErrorText, Field, Icon, Input, ItemList, ListActions, ListModeButton, LoadingCards, PageTitle, SectionTitle, TextArea, TextButton, entryClass, useListMode, useTrail } from "./ui";
 
 function parseEntries(source: string) {
   const entries: Record<string, string> = {};
@@ -23,6 +24,7 @@ function parseEntries(source: string) {
 
 export function Secrets() {
   const navigate = useNavigate();
+  const { canAdmin } = useSession();
   const [secrets, setSecrets] = useState<AppSecret[]>([]);
   const [name, setName] = useState("");
   const [entries, setEntries] = useState("");
@@ -74,8 +76,12 @@ export function Secrets() {
             <TextButton type="button" onClick={close}>
               {text("common.cancel")}
             </TextButton>
-          ) : ready && secrets.length > 0 ? (
+          ) : canAdmin && ready && secrets.length > 0 ? (
             <ListActions mode={mode} onToggle={toggleMode} label={text("secret.new")} onCreate={() => setCreating(true)} />
+          ) : ready && secrets.length > 0 ? (
+            <span className="hidden md:inline-flex">
+              <ListModeButton mode={mode} onToggle={toggleMode} />
+            </span>
           ) : null
         }
       />
@@ -87,7 +93,7 @@ export function Secrets() {
           <ErrorText>{error}</ErrorText>
         </div>
       ) : null}
-      {creating ? (
+      {canAdmin && creating ? (
         <form onSubmit={create} className="flex max-w-[720px] flex-col gap-6">
           <Field label={text("field.name")}>
             <Input value={name} onChange={(e) => setName(e.target.value)} required />
@@ -105,7 +111,11 @@ export function Secrets() {
       ) : !ready ? (
         <LoadingCards />
       ) : secrets.length === 0 ? (
-        <EmptyList message={text("secret.empty")} label={text("secret.new")} onCreate={() => setCreating(true)} />
+        canAdmin ? (
+          <EmptyList message={text("secret.empty")} label={text("secret.new")} onCreate={() => setCreating(true)} />
+        ) : (
+          <p className="text-muted">{text("secret.empty")}</p>
+        )
       ) : (
         <ItemList mode={mode}>
           {secrets.map((secret) => (
@@ -127,6 +137,7 @@ export function Secrets() {
 export function SecretPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
+  const { canAdmin } = useSession();
   const [secret, setSecret] = useState<AppSecret | null>(null);
   const [apps, setApps] = useState<Application[]>([]);
   const [name, setName] = useState("");
@@ -204,6 +215,7 @@ export function SecretPage() {
           <ErrorText>{error}</ErrorText>
         </div>
       ) : null}
+      {canAdmin ? (
       <form onSubmit={save} className="mt-8 flex flex-col gap-8">
         <Field label={text("field.name")}>
           <Input value={name} onChange={(e) => setName(e.target.value)} required />
@@ -252,13 +264,42 @@ export function SecretPage() {
           </Button>
         </div>
       </form>
+      ) : (
+        <div className="mt-8 flex flex-col gap-8">
+          <p className="text-muted">{secret.name}</p>
+          <section>
+            <SectionTitle>{text("field.keys")}</SectionTitle>
+            {keys.length === 0 ? (
+              <p className="mt-4 text-muted">{text("secret.none")}</p>
+            ) : (
+              <ul className="mt-4 flex flex-col gap-2 font-mono text-[13px]">
+                {keys.map((key) => (
+                  <li key={key}>{key}</li>
+                ))}
+              </ul>
+            )}
+          </section>
+          <section>
+            <SectionTitle>{text("secret.allowed")}</SectionTitle>
+            <ul className="mt-4 flex flex-col gap-2">
+              {secret.apps.map((app) => (
+                <li key={app.id}>
+                  <Link to={`/applications/${app.id}`} className="text-ink">{app.name}</Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </div>
+      )}
+      {canAdmin ? (
       <div className="mt-16 border-t border-line pt-8">
         <TextButton type="button" tone="danger" onClick={() => setConfirm(true)}>
           <Icon icon={Trash2} />
           {text("common.delete")}
         </TextButton>
       </div>
-      {confirm ? (
+      ) : null}
+      {canAdmin && confirm ? (
         <ConfirmDialog
           title={text("server.removeNamed", { name: secret.name })}
           confirmLabel={text("common.delete")}

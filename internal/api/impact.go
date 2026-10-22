@@ -81,7 +81,7 @@ func imageImpact(app store.Application) impactApp {
 }
 
 func (a *API) applicationUpdateImpact(w http.ResponseWriter, r *http.Request) {
-	app, err := a.Store.Application(r.Context(), userID(r.Context()), r.PathValue("id"))
+	app, err := a.Store.Application(r.Context(), ownerID(r.Context()), r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
 		return

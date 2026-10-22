@@ -21,7 +21,7 @@ type deploymentView struct {
 }
 
 func (a *API) listDeployments(w http.ResponseWriter, r *http.Request) {
-	rows, err := a.Store.OpenDeployments(r.Context(), userID(r.Context()))
+	rows, err := a.Store.OpenDeployments(r.Context(), ownerID(r.Context()))
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -54,7 +54,7 @@ func (a *API) cancelDeployment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
 		return
 	}
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	var err error
 	switch body.Kind {
 	case "template":

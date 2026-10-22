@@ -83,7 +83,7 @@ func (a *API) setNames(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
 		return
 	}
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	id := r.PathValue("id")
 	if id == selfAppID {
 		writeError(w, http.StatusConflict, "L'adresse de MyInfra se change depuis Transfert.")

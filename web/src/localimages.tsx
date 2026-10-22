@@ -4,6 +4,7 @@ import { api, type LocalImage } from "./api";
 import { currentLocale, text, textError } from "./i18n";
 import { ConfirmDialog, Spinner, useToast } from "./kit";
 import { usePoll } from "./poll";
+import { useSession } from "./session";
 import { Button, ErrorText, Field, Group, Icon, Input, LoadingCards, PageTitle, SectionTitle, Select, TextButton, focus } from "./ui";
 
 // An image a person built is brought to MyInfra as the archive docker save
@@ -48,6 +49,7 @@ export function Images() {
   const { data: images, setData: setImages, error, reload } = usePoll<LocalImage[]>("/api/images", 0);
   const [removing, setRemoving] = useState<LocalImage | null>(null);
   const toast = useToast();
+  const { canAdmin } = useSession();
 
   async function remove(image: LocalImage) {
     await api(`/api/images/${image.id}`, { method: "DELETE" });
@@ -66,7 +68,7 @@ export function Images() {
     <div className="max-w-[860px]">
       <PageTitle title={text("images.title")} icon={HardDrive} />
       <p className="mb-8 text-muted">{text("images.intro")}</p>
-      <AddImage onAdded={added} />
+      {canAdmin ? <AddImage onAdded={added} /> : null}
       <section className="mt-12">
         <SectionTitle>{text("images.list")}</SectionTitle>
         <div className="mt-4">
@@ -90,6 +92,7 @@ export function Images() {
                     </p>
                     {image.usedBy.length > 0 ? <p className="mt-1">{text("images.usedBy", { apps: image.usedBy.join(", ") })}</p> : null}
                   </div>
+                  {canAdmin ? (
                   <TextButton
                     type="button"
                     tone="danger"
@@ -100,13 +103,14 @@ export function Images() {
                     <Icon icon={Trash2} />
                     {text("common.delete")}
                   </TextButton>
+                  ) : null}
                 </li>
               ))}
             </ul>
           ) : null}
         </div>
       </section>
-      {removing ? (
+      {canAdmin && removing ? (
         <ConfirmDialog
           title={text("server.removeNamed", { name: removing.ref })}
           confirmLabel={text("common.delete")}

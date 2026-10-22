@@ -116,7 +116,7 @@ func shareableVars(vars map[string]string) map[string]string {
 
 // revealVariable returns one sealed value, on purpose, to its owner.
 func (a *API) revealVariable(w http.ResponseWriter, r *http.Request) {
-	app, err := a.Store.Application(r.Context(), userID(r.Context()), r.PathValue("id"))
+	app, err := a.Store.Application(r.Context(), ownerID(r.Context()), r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -131,7 +131,7 @@ func (a *API) revealVariable(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, err.Error())
 		return
 	}
-	a.note(context.Background(), userID(r.Context()), newID(), "variable.revealed", "info", "Variable affichée : "+r.PathValue("name")+".", "", "")
+	a.note(context.Background(), ownerID(r.Context()), newID(), "variable.revealed", "info", "Variable affichée : "+r.PathValue("name")+".", "", "")
 	writeJSON(w, http.StatusOK, map[string]string{"value": plain["v"]})
 }
 
@@ -146,7 +146,7 @@ func (a *API) setVariables(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
 		return
 	}
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	app, err := a.Store.Application(r.Context(), owner, r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)

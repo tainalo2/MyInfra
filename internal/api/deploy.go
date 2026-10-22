@@ -21,7 +21,7 @@ import (
 
 func (a *API) retryDeploy(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	owner := userID(ctx)
+	owner := ownerID(ctx)
 	id := r.PathValue("id")
 	row, err := a.Store.Server(ctx, owner, id)
 	if err != nil {

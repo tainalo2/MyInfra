@@ -71,7 +71,7 @@ func (a *API) takeLead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	owner := userID(ctx)
+	owner := ownerID(ctx)
 	role, err := a.Store.CopyRole(ctx)
 	if err != nil {
 		a.mapErr(w, err)
@@ -133,7 +133,7 @@ func (a *API) handOver(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	owner := userID(ctx)
+	owner := ownerID(ctx)
 	if len(a.operations(ctx, owner)) > 0 {
 		writeCoded(w, http.StatusConflict, "lead_busy", "Des opérations sont en cours sur les machines : attendez leur fin pour rendre la main.", nil)
 		return

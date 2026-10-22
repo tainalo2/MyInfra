@@ -9,7 +9,7 @@ export class ApiError extends Error {
   }
 }
 
-const authPaths = ["/api/setup", "/api/session", "/api/password"];
+const authPaths = ["/api/setup", "/api/session", "/api/session/totp", "/api/password"];
 
 // Last answer of each read, kept for the tab: a page opened again shows what
 // it had at once, then refreshes, instead of an empty skeleton every time.
@@ -62,7 +62,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (!res.ok) {
     if (res.status === 401) answers.clear();
-    if (res.status === 401 && !authPaths.includes(path) && location.pathname !== "/entree") {
+    if (res.status === 401 && !authPaths.includes(path) && !location.pathname.startsWith("/entree")) {
       try {
         sessionStorage.setItem(returnKey, location.pathname + location.search);
       } catch {

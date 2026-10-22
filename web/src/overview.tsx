@@ -13,6 +13,7 @@ import { EventList } from "./world";
 import { appHealth } from "./kit";
 import { urgent, useUpdates } from "./updates";
 import { WorldMap, healthOf, worst, type Inset, type MapSite, type Tone } from "./worldmap";
+import { useSession } from "./session";
 
 type Mode = "serveurs" | "apps" | "pods";
 type Selection = { kind: "app" | "server" | "lieu" | "pod"; id: string } | null;
@@ -112,6 +113,7 @@ function useOverview() {
 
 export function Overview() {
   const { view: updatesView } = useUpdates();
+  const { canDeploy } = useSession();
   useI18n();
   const wide = useWide();
   const navigate = useNavigate();
@@ -323,7 +325,7 @@ export function Overview() {
               model={model}
               select={select}
               onClose={() => select(null)}
-              onPause={togglePause}
+              onPause={canDeploy ? togglePause : undefined}
               onOpen={(to) => navigate(to)}
               error={actionError}
             />
@@ -334,10 +336,12 @@ export function Overview() {
             <Panel>
               <p>{text("overview.empty")}</p>
               <Missing />
-              <div className="flex flex-wrap gap-3">
-                <Button type="button" onClick={() => navigate("/clusters")}>{text("overview.newServer")}</Button>
-                <TextButton type="button" onClick={() => navigate("/nouveau")}>{text("home.new")}</TextButton>
-              </div>
+              {canDeploy ? (
+                <div className="flex flex-wrap gap-3">
+                  <Button type="button" onClick={() => navigate("/clusters")}>{text("overview.newServer")}</Button>
+                  <TextButton type="button" onClick={() => navigate("/nouveau")}>{text("home.new")}</TextButton>
+                </div>
+              ) : null}
             </Panel>
           </div>
         ) : null}
@@ -679,7 +683,7 @@ function Card({
   model: Model;
   select: (sel: string) => void;
   onClose: () => void;
-  onPause: (app: Application) => void;
+  onPause?: (app: Application) => void;
   onOpen: (to: string) => void;
   error: string;
 }) {
@@ -765,9 +769,10 @@ function AppCard({
   app: Application;
   model: Model;
   select: (sel: string) => void;
-  onPause: (app: Application) => void;
+  onPause?: (app: Application) => void;
   onOpen: (to: string) => void;
 }) {
+  const { canDeploy } = useSession();
   const status = statusLabel(appHealth(app, undefined, model.podsOfApp.get(app.id)));
   const pods = model.podsOfApp.get(app.id) ?? [];
   const byServer = new Map<string, OverviewPod[]>();
@@ -815,7 +820,7 @@ function AppCard({
           {text(pods.length > 1 ? "overview.singlePointPlaced" : "overview.singlePointLong", { server: model.serverById.get(host)?.name ?? "" })}
         </p>
       ) : null}
-      {host && !app.guarded && !spreading ? (
+      {host && !app.guarded && !spreading && canDeploy ? (
         <div>
           <Button type="button" onClick={() => setAsking(true)}>{text("redundancy.action")}</Button>
         </div>
@@ -835,7 +840,7 @@ function AppCard({
       {!app.clusterId && app.serverId ? <p className="text-muted">{text("overview.aloneNote")}</p> : null}
       <div className="flex flex-wrap items-center gap-4">
         <Button type="button" onClick={() => onOpen(`/applications/${app.id}`)}>{text("overview.open")}</Button>
-        {app.guarded ? null : (
+        {app.guarded || !onPause ? null : (
           <TextButton type="button" onClick={() => onPause(app)}>
             {app.paused ? text("home.resume") : "Pause"}
           </TextButton>

@@ -142,6 +142,7 @@ func serve() bool {
 	go app.Sync(ctx)
 	go app.WatchRole(ctx)
 	go app.WatchReach(ctx)
+	go app.WatchBudget(ctx)
 	go app.WarmSamples(ctx)
 	server := &http.Server{Addr: addr, Handler: app.Handler(), ReadHeaderTimeout: 5 * time.Second}
 	app.Shutdown = server.Shutdown

@@ -39,7 +39,7 @@ type appSecretView struct {
 }
 
 func (a *API) listAppSecrets(w http.ResponseWriter, r *http.Request) {
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	rows, err := a.Store.ListAppSecrets(r.Context(), owner)
 	if err != nil {
 		a.mapErr(w, err)
@@ -63,7 +63,7 @@ func (a *API) listAppSecrets(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) getAppSecret(w http.ResponseWriter, r *http.Request) {
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	row, err := a.Store.AppSecret(r.Context(), owner, r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
@@ -100,7 +100,7 @@ func (a *API) createAppSecret(w http.ResponseWriter, r *http.Request) {
 		writeGrant(w, err)
 		return
 	}
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	apps, err := a.ownedApps(r, owner, body.Apps)
 	if err != nil {
 		writeGrant(w, err)
@@ -141,7 +141,7 @@ func (a *API) updateAppSecret(w http.ResponseWriter, r *http.Request) {
 	if err := readJSON(w, r, &body); err != nil {
 		return
 	}
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	row, err := a.Store.AppSecret(r.Context(), owner, r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
@@ -211,7 +211,7 @@ func (a *API) deleteAppSecret(w http.ResponseWriter, r *http.Request) {
 	if err := readJSON(w, r, &body); err != nil {
 		return
 	}
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	row, err := a.Store.AppSecret(r.Context(), owner, r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)

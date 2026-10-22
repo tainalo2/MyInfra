@@ -14,6 +14,7 @@ import { ProviderSelect } from "./provider-select";
 import { TofuFiles } from "./tofu";
 import { EventList } from "./world";
 import { currentLocale, text, knownMessage } from "./i18n";
+import { useSession } from "./session";
 import {
   ActionsMenu,
   Button,
@@ -566,6 +567,7 @@ export function ServerPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const { canDeploy } = useSession();
   const [error, setError] = useState("");
   const [confirm, setConfirm] = useState(false);
   const [retrying, setRetrying] = useState(false);
@@ -668,25 +670,27 @@ export function ServerPage() {
         </div>
       ) : null}
       <div className="mt-6 flex flex-wrap items-center gap-3">
-        {linked ? (
+        {linked && canDeploy ? (
           <Link to={`/serveurs/${server.id}/terminal`} className={`inline-flex min-h-11 items-center gap-2 rounded-md border border-line bg-surface px-4 py-2 sm:min-h-0 ${focus}`}>
             <Icon icon={SquareTerminal} />
             {text("server.terminal")}
           </Link>
         ) : null}
-        {failed ? (
+        {canDeploy && failed ? (
           <Button type="button" onClick={() => void retry()} disabled={retrying || locked}>
             {retrying ? <Spinner /> : <Icon icon={RotateCcw} />}
             {text("ui.relancerLeDeploiement")}
           </Button>
         ) : null}
-        <CancelDeployment kind="server" id={server.id} active={deploying} />
-        <ActionsMenu label={text("apps.more")}>
-          {!failed && !locked ? <MenuItem onClick={() => void retry()}>{text("ui.relancerLeDeploiement")}</MenuItem> : null}
-          <MenuItem tone="danger" onClick={() => setConfirm(true)}>
-            {text("common.delete")}
-          </MenuItem>
-        </ActionsMenu>
+        {canDeploy ? <CancelDeployment kind="server" id={server.id} active={deploying} /> : null}
+        {canDeploy ? (
+          <ActionsMenu label={text("apps.more")}>
+            {!failed && !locked ? <MenuItem onClick={() => void retry()}>{text("ui.relancerLeDeploiement")}</MenuItem> : null}
+            <MenuItem tone="danger" onClick={() => setConfirm(true)}>
+              {text("common.delete")}
+            </MenuItem>
+          </ActionsMenu>
+        ) : null}
       </div>
       <div className="max-w-[720px]">
         <UpdateLock locked={locked && !transferring} />

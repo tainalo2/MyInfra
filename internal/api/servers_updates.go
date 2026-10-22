@@ -324,7 +324,7 @@ func (a *API) jobView(ctx context.Context, job store.UpdateJob) updateJobView {
 }
 
 func (a *API) listUpdateJobs(w http.ResponseWriter, r *http.Request) {
-	jobs, err := a.Store.RecentUpdateJobs(r.Context(), userID(r.Context()))
+	jobs, err := a.Store.RecentUpdateJobs(r.Context(), ownerID(r.Context()))
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -337,7 +337,7 @@ func (a *API) listUpdateJobs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) getUpdateJob(w http.ResponseWriter, r *http.Request) {
-	job, err := a.Store.UpdateJob(r.Context(), userID(r.Context()), r.PathValue("id"))
+	job, err := a.Store.UpdateJob(r.Context(), ownerID(r.Context()), r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -389,7 +389,7 @@ func (a *API) clusterUpdateImpact(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) writeUpdateImpact(w http.ResponseWriter, r *http.Request, clusterID, serverID string) {
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	servers, details, err := a.targetServers(r.Context(), owner, clusterID, serverID)
 	if err != nil {
 		a.writeJobErr(w, err)
@@ -483,7 +483,7 @@ func (a *API) startUpdateJob(w http.ResponseWriter, r *http.Request, clusterID, 
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
 		return
 	}
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	servers, details, err := a.targetServers(r.Context(), owner, clusterID, serverID)
 	if err != nil {
 		a.writeJobErr(w, err)
@@ -527,7 +527,7 @@ func (a *API) writeJobErr(w http.ResponseWriter, err error) {
 }
 
 func (a *API) resumeUpdateJob(w http.ResponseWriter, r *http.Request) {
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	job, err := a.Store.UpdateJob(r.Context(), owner, r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
@@ -571,7 +571,7 @@ func rewind(steps []updateStep) {
 }
 
 func (a *API) cancelUpdateJob(w http.ResponseWriter, r *http.Request) {
-	job, err := a.Store.UpdateJob(r.Context(), userID(r.Context()), r.PathValue("id"))
+	job, err := a.Store.UpdateJob(r.Context(), ownerID(r.Context()), r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
 		return

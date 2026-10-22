@@ -26,7 +26,7 @@ func (a *API) steady(next http.HandlerFunc) http.HandlerFunc {
 // route.
 func (a *API) appSteady(next http.HandlerFunc) http.HandlerFunc {
 	return a.steady(func(w http.ResponseWriter, r *http.Request) {
-		owner := userID(r.Context())
+		owner := ownerID(r.Context())
 		if app, err := a.Store.Application(r.Context(), owner, r.PathValue("id")); err == nil {
 			if app.Rollout == "updating" {
 				writeCoded(w, http.StatusConflict, "app_updating", "Cette application est en cours de mise à jour : attendez la fin pour la modifier.", nil)
@@ -45,7 +45,7 @@ func (a *API) appSteady(next http.HandlerFunc) http.HandlerFunc {
 // updated. Removing it stays possible.
 func (a *API) serverSteady(next http.HandlerFunc) http.HandlerFunc {
 	return a.steady(func(w http.ResponseWriter, r *http.Request) {
-		owner := userID(r.Context())
+		owner := ownerID(r.Context())
 		if server, err := a.Store.Server(r.Context(), owner, r.PathValue("id")); err == nil && a.updateRunningOn(r.Context(), owner, server.ID, server.ClusterID) {
 			writeCoded(w, http.StatusConflict, "servers_updating", "Ce serveur est en cours de mise à jour : attendez la fin pour le modifier.", nil)
 			return
@@ -87,7 +87,7 @@ func (a *API) updateRunningOn(ctx context.Context, owner, serverID, clusterID st
 // refuseBusyTarget answers for a creation on a server or a cluster being
 // updated, and returns true when it did.
 func (a *API) refuseBusyTarget(w http.ResponseWriter, r *http.Request, serverID, clusterID string) bool {
-	if a.updateRunningOn(r.Context(), userID(r.Context()), serverID, clusterID) {
+	if a.updateRunningOn(r.Context(), ownerID(r.Context()), serverID, clusterID) {
 		writeCoded(w, http.StatusConflict, "servers_updating", "Ce serveur ou ce cluster est en cours de mise à jour : attendez la fin.", nil)
 		return true
 	}
@@ -127,7 +127,7 @@ func (a *API) activity(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, view)
 		return
 	}
-	view.Operations = a.operations(ctx, userID(ctx))
+	view.Operations = a.operations(ctx, ownerID(ctx))
 	writeJSON(w, http.StatusOK, view)
 }
 

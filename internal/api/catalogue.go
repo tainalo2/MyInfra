@@ -72,7 +72,7 @@ func (a *API) installCatalogue(w http.ResponseWriter, r *http.Request) {
 	defaultHost := slug(name) + "." + appsDomain(a.AppsDomain)
 	publicHost := defaultHost
 	in := store.NewApplication{
-		ID: newID(), OwnerID: userID(r.Context()), Name: name,
+		ID: newID(), OwnerID: ownerID(r.Context()), Name: name,
 		SourceKind: "image", DestinationKind: body.DestinationKind,
 		DefaultID: newID(), DefaultHost: defaultHost,
 	}

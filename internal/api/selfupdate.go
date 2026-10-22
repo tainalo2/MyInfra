@@ -141,7 +141,7 @@ func (a *API) updateMyInfra(w http.ResponseWriter, r *http.Request) {
 	rel := latest
 	updating = rel.Version
 	releaseMu.Unlock()
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	var err error
 	switch view.Method {
 	case "local":

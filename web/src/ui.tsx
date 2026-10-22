@@ -29,6 +29,8 @@ import { UpdatesHost, VersionNote, urgent, useUpdates } from "./updates";
 import { ActivityHost, BusyIndicator, ReplicaBanner, TransferBanner, useActivity } from "./activity";
 import { settingsMatch } from "./navmap";
 import { useTheme } from "./theme";
+import { AccountNav } from "./account-nav";
+import { useSession } from "./session";
 
 export const focus =
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
@@ -416,6 +418,13 @@ export function useTrail(crumbs: Crumb[]) {
   }, [serialized, setOverride]);
 }
 
+function ReadOnlyBanner() {
+  useI18n();
+  const { role, canDeploy } = useSession();
+  if (canDeploy || role === null) return null;
+  return <p className="mb-4 rounded-md border border-line bg-status px-4 py-3 text-[13px] text-muted">{text("readOnly.hint")}</p>;
+}
+
 export function Shell() {
   useI18n();
   const location = useLocation();
@@ -441,6 +450,7 @@ export function Shell() {
             <UpdatesNav />
             <div className="mt-auto flex flex-col gap-1 border-t border-line pt-4">
               <NavItem {...settingsNav} />
+              <AccountNav />
             </div>
           </nav>
           <div className="hidden shrink-0 flex-col gap-1 px-4 pb-4 md:flex">
@@ -457,6 +467,7 @@ export function Shell() {
         ) : (
           <main className="min-w-0 flex-1 overflow-y-auto px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-4 md:px-6 md:py-12">
             <div className="mx-auto w-full max-w-[960px]">
+              <ReadOnlyBanner />
               <TransferBanner />
               <ReplicaBanner />
               <Breadcrumb />
@@ -626,6 +637,7 @@ function crumbsFor(pathname: string, names: Record<string, string>): Crumb[] {
     "/registres": "nav.registries",
     "/images": "nav.images",
     "/compte": "nav.account",
+    "/utilisateurs": "nav.users",
     "/transfert": "nav.transfer",
     "/copies": "nav.copies",
     "/dns/enregistrements": "nav.dnsRecords",

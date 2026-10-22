@@ -21,7 +21,7 @@ func (a *API) restoreApplicationBackup(w http.ResponseWriter, r *http.Request) {
 		writeCoded(w, http.StatusConflict, "replica", replicaRefused, nil)
 		return
 	}
-	app, err := a.Store.Application(r.Context(), userID(r.Context()), r.PathValue("id"))
+	app, err := a.Store.Application(r.Context(), ownerID(r.Context()), r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -54,7 +54,7 @@ func (a *API) restoreApplicationBackup(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, backupUploadLimit)
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Hour)
 	defer cancel()
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	command, host, err := a.restoreCommand(ctx, owner, app, svc, source)
 	if err != nil {
 		a.mapErr(w, err)

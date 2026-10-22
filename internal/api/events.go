@@ -29,7 +29,7 @@ type eventView struct {
 }
 
 func (a *API) listEvents(w http.ResponseWriter, r *http.Request) {
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	if err := a.Store.BackfillEvents(r.Context(), owner); err != nil {
 		a.mapErr(w, err)
 		return

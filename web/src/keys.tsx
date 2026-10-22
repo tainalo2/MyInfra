@@ -3,7 +3,8 @@ import { Download, KeyRound, Plus, Trash2 } from "lucide-react";
 import { api, type Secret } from "./api";
 import { text } from "./i18n";
 import { ConfirmDialog, useToast } from "./kit";
-import { Button, EmptyList, ErrorText, Field, Icon, Input, ItemList, ListActions, LoadingCards, PageTitle, TextArea, TextButton, entryClass, useListMode } from "./ui";
+import { useSession } from "./session";
+import { Button, EmptyList, ErrorText, Field, Icon, Input, ItemList, ListActions, ListModeButton, LoadingCards, PageTitle, TextArea, TextButton, entryClass, useListMode } from "./ui";
 
 export function Keys() {
   const [secrets, setSecrets] = useState<Secret[]>([]);
@@ -17,6 +18,7 @@ export function Keys() {
   const [mode, toggleMode] = useListMode();
   const [removing, setRemoving] = useState<Secret | null>(null);
   const toast = useToast();
+  const { canAdmin } = useSession();
 
   async function reload() {
     const rows = await api<Secret[]>("/api/secrets");
@@ -97,8 +99,12 @@ export function Keys() {
             <TextButton type="button" onClick={close}>
               {text("common.cancel")}
             </TextButton>
-          ) : ready && secrets.length > 0 ? (
+          ) : canAdmin && ready && secrets.length > 0 ? (
             <ListActions mode={mode} onToggle={toggleMode} label={text("key.new")} onCreate={() => setCreating(true)} />
+          ) : ready && secrets.length > 0 ? (
+            <span className="hidden md:inline-flex">
+              <ListModeButton mode={mode} onToggle={toggleMode} />
+            </span>
           ) : null
         }
       />
@@ -107,7 +113,7 @@ export function Keys() {
           <ErrorText>{error}</ErrorText>
         </div>
       ) : null}
-      {creating ? (
+      {canAdmin && creating ? (
         <>
           <form onSubmit={generate} className="mb-6 flex max-w-[720px] flex-col gap-6">
             <Field label={text("field.name")}>
@@ -141,7 +147,11 @@ export function Keys() {
       ) : !ready ? (
         <LoadingCards />
       ) : secrets.length === 0 ? (
-        <EmptyList message={text("key.empty")} label={text("key.new")} onCreate={() => setCreating(true)} />
+        canAdmin ? (
+          <EmptyList message={text("key.empty")} label={text("key.new")} onCreate={() => setCreating(true)} />
+        ) : (
+          <p className="text-muted">{text("key.empty")}</p>
+        )
       ) : (
         <ItemList mode={mode}>
           {secrets.map((secret) => (
@@ -153,23 +163,25 @@ export function Keys() {
                   <span className="mt-1 block break-all font-mono text-[13px] text-muted">{secret.fingerprint}</span>
                 </span>
               </span>
-              <span className="flex gap-4">
-                {secret.hasPrivate ? (
-                  <TextButton type="button" onClick={() => download(secret).catch((err) => setError(err.message))}>
-                    <Icon icon={Download} />
-                    {text("ui.telecharger")}
+              {canAdmin ? (
+                <span className="flex gap-4">
+                  {secret.hasPrivate ? (
+                    <TextButton type="button" onClick={() => download(secret).catch((err) => setError(err.message))}>
+                      <Icon icon={Download} />
+                      {text("ui.telecharger")}
+                    </TextButton>
+                  ) : null}
+                  <TextButton type="button" tone="danger" onClick={() => setRemoving(secret)}>
+                    <Icon icon={Trash2} />
+                    {text("common.delete")}
                   </TextButton>
-                ) : null}
-                <TextButton type="button" tone="danger" onClick={() => setRemoving(secret)}>
-                  <Icon icon={Trash2} />
-                  {text("common.delete")}
-                </TextButton>
-              </span>
+                </span>
+              ) : null}
             </li>
           ))}
         </ItemList>
       )}
-      {removing ? (
+      {canAdmin && removing ? (
         <ConfirmDialog
           title={text("server.removeNamed", { name: removing.name })}
           confirmLabel={text("common.delete")}

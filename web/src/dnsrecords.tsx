@@ -6,6 +6,7 @@ import { text, type MsgKey } from "./i18n";
 import { ConfirmDialog, Spinner, useToast } from "./kit";
 import { useI18n } from "./lang";
 import { usePoll } from "./poll";
+import { useSession } from "./session";
 import { Button, ErrorText, Fold, Icon, LoadingLines, PageTitle, TextButton } from "./ui";
 
 type DnsRecord = { type: string; target: string; server?: string };
@@ -30,6 +31,7 @@ const stateTone: Record<DnsName["state"], string> = { ok: "text-ok", differs: "t
 export function DnsRecords() {
   useI18n();
   const toast = useToast();
+  const { canAdmin } = useSession();
   const { data, error, reload } = usePoll<DnsZone[]>("/api/dns/records", 0);
   const [busy, setBusy] = useState("");
   const [drop, setDrop] = useState<{ zone: string; name: string } | null>(null);
@@ -87,7 +89,7 @@ export function DnsRecords() {
                     <ul className="flex flex-col">
                       {used.map((name) => (
                         <NameRow key={name.name} name={name}>
-                          {name.state !== "ok" ? (
+                          {canAdmin && name.state !== "ok" ? (
                             <Button type="button" variant="secondary" onClick={() => void publish(zone.zone, name.name)} disabled={busy !== ""}>
                               {busy === name.name ? <Spinner /> : null}
                               {text("dnsrec.publish")}
@@ -104,9 +106,11 @@ export function DnsRecords() {
                     <ul className="flex flex-col">
                       {others.map((name) => (
                         <NameRow key={name.name} name={name}>
-                          <TextButton type="button" tone="danger" onClick={() => setDrop({ zone: zone.zone, name: name.name })}>
-                            {text("common.delete")}
-                          </TextButton>
+                          {canAdmin ? (
+                            <TextButton type="button" tone="danger" onClick={() => setDrop({ zone: zone.zone, name: name.name })}>
+                              {text("common.delete")}
+                            </TextButton>
+                          ) : null}
                         </NameRow>
                       ))}
                     </ul>

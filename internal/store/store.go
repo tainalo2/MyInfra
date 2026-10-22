@@ -110,7 +110,7 @@ func (s *Store) CreateFirstUser(ctx context.Context, id, passwordHash string) er
 	if n > 0 {
 		return ErrSetupDone
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO users (id, password_hash) VALUES ($1, $2)`, id, passwordHash); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO users (id, password_hash, login, role) VALUES ($1, $2, 'admin', 'admin')`, id, passwordHash); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -1399,6 +1399,7 @@ type Name struct {
 
 type Application struct {
 	ID              string
+	OwnerID         string
 	Name            string
 	SourceKind      string
 	Source          string
@@ -1570,7 +1571,7 @@ func (s *Store) Application(ctx context.Context, ownerID, id string) (Applicatio
 	var app Application
 	var raw []byte
 	err := s.pool.QueryRow(ctx, `
-		SELECT a.id, a.name, a.source_kind, a.source, a.destination_kind,
+		SELECT a.id, a.owner_id, a.name, a.source_kind, a.source, a.destination_kind,
 		       COALESCE(a.server_id, ''), COALESCE(srv.name, ''),
 		       COALESCE(a.cluster_id, ''), COALESCE(clu.name, ''),
 		       a.replicas, a.variables, a.created_at, a.run_status, a.paused, a.rollout, a.rollout_detail, a.run_detail
@@ -1578,7 +1579,7 @@ func (s *Store) Application(ctx context.Context, ownerID, id string) (Applicatio
 		LEFT JOIN servers srv ON srv.id = a.server_id
 		LEFT JOIN clusters clu ON clu.id = a.cluster_id
 		WHERE a.owner_id = $1 AND a.id = $2`, ownerID, id).Scan(
-		&app.ID, &app.Name, &app.SourceKind, &app.Source, &app.DestinationKind,
+		&app.ID, &app.OwnerID, &app.Name, &app.SourceKind, &app.Source, &app.DestinationKind,
 		&app.ServerID, &app.ServerName, &app.ClusterID, &app.ClusterName,
 		&app.Replicas, &raw, &app.CreatedAt, &app.RunStatus, &app.Paused, &app.Rollout, &app.RolloutDetail, &app.RunDetail,
 	)
@@ -1613,6 +1614,18 @@ func (s *Store) Application(ctx context.Context, ownerID, id string) (Applicatio
 	}
 	app.Services, err = s.services(ctx, id)
 	return app, err
+}
+
+func (s *Store) ApplicationByID(ctx context.Context, id string) (Application, error) {
+	var owner string
+	err := s.pool.QueryRow(ctx, `SELECT owner_id FROM applications WHERE id = $1`, id).Scan(&owner)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Application{}, ErrNotFound
+	}
+	if err != nil {
+		return Application{}, err
+	}
+	return s.Application(ctx, owner, id)
 }
 
 func (s *Store) services(ctx context.Context, applicationID string) ([]Service, error) {

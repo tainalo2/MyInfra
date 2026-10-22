@@ -199,13 +199,13 @@ func (a *API) startTransfer(w http.ResponseWriter, r *http.Request) {
 		refuse(http.StatusBadRequest, "Cette copie n'a pas d'image publiée.")
 		return
 	}
-	registryHost, registryUser, registryPassword := a.imageRegistry(r.Context(), userID(r.Context()))
+	registryHost, registryUser, registryPassword := a.imageRegistry(r.Context(), ownerID(r.Context()))
 	userData, token, err := a.startupConfig(registryHost, registryUser, registryPassword)
 	if err != nil {
 		refuse(http.StatusBadRequest, err.Error())
 		return
 	}
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	a.markTransferMethod("machine")
 	a.setTransferKeep(body.Keep)
 	a.setTransfer(true, "creating", "Ouverture de la machine", "", "")
@@ -311,7 +311,7 @@ func (a *API) startPodTransfer(w http.ResponseWriter, r *http.Request) {
 		refuse(http.StatusBadRequest, "Choisissez un domaine.")
 		return
 	}
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	zone := strings.ToLower(strings.Trim(strings.TrimSpace(body.Zone), "."))
 	if zone == "" {
 		zones, err := a.zoneViews(r.Context(), owner)
@@ -625,7 +625,7 @@ func (a *API) bootstrap(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) transferAccount(r *http.Request, id string) (store.Secret, storedToken, error) {
-	return a.openToken(r.Context(), userID(r.Context()), id)
+	return a.openToken(r.Context(), ownerID(r.Context()), id)
 }
 
 func (a *API) imageRegistry(ctx context.Context, owner string) (string, string, string) {
@@ -1186,7 +1186,7 @@ func (a *API) podProxy(ctx context.Context, host deploy.Host, owner, clusterID, 
 // cleanPodTransfer removes what a transfer into the cluster left there when
 // it was cut: its namespace, while no copy of MyInfra runs from it.
 func (a *API) cleanPodTransfer(w http.ResponseWriter, r *http.Request) {
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	clusterID := r.PathValue("id")
 	if app, ok := a.selfRecord(r.Context()); ok && app.ClusterID == clusterID {
 		writeError(w, http.StatusConflict, "MyInfra tourne dans ce cluster : retirez-le depuis son application.")

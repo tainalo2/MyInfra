@@ -143,7 +143,7 @@ func (a *API) zoneViews(ctx context.Context, owner string) ([]zoneView, error) {
 }
 
 func (a *API) listZones(w http.ResponseWriter, r *http.Request) {
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	out, err := a.zoneViews(r.Context(), owner)
 	if err != nil {
 		a.mapErr(w, err)
@@ -153,7 +153,7 @@ func (a *API) listZones(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) secretZones(w http.ResponseWriter, r *http.Request) {
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	sec, err := a.Store.Secret(r.Context(), owner, r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)

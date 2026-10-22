@@ -5,6 +5,7 @@ import { currentLocale, text, type MsgKey } from "./i18n";
 import { Sheet } from "./kit";
 import { useI18n } from "./lang";
 import { usePoll } from "./poll";
+import { useSession } from "./session";
 import { Button, Icon, focus } from "./ui";
 
 export type Operation = {
@@ -189,6 +190,7 @@ export function TransferBanner() {
   useI18n();
   const { transferring } = useActivity();
   const { pathname } = useLocation();
+  const { canAdmin } = useSession();
   if (!transferring || pathname.startsWith("/transfert")) return null;
   return (
     <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-md border border-line bg-status px-4 py-3">
@@ -196,9 +198,11 @@ export function TransferBanner() {
         <Icon icon={ArrowRightLeft} />
         {text("activity.transferBanner")}
       </p>
-      <Link to="/transfert/suivi" className="underline">
-        {text("activity.follow")}
-      </Link>
+      {canAdmin ? (
+        <Link to="/transfert/suivi" className="underline">
+          {text("activity.follow")}
+        </Link>
+      ) : null}
     </div>
   );
 }

@@ -70,7 +70,7 @@ func splitLocal(ref string) (string, string) {
 }
 
 func (a *API) listLocalImages(w http.ResponseWriter, r *http.Request) {
-	rows, err := a.Store.LocalImages(r.Context(), userID(r.Context()))
+	rows, err := a.Store.LocalImages(r.Context(), ownerID(r.Context()))
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -158,7 +158,7 @@ func (a *API) keepLocalImage(w http.ResponseWriter, r *http.Request, src io.Read
 		return
 	}
 	defer f.Close()
-	img := store.LocalImage{ID: newID(), OwnerID: userID(r.Context()), Ref: ref, Source: source, SourceURL: sourceURL,
+	img := store.LocalImage{ID: newID(), OwnerID: ownerID(r.Context()), Ref: ref, Source: source, SourceURL: sourceURL,
 		Size: size, Digest: archive.Digest, Platform: archive.Platform, Config: archive.Config}
 	if err := a.Store.SaveLocalImage(r.Context(), img, f); err != nil {
 		if errors.Is(err, store.ErrNameTaken) {
@@ -210,7 +210,7 @@ func localRef(name, tag string, archive *imagefile.Archive) (string, error) {
 }
 
 func (a *API) deleteLocalImage(w http.ResponseWriter, r *http.Request) {
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	img, err := a.Store.LocalImage(r.Context(), owner, r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)

@@ -36,7 +36,7 @@ func (a *API) importCluster(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := newID()
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	if err := a.Store.ImportCluster(r.Context(), owner, id, name, sealed.Ciphertext, sealed.Nonce, sealed.WrappedDEK); err != nil {
 		a.mapErr(w, err)
 		return
@@ -46,7 +46,7 @@ func (a *API) importCluster(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) argoApps(w http.ResponseWriter, r *http.Request) {
-	origin, ciphertext, nonce, wrapped, err := a.Store.ClusterKube(r.Context(), userID(r.Context()), r.PathValue("id"))
+	origin, ciphertext, nonce, wrapped, err := a.Store.ClusterKube(r.Context(), ownerID(r.Context()), r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
 		return

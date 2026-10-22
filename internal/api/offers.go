@@ -24,7 +24,7 @@ func (a *API) providerOffers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) providerProjects(w http.ResponseWriter, r *http.Request) {
-	sec, tok, err := a.openProvider(r.Context(), userID(r.Context()), r.PathValue("id"))
+	sec, tok, err := a.openProvider(r.Context(), ownerID(r.Context()), r.PathValue("id"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -41,7 +41,7 @@ func (a *API) providerProjects(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) offers(r *http.Request, id, location, project string) (catalog.Catalog, error) {
-	return a.catalogFor(r.Context(), userID(r.Context()), id, location, project)
+	return a.catalogFor(r.Context(), ownerID(r.Context()), id, location, project)
 }
 
 func (a *API) catalogFor(ctx context.Context, owner, id, location, project string) (catalog.Catalog, error) {

@@ -330,6 +330,9 @@ func (a *API) reachServer(view *serverView) {
 	view.SeenAt = health.SeenAt
 	view.ProviderCheckedAt = health.ProviderCheckedAt
 	view.ProviderError = health.ProviderError
+	if state == "gone" {
+		view.Cost = nil
+	}
 }
 
 // reachApp shows an application unreachable when what it runs on is.
@@ -365,7 +368,7 @@ func (a *API) reachApp(view *appView) {
 // page.
 func (a *API) checkServerNow(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	owner := userID(ctx)
+	owner := ownerID(ctx)
 	row, err := a.Store.Server(ctx, owner, r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)

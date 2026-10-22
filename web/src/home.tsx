@@ -8,10 +8,13 @@ import { usePoll } from "./poll";
 import { text } from "./i18n";
 import { AppLogo } from "./app-logo";
 import { RemovalNotice } from "./destructions";
-import { EmptyList, ErrorText, ItemList, ListActions, LoadingCards, PageTitle, TextButton, entryClass, removalOf, useDestructions, useListMode } from "./ui";
+import { useSession } from "./session";
+import { Button, EmptyList, ErrorText, Icon, ItemList, ListModeButton, LoadingCards, PageTitle, TextButton, entryClass, removalOf, useDestructions, useListMode } from "./ui";
+import { Plus } from "lucide-react";
 
 export function Home() {
   const navigate = useNavigate();
+  const { canDeploy } = useSession();
   const { data: apps, setData: setApps, error } = usePoll<Application[]>("/api/applications", 8000);
   const [mode, toggleMode] = useListMode();
   const jobs = useDestructions();
@@ -32,14 +35,24 @@ export function Home() {
         icon={LayoutGrid}
         action={
           apps && apps.length > 0 ? (
-            <ListActions mode={mode} onToggle={toggleMode} label={text("home.new")} onCreate={() => navigate("/nouveau")} />
+            <div className="flex items-center gap-4">
+              <span className="hidden md:inline-flex">
+                <ListModeButton mode={mode} onToggle={toggleMode} />
+              </span>
+              {canDeploy ? (
+                <Button type="button" onClick={() => navigate("/nouveau")}>
+                  <Icon icon={Plus} />
+                  {text("home.new")}
+                </Button>
+              ) : null}
+            </div>
           ) : null
         }
       />
       {error && !apps ? <ErrorText>{error}</ErrorText> : null}
       {apps === null && !error ? <LoadingCards /> : null}
       {apps && apps.length === 0 ? (
-        <EmptyList message={text("home.empty")} label={text("home.new")} onCreate={() => navigate("/nouveau")} />
+        canDeploy ? <EmptyList message={text("home.empty")} label={text("home.new")} onCreate={() => navigate("/nouveau")} /> : <p className="text-muted">{text("home.empty")}</p>
       ) : null}
       {apps && apps.length > 0 ? (
         <ItemList mode={mode}>
@@ -62,7 +75,7 @@ export function Home() {
                     {app.hostname}
                   </a>
                 ) : null}
-                {app.guarded ? null : (
+                {app.guarded || !canDeploy ? null : (
                   <div>
                     <TextButton type="button" onClick={() => (app.paused ? void setPaused(app, false).catch((err) => toast(err.message, "bad")) : setPausing(app))}>
                       {app.paused ? text("home.resume") : text("apps.pauseAction")}

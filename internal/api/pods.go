@@ -19,7 +19,7 @@ import (
 var podNamePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$`)
 
 func (a *API) podLogs(w http.ResponseWriter, r *http.Request) {
-	host, namespace, name, err := a.podTarget(r.Context(), userID(r.Context()), r.PathValue("id"), r.PathValue("pod"))
+	host, namespace, name, err := a.podTarget(r.Context(), ownerID(r.Context()), r.PathValue("id"), r.PathValue("pod"))
 	if err != nil {
 		a.writePodErr(w, err)
 		return
@@ -53,7 +53,7 @@ func (a *API) podLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) resetPod(w http.ResponseWriter, r *http.Request) {
-	host, namespace, name, err := a.podTarget(r.Context(), userID(r.Context()), r.PathValue("id"), r.PathValue("pod"))
+	host, namespace, name, err := a.podTarget(r.Context(), ownerID(r.Context()), r.PathValue("id"), r.PathValue("pod"))
 	if err != nil {
 		a.writePodErr(w, err)
 		return

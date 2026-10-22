@@ -23,7 +23,7 @@ import (
 )
 
 func (a *API) listServers(w http.ResponseWriter, r *http.Request) {
-	rows, err := a.Store.ListServers(r.Context(), userID(r.Context()))
+	rows, err := a.Store.ListServers(r.Context(), ownerID(r.Context()))
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -153,7 +153,7 @@ func (a *API) createServer(w http.ResponseWriter, r *http.Request) {
 	clusterID := strings.TrimSpace(body.ClusterID)
 	clusterName := ""
 	if clusterID != "" {
-		clusters, err := a.Store.ListClusters(r.Context(), userID(r.Context()))
+		clusters, err := a.Store.ListClusters(r.Context(), ownerID(r.Context()))
 		if err != nil {
 			a.mapErr(w, err)
 			return
@@ -169,7 +169,7 @@ func (a *API) createServer(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	controlPlane := body.ControlPlane && clusterID != ""
-	existing, err := a.Store.ListServers(r.Context(), userID(r.Context()))
+	existing, err := a.Store.ListServers(r.Context(), ownerID(r.Context()))
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -187,7 +187,7 @@ func (a *API) createServer(w http.ResponseWriter, r *http.Request) {
 	var plan catalog.Plan
 	var rawPlan []byte
 	if providerID != "" {
-		sec, _, err := a.openProvider(r.Context(), userID(r.Context()), providerID)
+		sec, _, err := a.openProvider(r.Context(), ownerID(r.Context()), providerID)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
@@ -215,7 +215,7 @@ func (a *API) createServer(w http.ResponseWriter, r *http.Request) {
 	}
 	id := newID()
 	token := randomToken()
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	status := "pending"
 	if providerID != "" {
 		status = "deploying"
@@ -318,7 +318,7 @@ func uniqueIDs(ids []string) []string {
 }
 
 func (a *API) getServer(w http.ResponseWriter, r *http.Request) {
-	row, err := a.Store.Server(r.Context(), userID(r.Context()), r.PathValue("id"))
+	row, err := a.Store.Server(r.Context(), ownerID(r.Context()), r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -327,7 +327,7 @@ func (a *API) getServer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) deleteServer(w http.ResponseWriter, r *http.Request) {
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	row, err := a.Store.Server(r.Context(), owner, r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
@@ -352,7 +352,7 @@ func (a *API) attachCluster(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
 		return
 	}
-	if err := a.Store.AttachCluster(r.Context(), userID(r.Context()), r.PathValue("id"), strings.TrimSpace(body.ClusterID)); err != nil {
+	if err := a.Store.AttachCluster(r.Context(), ownerID(r.Context()), r.PathValue("id"), strings.TrimSpace(body.ClusterID)); err != nil {
 		a.mapErr(w, err)
 		return
 	}
@@ -360,7 +360,7 @@ func (a *API) attachCluster(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) listClusters(w http.ResponseWriter, r *http.Request) {
-	rows, err := a.Store.ListClusters(r.Context(), userID(r.Context()))
+	rows, err := a.Store.ListClusters(r.Context(), ownerID(r.Context()))
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -392,7 +392,7 @@ func (a *API) createCluster(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := newID()
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	if err := a.Store.CreateCluster(r.Context(), owner, id, name); err != nil {
 		a.mapErr(w, err)
 		return
@@ -402,7 +402,7 @@ func (a *API) createCluster(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) deleteCluster(w http.ResponseWriter, r *http.Request) {
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	cluster, err := a.Store.Cluster(r.Context(), owner, r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
@@ -553,7 +553,7 @@ func (a *API) joinScript(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) listApplications(w http.ResponseWriter, r *http.Request) {
-	out, _, err := a.applications(r.Context(), userID(r.Context()))
+	out, _, err := a.applications(r.Context(), ownerID(r.Context()))
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -598,7 +598,7 @@ func (a *API) applications(ctx context.Context, owner string) ([]appView, map[st
 
 func (a *API) getApplication(w http.ResponseWriter, r *http.Request) {
 	if r.PathValue("id") == selfAppID {
-		self, ok := a.selfView(r.Context(), userID(r.Context()))
+		self, ok := a.selfView(r.Context(), ownerID(r.Context()))
 		if !ok {
 			writeError(w, http.StatusNotFound, "Introuvable.")
 			return
@@ -607,7 +607,7 @@ func (a *API) getApplication(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, self)
 		return
 	}
-	app, err := a.Store.Application(r.Context(), userID(r.Context()), r.PathValue("id"))
+	app, err := a.Store.Application(r.Context(), ownerID(r.Context()), r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -643,12 +643,8 @@ func (a *API) createApplication(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Donnez un nom à l'application.")
 		return
 	}
-	if body.SourceKind == "git" {
-		writeCoded(w, http.StatusBadRequest, "git_unsupported", gitUnsupported, nil)
-		return
-	}
-	if body.SourceKind != "image" && body.SourceKind != "template" {
-		writeError(w, http.StatusBadRequest, "Choisissez une image ou un modèle.")
+	if body.SourceKind != "image" && body.SourceKind != "template" && body.SourceKind != "git" {
+		writeError(w, http.StatusBadRequest, "Choisissez une image, un dépôt Git ou un modèle.")
 		return
 	}
 	source := strings.TrimSpace(body.Source)
@@ -682,11 +678,35 @@ func (a *API) createApplication(w http.ResponseWriter, r *http.Request) {
 	if body.Variables == nil {
 		body.Variables = map[string]string{}
 	}
+	gitSource := ""
+	if body.SourceKind == "git" {
+		gitSource = source
+	}
 	if body.Listen < 0 || body.Listen > 65535 {
 		writeError(w, http.StatusBadRequest, "Le port va de 1 à 65535.")
 		return
 	}
 	implicit := len(body.Services) == 0
+	clusterID := ""
+	serverID := ""
+	if body.DestinationKind == "cluster" {
+		clusterID = strings.TrimSpace(body.ClusterID)
+	} else {
+		serverID = strings.TrimSpace(body.ServerID)
+	}
+	if gitSource != "" {
+		built, imageRef, gitVars, err := a.materializeGitApp(r.Context(), ownerID(r.Context()), serverID, clusterID, name, gitSource, body.Services)
+		if err != nil {
+			a.mapErr(w, err)
+			return
+		}
+		for key, value := range gitVars {
+			body.Variables[key] = value
+		}
+		body.Services = built
+		source = imageRef
+		body.SourceKind = "image"
+	}
 	services, source, err := normalizeServices(name, body.SourceKind, source, body.Replicas, body.Variables, body.Services)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -695,27 +715,23 @@ func (a *API) createApplication(w http.ResponseWriter, r *http.Request) {
 	if implicit && len(services) == 1 && body.Listen > 0 {
 		services[0].Listen = body.Listen
 	}
-	if err := a.checkLocalImages(r.Context(), userID(r.Context()), serviceImages(services)); err != nil {
+	if err := a.checkLocalImages(r.Context(), ownerID(r.Context()), serviceImages(services)); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	a.fillFromImages(r.Context(), services, implicit)
-	clusterID := ""
-	if body.DestinationKind == "cluster" {
-		clusterID = strings.TrimSpace(body.ClusterID)
-	}
-	if err := a.shapeRedundancy(r.Context(), userID(r.Context()), clusterID, services, body.Replicas); err != nil {
+	if err := a.shapeRedundancy(r.Context(), ownerID(r.Context()), clusterID, services, body.Replicas); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	in := store.NewApplication{
-		ID: newID(), OwnerID: userID(r.Context()), Name: name,
+		ID: newID(), OwnerID: ownerID(r.Context()), Name: name,
 		SourceKind: body.SourceKind, Source: source, DestinationKind: body.DestinationKind,
 		Replicas: body.Replicas, Variables: body.Variables, Services: services,
 		DefaultID: newID(), DefaultHost: slug(name) + "." + appsDomain(a.AppsDomain),
 	}
 	if body.DestinationKind == "server" {
-		server, err := a.Store.Server(r.Context(), userID(r.Context()), body.ServerID)
+		server, err := a.Store.Server(r.Context(), ownerID(r.Context()), body.ServerID)
 		if err != nil {
 			a.mapErr(w, err)
 			return
@@ -726,7 +742,7 @@ func (a *API) createApplication(w http.ResponseWriter, r *http.Request) {
 		}
 		in.ServerID = body.ServerID
 	} else {
-		origin, _, _, _, err := a.Store.ClusterKube(r.Context(), userID(r.Context()), body.ClusterID)
+		origin, _, _, _, err := a.Store.ClusterKube(r.Context(), ownerID(r.Context()), body.ClusterID)
 		if err != nil {
 			a.mapErr(w, err)
 			return
@@ -843,7 +859,7 @@ func (a *API) pauseApplication(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
 		return
 	}
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	if err := a.Store.SetPaused(r.Context(), owner, r.PathValue("id"), body.Paused); err != nil {
 		a.mapErr(w, err)
 		return

@@ -63,6 +63,8 @@ type API struct {
 	syncMu             sync.Mutex
 	destructionBusy    map[string]bool
 	authGates          gateSet
+	loginMu            sync.Mutex
+	loginChallenges    map[string]loginChallenge
 	alerts             *alertState
 }
 
@@ -71,14 +73,29 @@ func (a *API) Handler() http.Handler { return a.routes() }
 type ctxKey int
 
 const userKey ctxKey = 1
+const ownerKey ctxKey = 2
 
 func withUser(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, userKey, id)
 }
 
+func withOwner(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, ownerKey, id)
+}
+
 func userID(ctx context.Context) string {
 	id, _ := ctx.Value(userKey).(string)
 	return id
+}
+
+// ownerID is the account that owns infrastructure rows (first user). Logins
+// with other roles still see and act on that same estate.
+func ownerID(ctx context.Context) string {
+	id, _ := ctx.Value(ownerKey).(string)
+	if id != "" {
+		return id
+	}
+	return userID(ctx)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

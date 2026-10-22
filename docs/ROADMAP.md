@@ -1,38 +1,18 @@
 # Feuille de route MyInfra
 
-État au **v0.1.0-rc.8**.
+Vue courte — socle **v0.1.0-rc.8** livré, priorités **suivantes**.
 
-## 1. Stabiliser et publier — fait
+## Déjà en place
 
-- Release **rc.8** : sync `updates` / `update_jobs`, `preparing_since`, reprise des destructions au `takeLead`, `POST /api/sync/yield`.
-- Captures d’écran vérifiées en CI ; checklist cluster : [CLUSTER_UPGRADE.md](CLUSTER_UPGRADE.md).
+Sauvegardes et restauration (S3 externe, CNPG, téléchargements UI), alertes, validation fournisseurs / DNS / registre, build depuis Git, comptes **admin** / **déploiement** / **lecture seule** avec 2FA, copies synchronisées.
 
-## 2. Protéger les données — fait
+→ Détails : [BACKUPS.md](BACKUPS.md), [VALIDATION.md](VALIDATION.md), [SECURITY_COPIES.md](SECURITY_COPIES.md), [CLUSTER_UPGRADE.md](CLUSTER_UPGRADE.md).
 
-Objectif : ne plus dépendre uniquement du Garage et des bases **dans** le cluster.
+## Prochain
 
-| Livrable | Statut |
-|----------|--------|
-| Réplication SQLite (Litestream) vers un **S3 externe** en plus du Garage | **MVP** : variables `MYINFRA_OFFSITE_S3_*` (voir [BACKUPS.md](BACKUPS.md)) |
-| **Téléchargement local** par scénario (garage, offsite, disque, PostgreSQL, machine seule) | **Fait** — UI + API |
-| Sauvegardes PostgreSQL (CNPG) vers S3 externe | **Fait** — Barman + `ScheduledBackup` si `MYINFRA_OFFSITE_S3_*` |
-| Restauration guidée (upload, même format que le téléchargement) | **Fait** — UI + `POST` par scénario |
-| Alertes e-mail / **ntfy** (optionnelles au démarrage ; `internal/notify`) | **Fait** — serveur, provider, cluster, application (copie pilote) |
+1. **Multi-comptes** — finaliser droits, UI et tests (connexions réservées à l’admin, rôles déploiement / lecture seule).
+2. **Qualité** — parcours critiques couverts en CI (auth, rôles, déploiement minimal).
+3. **Release stable** — version sans `-rc`, image publiée, notes de version.
+4. **Produit** — retours terrain (réglages, doc, petits écarts UX).
 
-## 3. Valider l’existant — fait
-
-- Providers : tests de contrat `Exists` + catalogue/OpenTofu pour les 6 restants (UpCloud, Akamai, Gcore, Ionos, Kamatera, Infomaniak…) — voir [VALIDATION.md](VALIDATION.md).
-- DNS Cloudflare : tests zones, écriture et liste des enregistrements.
-- Registre privé : tests login, tags, `pullConfig` et secret Kubernetes — essai réel documenté.
-- Revue sécurité copies / sync / sondes : [SECURITY_COPIES.md](SECURITY_COPIES.md) + tests `sync_auth`, `guard`, `lead`.
-
-## 4. Fonctionnalités
-
-- Build depuis Git (BuildKit / Kaniko, webhook).
-- Multi-utilisateurs, rôles, 2FA.
-- Coût réel (serveurs disparus, alerte budget).
-- Templates : import URL, modèles avec champs guidés.
-
----
-
-Ordre recommandé : terminer **2** (sauvegardes + alertes), puis **3**, puis **4**.
+L’ordre peut changer selon les issues ouvertes sur le dépôt.

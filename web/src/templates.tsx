@@ -25,6 +25,7 @@ import { useI18n } from "./lang";
 import type { MsgKey } from "./i18n";
 import { NameList } from "./names";
 import { ProviderSelect } from "./provider-select";
+import { useSession } from "./session";
 import { ToolInstall } from "./tools";
 import {
   ActionsMenu,
@@ -49,6 +50,7 @@ const emptyApp = (): TemplateApp => ({ name: "", sourceKind: "image", source: ""
 
 export function Templates() {
   const navigate = useNavigate();
+  const { canDeploy } = useSession();
   const [rows, setRows] = useState<Template[] | null>(() => peek<Template[]>("/api/templates"));
   const [error, setError] = useState("");
   const [removing, setRemoving] = useState<Template | null>(null);
@@ -87,7 +89,7 @@ export function Templates() {
         title={text("nav.templates")}
         icon={LayoutTemplate}
         action={
-          rows && rows.length > 0 ? (
+          rows && rows.length > 0 && canDeploy ? (
             <span className="flex items-center gap-4">
               <TextButton type="button" onClick={() => document.getElementById("template-file")?.click()}>
                 {text("cluster.import")}
@@ -119,12 +121,16 @@ export function Templates() {
       {rows === null ? (
         <LoadingLines lines={4} />
       ) : rows.length === 0 ? (
-        <div className="flex flex-col items-start gap-6">
-          <EmptyList message={text("template.empty")} label={text("template.new")} onCreate={() => navigate("/templates/nouveau")} />
-          <TextButton type="button" onClick={() => document.getElementById("template-file")?.click()}>
-            {text("cluster.import")}
-          </TextButton>
-        </div>
+        canDeploy ? (
+          <div className="flex flex-col items-start gap-6">
+            <EmptyList message={text("template.empty")} label={text("template.new")} onCreate={() => navigate("/templates/nouveau")} />
+            <TextButton type="button" onClick={() => document.getElementById("template-file")?.click()}>
+              {text("cluster.import")}
+            </TextButton>
+          </div>
+        ) : (
+          <p className="text-muted">{text("template.empty")}</p>
+        )
       ) : (
         <ul className="flex flex-col gap-4">
           {rows.map((row) => (
@@ -135,13 +141,15 @@ export function Templates() {
               </Link>
               <div className="absolute right-3 top-3">
                 <ActionsMenu label={text("apps.more")}>
-                  <MenuItem onClick={() => navigate(`/templates/${row.id}/deploy`)}>{text("template.deploy")}</MenuItem>
+                  {canDeploy ? <MenuItem onClick={() => navigate(`/templates/${row.id}/deploy`)}>{text("template.deploy")}</MenuItem> : null}
                   <MenuItem onClick={() => void download(row).catch((err) => toast(err instanceof Error ? err.message : text("common.error"), "bad"))}>
                     {text("template.export")}
                   </MenuItem>
-                  <MenuItem tone="danger" onClick={() => setRemoving(row)}>
-                    {text("common.delete")}
-                  </MenuItem>
+                  {canDeploy ? (
+                    <MenuItem tone="danger" onClick={() => setRemoving(row)}>
+                      {text("common.delete")}
+                    </MenuItem>
+                  ) : null}
                 </ActionsMenu>
               </div>
             </li>

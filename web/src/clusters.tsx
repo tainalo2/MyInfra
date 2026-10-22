@@ -10,9 +10,11 @@ import { RemovalNotice } from "./destructions";
 import { ServerCard, ServerForm, billText } from "./servers";
 import { UpdateBadge, UpdateDialog, urgent, useUpdates } from "./updates";
 import { hourlyRate } from "./measure";
-import { ActionsMenu, Button, EmptyList, ErrorText, Field, Icon, Input, ItemList, ListActions, LoadingCards, LoadingLines, MenuItem, PageTitle, Skeleton, TextArea, TextButton, entryClass, removalOf, useDestructions, useListMode, type ListMode } from "./ui";
+import { useSession } from "./session";
+import { ActionsMenu, Button, EmptyList, ErrorText, Field, Icon, Input, ItemList, ListActions, ListModeButton, LoadingCards, LoadingLines, MenuItem, PageTitle, Skeleton, TextArea, TextButton, entryClass, removalOf, useDestructions, useListMode, type ListMode } from "./ui";
 
 export function Clusters() {
+  const { canDeploy } = useSession();
   const [clusters, setClusters] = useState<Cluster[]>(() => peek<Cluster[]>("/api/clusters") ?? []);
   const [servers, setServers] = useState<Server[]>(() => peek<Server[]>("/api/servers") ?? []);
   const [name, setName] = useState("");
@@ -103,10 +105,18 @@ export function Clusters() {
             </TextButton>
           ) : ready && clusters.length > 0 ? (
             <div className="flex flex-wrap items-center gap-4">
-              <TextButton type="button" onClick={() => setImporting(true)}>
-                {text("cluster.import")}
-              </TextButton>
-              <ListActions mode={mode} onToggle={toggleMode} label={text("cluster.new")} onCreate={() => setCreatingCluster(true)} />
+              {canDeploy ? (
+                <>
+                  <TextButton type="button" onClick={() => setImporting(true)}>
+                    {text("cluster.import")}
+                  </TextButton>
+                  <ListActions mode={mode} onToggle={toggleMode} label={text("cluster.new")} onCreate={() => setCreatingCluster(true)} />
+                </>
+              ) : (
+                <span className="hidden md:inline-flex">
+                  <ListModeButton mode={mode} onToggle={toggleMode} />
+                </span>
+              )}
             </div>
           ) : null
         }
@@ -156,12 +166,16 @@ export function Clusters() {
       ) : !ready ? (
         <LoadingCards />
       ) : clusters.length === 0 ? (
-        <div className="flex flex-col items-start gap-6">
-          <EmptyList message={text("cluster.empty")} label={text("cluster.new")} onCreate={() => setCreatingCluster(true)} />
-          <TextButton type="button" onClick={() => setImporting(true)}>
-            {text("cluster.import")}
-          </TextButton>
-        </div>
+        canDeploy ? (
+          <div className="flex flex-col items-start gap-6">
+            <EmptyList message={text("cluster.empty")} label={text("cluster.new")} onCreate={() => setCreatingCluster(true)} />
+            <TextButton type="button" onClick={() => setImporting(true)}>
+              {text("cluster.import")}
+            </TextButton>
+          </div>
+        ) : (
+          <p className="text-muted">{text("cluster.empty")}</p>
+        )
       ) : (
         <ItemList mode={mode} columns={1}>
           {clusters.map((cluster) => (

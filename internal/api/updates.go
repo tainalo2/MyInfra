@@ -203,7 +203,7 @@ type updateView struct {
 }
 
 func (a *API) listUpdates(w http.ResponseWriter, r *http.Request) {
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	rows, err := a.Store.Updates(r.Context(), owner)
 	if err != nil {
 		a.mapErr(w, err)
@@ -283,7 +283,7 @@ func (a *API) checkUpdatesNow(w http.ResponseWriter, r *http.Request) {
 
 // updateApplication applies the update found for an application.
 func (a *API) updateApplication(w http.ResponseWriter, r *http.Request) {
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	app, err := a.Store.Application(r.Context(), owner, r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)

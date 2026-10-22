@@ -36,7 +36,7 @@ type overviewView struct {
 // sample per cluster, and no SSH, so the page stays fast when a machine hangs.
 func (a *API) overview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	owner := userID(ctx)
+	owner := ownerID(ctx)
 	servers, err := a.Store.ListServers(ctx, owner)
 	if err != nil {
 		a.mapErr(w, err)

@@ -13,7 +13,7 @@ import (
 
 func (a *API) serverTofu(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	row, err := a.Store.Server(ctx, userID(ctx), r.PathValue("id"))
+	row, err := a.Store.Server(ctx, ownerID(ctx), r.PathValue("id"))
 	if err != nil || row.ProviderServerID == "" {
 		a.mapErr(w, errString("Aucun fichier OpenTofu."))
 		return
@@ -32,7 +32,7 @@ func (a *API) serverTofu(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) saveServerTofu(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	owner := userID(ctx)
+	owner := ownerID(ctx)
 	row, err := a.Store.Server(ctx, owner, r.PathValue("id"))
 	if err != nil || row.ProviderServerID == "" {
 		a.mapErr(w, errString("Aucun fichier OpenTofu."))
@@ -64,7 +64,7 @@ func (a *API) saveServerTofu(w http.ResponseWriter, r *http.Request) {
 func (a *API) dnsTofu(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	host := strings.ToLower(r.PathValue("host"))
-	_, provider, err := a.Store.DomainName(ctx, userID(ctx), host)
+	_, provider, err := a.Store.DomainName(ctx, ownerID(ctx), host)
 	if err != nil || provider == "" {
 		a.mapErr(w, errString("Aucun fichier OpenTofu."))
 		return
@@ -83,7 +83,7 @@ func (a *API) dnsTofu(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) saveDNSTofu(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	owner := userID(ctx)
+	owner := ownerID(ctx)
 	host := strings.ToLower(r.PathValue("host"))
 	name, provider, err := a.Store.DomainName(ctx, owner, host)
 	if err != nil || provider == "" || name.SecretID == "" {

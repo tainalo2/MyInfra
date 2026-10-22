@@ -132,9 +132,9 @@ func (a *API) selfRuntime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	view := runtimeView{Pods: []podView{}, Status: app.RunStatus}
-	sample, measured := a.clusterSample(r.Context(), userID(r.Context()), app.ClusterID)
+	sample, measured := a.clusterSample(r.Context(), ownerID(r.Context()), app.ClusterID)
 	view.Measured = measured
-	servers, _ := a.Store.ListServers(r.Context(), userID(r.Context()))
+	servers, _ := a.Store.ListServers(r.Context(), ownerID(r.Context()))
 	nodes := map[string]bool{}
 	for _, pod := range sample.Pods {
 		if pod.Namespace != transfer.PodNamespace {
@@ -204,7 +204,7 @@ func (a *API) deleteSelf(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "Introuvable.")
 		return
 	}
-	host, err := a.clusterHost(r.Context(), userID(r.Context()), app.ClusterID)
+	host, err := a.clusterHost(r.Context(), ownerID(r.Context()), app.ClusterID)
 	if err != nil {
 		writeError(w, http.StatusConflict, err.Error())
 		return
@@ -216,7 +216,7 @@ func (a *API) deleteSelf(w http.ResponseWriter, r *http.Request) {
 	// Removed from a copy that followed it, the copy drives again: there is
 	// no other one left. Its name and its peer go with it.
 	if role, err := a.Store.CopyRole(r.Context()); err == nil && role.MainMethod == "pod" && role.MainClusterID == app.ClusterID {
-		owner := userID(r.Context())
+		owner := ownerID(r.Context())
 		if zone := zoneOfURL(role.MainURL); zone != "" {
 			if sec, creds, err := a.dnsAccountOf(r.Context(), owner, zone); err == nil {
 				_ = a.dnsClient().DropAddress(r.Context(), sec.Provider, creds, zone, hostOfURL(role.MainURL))

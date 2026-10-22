@@ -11,7 +11,7 @@ import (
 )
 
 func (a *API) serverTerminal(w http.ResponseWriter, r *http.Request) {
-	owner := userID(r.Context())
+	owner := ownerID(r.Context())
 	server, err := a.Store.Server(r.Context(), owner, r.PathValue("id"))
 	if err != nil {
 		a.mapErr(w, err)
@@ -35,7 +35,7 @@ func (a *API) serverTerminal(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) podTerminal(w http.ResponseWriter, r *http.Request) {
-	host, namespace, name, err := a.podTarget(r.Context(), userID(r.Context()), r.PathValue("id"), r.PathValue("pod"))
+	host, namespace, name, err := a.podTarget(r.Context(), ownerID(r.Context()), r.PathValue("id"), r.PathValue("pod"))
 	if err != nil {
 		a.writePodErr(w, err)
 		return

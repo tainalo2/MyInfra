@@ -3,8 +3,10 @@ import { Link } from "react-router-dom";
 import { api } from "./api";
 import { TextButton } from "./ui";
 import { text as say } from "./i18n";
+import { useSession } from "./session";
 
 export function PodActions({ appId, name, failed }: { appId: string; name: string; failed: boolean }) {
+  const { canDeploy } = useSession();
   const [open, setOpen] = useState(failed);
   const [text, setText] = useState("");
   const [error, setError] = useState("");
@@ -45,12 +47,16 @@ export function PodActions({ appId, name, failed }: { appId: string; name: strin
         <TextButton type="button" onClick={() => setOpen((value) => !value)}>
           {open ? say("ui.masquerLeJournal") : say("pods.log")}
         </TextButton>
-        <TextButton type="button" onClick={() => void reset()} disabled={resetting}>
-          {say("ui.relancer")}
-        </TextButton>
-        <Link to={`/applications/${appId}/terminal/${encodeURIComponent(name)}`} className="text-muted underline">
-          Terminal
-        </Link>
+        {canDeploy ? (
+          <TextButton type="button" onClick={() => void reset()} disabled={resetting}>
+            {say("ui.relancer")}
+          </TextButton>
+        ) : null}
+        {canDeploy ? (
+          <Link to={`/applications/${appId}/terminal/${encodeURIComponent(name)}`} className="text-muted underline">
+            {say("server.terminal")}
+          </Link>
+        ) : null}
       </div>
       {error ? <p className="text-bad">{error}</p> : null}
       {open ? (

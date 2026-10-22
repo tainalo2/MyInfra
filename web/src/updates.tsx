@@ -6,6 +6,7 @@ import { currentLocale, knownMessage, text, type MsgKey } from "./i18n";
 import { Sheet, Spinner, useToast } from "./kit";
 import { useI18n } from "./lang";
 import { usePoll } from "./poll";
+import { useSession } from "./session";
 import { Button, ErrorText, Icon, LoadingLines, PageTitle, SectionTitle, TextButton, focus } from "./ui";
 
 type UpdatesState = { view: UpdatesView | null; reload: () => void };
@@ -413,6 +414,7 @@ export function VersionNote() {
 
 export function UpdatesPage() {
   useI18n();
+  const { canDeploy } = useSession();
   const { view, reload } = useUpdates();
   const toast = useToast();
   const servers = usePoll<Server[]>("/api/servers", 0).data ?? [];
@@ -469,10 +471,12 @@ export function UpdatesPage() {
         title={text("nav.updates")}
         icon={ArrowUpCircle}
         action={
-          <Button type="button" variant="secondary" onClick={checkNow} disabled={busyCheck}>
-            {busyCheck ? <Spinner /> : <Icon icon={RefreshCw} />}
-            {busyCheck ? text("upd.checking") : text("upd.check")}
-          </Button>
+          canDeploy ? (
+            <Button type="button" variant="secondary" onClick={checkNow} disabled={busyCheck}>
+              {busyCheck ? <Spinner /> : <Icon icon={RefreshCw} />}
+              {busyCheck ? text("upd.checking") : text("upd.check")}
+            </Button>
+          ) : null
         }
       />
       {!view ? (
@@ -504,7 +508,7 @@ export function UpdatesPage() {
                 </p>
                 {myinfra && version && !version.canUpdate && version.reason ? <p className="mt-2 text-[13px] text-muted">{knownMessage(version.reason)}</p> : null}
               </div>
-              {myinfra && version?.canUpdate ? (
+              {myinfra && version?.canUpdate && canDeploy ? (
                 <Button type="button" onClick={() => setTarget({ kind: "myinfra", name: "MyInfra", item: myinfra, version })}>
                   {text("upd.update")}
                 </Button>
@@ -529,9 +533,11 @@ export function UpdatesPage() {
                       </p>
                       <p className="text-[13px] text-muted [overflow-wrap:anywhere]">{summary(item)}</p>
                     </div>
-                    <Button type="button" variant="secondary" onClick={() => setTarget({ kind: "app", id: item.id, name: item.name, item })}>
-                      {text("upd.update")}
-                    </Button>
+                    {canDeploy ? (
+                      <Button type="button" variant="secondary" onClick={() => setTarget({ kind: "app", id: item.id, name: item.name, item })}>
+                        {text("upd.update")}
+                      </Button>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -548,13 +554,15 @@ export function UpdatesPage() {
                   {group.clusterId ? (
                     <div className="flex flex-wrap items-center justify-between gap-4 border-t border-line py-3">
                       <p className="font-medium">{text("upd.cluster", { name: group.name })}</p>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={() => setTarget({ kind: "cluster", id: group.clusterId!, name: group.name, k3s: group.items.some((item) => item.detail.k3sNext) })}
-                      >
-                        {text("upd.cluster.update")}
-                      </Button>
+                      {canDeploy ? (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => setTarget({ kind: "cluster", id: group.clusterId!, name: group.name, k3s: group.items.some((item) => item.detail.k3sNext) })}
+                        >
+                          {text("upd.cluster.update")}
+                        </Button>
+                      ) : null}
                     </div>
                   ) : null}
                   <ul className="flex flex-col">
@@ -569,9 +577,11 @@ export function UpdatesPage() {
                           </p>
                           <p className="text-[13px] text-muted">{summary(item)}</p>
                         </div>
-                        <Button type="button" variant="secondary" onClick={() => setTarget({ kind: "server", id: item.id, name: item.name, item })}>
-                          {text("upd.update")}
-                        </Button>
+                        {canDeploy ? (
+                          <Button type="button" variant="secondary" onClick={() => setTarget({ kind: "server", id: item.id, name: item.name, item })}>
+                            {text("upd.update")}
+                          </Button>
+                        ) : null}
                       </li>
                     ))}
                   </ul>
