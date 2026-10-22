@@ -106,7 +106,22 @@ const named: { test: RegExp; place: Place }[] = [
 export function placeOf(code?: string): Place | null {
   const value = (code ?? "").trim();
   if (!value) return null;
-  return named.find((item) => item.test.test(value))?.place ?? null;
+  const found = named.find((item) => item.test.test(value));
+  if (found) return found.place;
+  const lower = value.toLowerCase();
+  return named.find((item) => item.place.label.toLowerCase() === lower)?.place ?? null;
+}
+
+export function knownPlaces(): Place[] {
+  const seen = new Set<string>();
+  const out: Place[] = [];
+  for (const item of named) {
+    if (seen.has(item.place.label)) continue;
+    seen.add(item.place.label);
+    out.push(item.place);
+  }
+  out.sort((a, b) => a.label.localeCompare(b.label, "fr"));
+  return out;
 }
 
 export function placeLabel(code?: string) {

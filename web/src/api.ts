@@ -180,6 +180,7 @@ export type Server = {
   seenAt?: string;
   providerCheckedAt?: string;
   providerError?: string;
+  place?: string;
 };
 
 export type Cost = {

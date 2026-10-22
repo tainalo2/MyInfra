@@ -197,7 +197,7 @@ function PasswordForm({
             />
           </Field>
         ) : null}
-        <Field label={text("auth.password")} hint={signingIn ? text("auth.passwordLoginHint") : undefined}>
+        <Field label={text("auth.password")}>
           <Input
             id={signingIn ? "password" : choosing ? "new-password" : "password"}
             name="password"

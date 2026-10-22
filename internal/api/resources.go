@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"myinfra/internal/catalog"
 	"myinfra/internal/deploy"
@@ -60,6 +62,8 @@ type serverView struct {
 	SeenAt            *time.Time `json:"seenAt,omitempty"`
 	ProviderCheckedAt *time.Time `json:"providerCheckedAt,omitempty"`
 	ProviderError     string     `json:"providerError,omitempty"`
+	// Place is the city of a machine added by hand. A bought machine uses its plan.
+	Place string `json:"place,omitempty"`
 }
 
 func (a *API) toServer(row store.Server) serverView {
@@ -77,6 +81,7 @@ func (a *API) toServer(row store.Server) serverView {
 		Plan:         plan,
 		Deploy:       stepsOf(row.Deploy),
 		CreatedAt:    row.CreatedAt,
+		Place:        manualPlace(row.Plan),
 	}
 	if plan != nil {
 		view.Cost = billOf(plan.Hourly, plan.Monthly, plan.Currency, row.CreatedAt)
@@ -94,6 +99,19 @@ func stepsOf(raw []byte) []deploy.Step {
 		return nil
 	}
 	return steps
+}
+
+func manualPlace(raw []byte) string {
+	if planOf(raw) != nil || len(raw) == 0 {
+		return ""
+	}
+	var body struct {
+		Location string `json:"location"`
+	}
+	if json.Unmarshal(raw, &body) != nil {
+		return ""
+	}
+	return strings.TrimSpace(body.Location)
 }
 
 func planOf(raw []byte) *catalog.Plan {
@@ -325,6 +343,58 @@ func (a *API) getServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, a.toServer(row))
+}
+
+func (a *API) setServerPlace(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Place string `json:"place"`
+	}
+	if err := readJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "Requête illisible.")
+		return
+	}
+	place, ok := cleanPlace(body.Place)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "Choisissez une ville.")
+		return
+	}
+	owner := ownerID(r.Context())
+	row, err := a.Store.Server(r.Context(), owner, r.PathValue("id"))
+	if err != nil {
+		a.mapErr(w, err)
+		return
+	}
+	if row.ProviderID != "" {
+		writeError(w, http.StatusConflict, "Le lieu d'un serveur acheté vient de son offre.")
+		return
+	}
+	if err := a.Store.SetServerPlace(r.Context(), owner, row.ID, place); err != nil {
+		a.mapErr(w, err)
+		return
+	}
+	row, err = a.Store.Server(r.Context(), owner, row.ID)
+	if err != nil {
+		a.mapErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a.toServer(row))
+}
+
+func cleanPlace(raw string) (string, bool) {
+	place := strings.TrimSpace(raw)
+	if place == "" {
+		return "", true
+	}
+	if utf8.RuneCountInString(place) > 80 {
+		return "", false
+	}
+	for _, r := range place {
+		if unicode.IsLetter(r) || unicode.IsNumber(r) || r == ' ' || r == '-' || r == '\'' || r == '.' || r == '’' {
+			continue
+		}
+		return "", false
+	}
+	return place, true
 }
 
 func (a *API) deleteServer(w http.ResponseWriter, r *http.Request) {

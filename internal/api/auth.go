@@ -220,6 +220,7 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("GET /api/events", a.auth(a.listEvents))
 	mux.HandleFunc("POST /api/servers", a.deployAuth(a.steady(a.createServer)))
 	mux.HandleFunc("GET /api/servers/{id}", a.auth(a.getServer))
+	mux.HandleFunc("PUT /api/servers/{id}/place", a.deployAuth(a.serverSteady(a.setServerPlace)))
 	mux.HandleFunc("GET /api/servers/{id}/tofu", a.auth(a.serverTofu))
 	mux.HandleFunc("PUT /api/servers/{id}/tofu", a.deployAuth(a.serverSteady(a.saveServerTofu)))
 	mux.HandleFunc("GET /api/servers/{id}/runtime", a.auth(a.serverRuntime))

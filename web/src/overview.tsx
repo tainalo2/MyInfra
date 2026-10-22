@@ -48,7 +48,7 @@ function appTone(app: Application): Tone {
 }
 
 function siteOf(server: OverviewServer) {
-  return placeOf(server.plan?.location)?.label ?? "";
+  return placeOf(server.plan?.location)?.label || placeOf(server.place)?.label || "";
 }
 
 function useWide() {
@@ -196,7 +196,7 @@ export function Overview() {
   const sites: MapSite[] = useMemo(() => {
     const out: MapSite[] = [];
     for (const [label, servers] of model.places) {
-      const place = servers[0] ? placeOf(servers[0].plan?.location) : null;
+      const place = servers[0] ? placeOf(servers[0].plan?.location) ?? placeOf(servers[0].place) : null;
       if (!label || !place) continue;
       const ids = new Set(servers.map((server) => server.id));
       const site: MapSite = { key: label, place, count: servers.length, tone: worst(servers.map((server) => healthOf(server, server.usage))) };

@@ -79,6 +79,7 @@ export function IconButton({
 
 export function ActionsMenu({ label, children }: { label: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  const [alignEnd, setAlignEnd] = useState(false);
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -97,11 +98,23 @@ export function ActionsMenu({ label, children }: { label: string; children: Reac
     };
   }, [open]);
 
+  function toggle() {
+    if (!open && root.current) {
+      const rect = root.current.getBoundingClientRect();
+      const needed = 260;
+      const spaceRight = window.innerWidth - rect.left;
+      const spaceLeft = rect.right;
+      // A menu at the start of the page used to open left, under the navigation.
+      setAlignEnd(spaceRight < needed && spaceLeft > spaceRight);
+    }
+    setOpen((value) => !value);
+  }
+
   return (
     <div className="relative" ref={root}>
-      <IconButton icon={MoreHorizontal} label={label} aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((value) => !value)} />
+      <IconButton icon={MoreHorizontal} label={label} aria-expanded={open} aria-haspopup="menu" onClick={toggle} />
       {open ? (
-        <div role="menu" onClick={() => setOpen(false)} className="absolute right-0 z-20 mt-2 min-w-48 rounded-md border border-line bg-surface p-1">
+        <div role="menu" onClick={() => setOpen(false)} className={`absolute z-30 mt-2 w-max min-w-48 max-w-[min(20rem,calc(100vw-2rem))] rounded-md border border-line bg-surface p-1 ${alignEnd ? "right-0" : "left-0"}`}>
           {children}
         </div>
       ) : null}

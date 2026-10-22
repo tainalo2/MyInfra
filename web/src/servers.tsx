@@ -9,7 +9,7 @@ import { UsageMeters } from "./meters";
 import { hourlyRate, money, podCpu, size, usageText } from "./measure";
 import { ProviderLogo } from "./logos";
 import { OfferFields, OfferStorage, cheapestOffer, chosenStorage, formatPrice, memory } from "./offers";
-import { placeLabel } from "./places";
+import { knownPlaces, placeLabel, placeOf } from "./places";
 import { ProviderSelect } from "./provider-select";
 import { TofuFiles } from "./tofu";
 import { EventList } from "./world";
@@ -509,7 +509,7 @@ export function ServerCard({
         {controlPlane ? <p className="mt-1 text-faint">{text("server.controlPlaneShort")}</p> : null}
         {update ? <p className="mt-2"><UpdateBadge item={update} /></p> : null}
         {server.address ? <p className="mt-2 truncate text-muted">{server.address}</p> : null}
-        {placeLabel(server.plan?.location) ? <p className="mt-1 truncate text-muted">{placeLabel(server.plan?.location)}</p> : null}
+        {placeLabel(server.plan?.location) || placeLabel(server.place) ? <p className="mt-1 truncate text-muted">{placeLabel(server.plan?.location) || placeLabel(server.place)}</p> : null}
         {server.plan ? (
           <p className="mt-1 truncate text-muted">
             {server.plan.name} · {server.plan.vcpu} vCPU · {memory(server.plan.memoryMb)}
@@ -631,7 +631,7 @@ export function ServerPage() {
     )],
     ...(server.clusterName ? [[text("server.cluster"), `${server.clusterName}${server.controlPlane ? ` · ${text("server.controlPlaneShort")}` : ""}`] as [string, ReactNode]] : []),
     ...(server.plan ? [[text("server.offer"), `${server.plan.name} · ${server.plan.vcpu} vCPU · ${memory(server.plan.memoryMb)}${server.plan.diskGb > 0 ? ` · ${server.plan.diskGb} ${text("unit.gb")}` : ""}`] as [string, ReactNode]] : []),
-    ...(server.plan && placeLabel(server.plan.location) ? [[text("server.place"), placeLabel(server.plan.location)] as [string, ReactNode]] : []),
+    ...(placeLabel(server.plan?.location) || (!(canDeploy && !server.providerId) && placeLabel(server.place)) ? [[text("server.place"), placeLabel(server.plan?.location) || placeLabel(server.place)] as [string, ReactNode]] : []),
     ...(server.address ? [[text("server.address"), <span className="break-all font-mono text-[13px]">{server.address}</span>] as [string, ReactNode]] : []),
     [text("server.cost"), server.cost ? billText(server.cost, false, hourlyRate(server)) : text("bill.none")],
     [text("server.uptime"), exploitation(server.createdAt, now)],
@@ -653,6 +653,29 @@ export function ServerPage() {
           </div>
         ))}
       </dl>
+      {!server.providerId && canDeploy ? (
+        <div className="mt-6 max-w-[720px]">
+          <Field label={text("server.place")} hint={text("server.placeHint")}>
+            <Select
+              value={placeOf(server.place)?.label ?? server.place ?? ""}
+              onChange={(e) => {
+                const place = e.target.value;
+                void api<Server>(`/api/servers/${server.id}/place`, { method: "PUT", body: JSON.stringify({ place }) })
+                  .then(setServer)
+                  .catch((err) => setError(err instanceof Error ? err.message : text("common.error")));
+              }}
+            >
+              <option value="">{text("ui.sansLieuConnu")}</option>
+              {server.place && !knownPlaces().some((item) => item.label === server.place) ? <option value={server.place}>{server.place}</option> : null}
+              {knownPlaces().map((item) => (
+                <option key={item.label} value={item.label}>
+                  {item.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+      ) : null}
       <ReachNotice server={server} onChecked={setServer} onRemove={() => setConfirm(true)} />
       <ServerFacts serverId={server.id} />
       {!server.plan && server.joinCommand ? (

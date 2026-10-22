@@ -1044,6 +1044,22 @@ func (s *Store) RememberAddress(ctx context.Context, token, address string) erro
 	return err
 }
 
+// SetServerPlace records the city of a machine added by hand. A bought
+// machine keeps the place of its offer.
+func (s *Store) SetServerPlace(ctx context.Context, ownerID, id, place string) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE servers
+		SET plan = jsonb_set(CASE WHEN jsonb_typeof(plan) = 'object' THEN plan ELSE '{}'::jsonb END, '{location}', to_jsonb($3::text), true)
+		WHERE id = $1 AND owner_id = $2 AND provider_id = ''`, id, ownerID, place)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // SetJoinAddress replaces the address announced by the machine itself.
 func (s *Store) SetJoinAddress(ctx context.Context, token, address string) error {
 	tag, err := s.pool.Exec(ctx, `UPDATE servers SET address = $2 WHERE join_token = $1`, token, address)
