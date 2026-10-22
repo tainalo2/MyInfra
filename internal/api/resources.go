@@ -66,7 +66,7 @@ func (a *API) toServer(row store.Server) serverView {
 	plan := planOf(row.Plan)
 	view := serverView{
 		ID: row.ID, Name: row.Name, Status: row.Status, ClusterID: row.ClusterID,
-		JoinCommand:  join.Command(a.PublicURL, row.JoinToken),
+		JoinCommand:  join.Command(a.reachURL(), row.JoinToken),
 		Address:      row.Address,
 		ProviderID:   row.ProviderID,
 		Provider:     row.Provider,
@@ -549,7 +549,7 @@ func (a *API) joinScript(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Introuvable.\n", http.StatusNotFound)
 		return
 	}
-	script, err := machineScript(a.PublicURL, r.PathValue("token"), keys, row.ClusterID != "")
+	script, err := machineScript(a.reachURL(), machineToken(r), keys, row.ClusterID != "")
 	if err != nil {
 		http.Error(w, "Introuvable.\n", http.StatusNotFound)
 		return

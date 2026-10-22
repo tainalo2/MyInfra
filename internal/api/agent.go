@@ -52,7 +52,7 @@ func (a *API) agentSync(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	script, err := agent.Sync(a.PublicURL, token, work)
+	script, err := agent.Sync(a.reachURL(), token, work)
 	if err != nil {
 		http.Error(w, "Introuvable.\n", http.StatusNotFound)
 		return

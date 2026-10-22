@@ -38,7 +38,7 @@ func (a *API) deliverMachine(ctx context.Context, server store.AloneServer) {
 	if err != nil {
 		return
 	}
-	script, err := agent.Sync(a.PublicURL, server.JoinToken, work)
+	script, err := agent.Sync(a.reachURL(), server.JoinToken, work)
 	if err != nil {
 		return
 	}

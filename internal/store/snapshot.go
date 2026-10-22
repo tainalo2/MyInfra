@@ -46,6 +46,10 @@ type snapAppSecret struct {
 type snapUser struct {
 	ID           string `json:"id"`
 	PasswordHash string `json:"passwordHash"`
+	Login        string `json:"login,omitempty"`
+	Role         string `json:"role,omitempty"`
+	TOTPSecret   string `json:"totpSecret,omitempty"`
+	Onboarded    bool   `json:"onboarded,omitempty"`
 }
 
 type snapSecret struct {
@@ -152,14 +156,14 @@ func (s *Store) Installation(ctx context.Context) (Installation, error) {
 
 func (s *Store) ExportSnapshot(ctx context.Context) (Snapshot, error) {
 	var snap Snapshot
-	users, err := s.pool.Query(ctx, `SELECT id, password_hash FROM users ORDER BY created_at`)
+	users, err := s.pool.Query(ctx, `SELECT id, password_hash, login, role, totp_secret, onboarded FROM users ORDER BY created_at`)
 	if err != nil {
 		return Snapshot{}, err
 	}
 	defer users.Close()
 	for users.Next() {
 		var row snapUser
-		if err := users.Scan(&row.ID, &row.PasswordHash); err != nil {
+		if err := users.Scan(&row.ID, &row.PasswordHash, &row.Login, &row.Role, &row.TOTPSecret, &row.Onboarded); err != nil {
 			return Snapshot{}, err
 		}
 		snap.Users = append(snap.Users, row)
@@ -343,7 +347,14 @@ func (s *Store) ImportSnapshot(ctx context.Context, snap Snapshot) error {
 		}
 	}
 	for _, row := range snap.Users {
-		if _, err := tx.Exec(ctx, `INSERT INTO users (id, password_hash) VALUES ($1, $2)`, row.ID, row.PasswordHash); err != nil {
+		role := row.Role
+		if role == "" {
+			role = "admin"
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO users (id, password_hash, login, role, totp_secret, onboarded)
+			VALUES ($1, $2, $3, $4, $5, $6)`,
+			row.ID, row.PasswordHash, row.Login, role, row.TOTPSecret, row.Onboarded); err != nil {
 			return err
 		}
 	}
