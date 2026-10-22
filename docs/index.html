@@ -433,9 +433,14 @@
             <p>Provider tokens, SSH keys and app secrets sealed with AES-GCM. A list never shows a secret in clear text.</p>
           </article>
           <article class="card">
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 5 6v5c0 4 2.8 7.4 7 8.5 4.2-1.1 7-4.5 7-8.5V6l-7-3Z"/><path d="M9.5 12.2 11.2 14l3.3-3.8"/></svg></div>
+            <h3>Accounts and two-factor sign-in</h3>
+            <p>Several people on one installation, each with a role: administration, deployment or read-only. An account can require a TOTP code. Logins, roles and codes move with a transfer.</p>
+          </article>
+          <article class="card">
             <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></div>
             <h3>See it all on a map</h3>
-            <p>Every server, app and pod, what needs attention, and the hourly and monthly cost at the top of the screen.</p>
+            <p>Every server, app and pod, what needs attention, and the hourly and monthly cost at the top of the screen. A machine you add yourself takes the city you choose.</p>
           </article>
           <article class="card">
             <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg></div>
@@ -616,11 +621,11 @@
         <div class="steps">
           <div class="step">
             <h3>Start MyInfra</h3>
-            <p>Run the executable. It unpacks its own PostgreSQL, opens your browser and asks for a password. Then link a provider token, an SSH key and a DNS account.</p>
+            <p>Run the executable. It unpacks its own PostgreSQL, opens your browser and asks for a password. You can add other accounts, each with a role and an optional TOTP code. Then link a provider token, an SSH key and a DNS account.</p>
           </div>
           <div class="step">
             <h3>Add servers</h3>
-            <p>Buy a machine from your provider in a few clicks, or paste one command on a machine you own. Group machines into a k3s cluster joined over WireGuard.</p>
+            <p>Buy a machine from your provider in a few clicks, or paste one command on a machine you own: it receives the SSH key, and MyInfra finishes the setup. Give that machine a city for the map. Group machines into a k3s cluster joined over WireGuard.</p>
           </div>
           <div class="step">
             <h3>Put apps online</h3>

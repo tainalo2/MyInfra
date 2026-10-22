@@ -69,13 +69,15 @@ On a phone, the same application, laid out for the thumb:
 **Run servers**
 
 - **Providers.** Buy and destroy machines at Hetzner, Scaleway, OVH, DigitalOcean, Infomaniak, UpCloud, Akamai, Vultr, Exoscale, Gcore, Kamatera and IONOS, with your own API token. MyInfra does not resell compute.
-- **Bring your own machine.** Any Linux machine you already have joins with one command to paste.
+- **Bring your own machine.** Any Linux machine you already have joins with one command to paste. The command installs MyInfra's SSH key and announces the machine's own address; MyInfra then installs Docker, or Kubernetes on a cluster node, over SSH, as it does for a machine it bought. Choose a city so the machine shows on the map. When MyInfra itself is on the same local network, that command uses the address of your computer instead of localhost.
 - **Clusters.** Linked machines running k3s, Traefik at the edge, Kubernetes traffic between nodes over WireGuard only, an odd number of control planes, a name pointing at every node.
-- **Overview.** A map of every server; switch to applications or pods. Pick an application to light up the servers that run it. A panel lists what needs attention, and the hourly and monthly cost is always at the top.
+- **Overview.** A map of every server; switch to applications or pods. Pick an application to light up the servers that run it. A machine you added yourself takes the city you chose. A panel lists what needs attention, and the hourly and monthly cost is always at the top.
 - **Templates.** Describe applications, machines and a cluster once; deploy, export or share it. Nine ready-made templates — first steps, website, team workspace, knowledge base, development, monitoring, automation, paperwork, media — only ask for your provider, offers, keys and domain; the applications' passwords are drawn at deployment.
 
 **Keep control**
 
+- **Accounts.** Several people share one installation, with a login and a role. Administration can do everything. Deployment runs servers and applications, can look at connections, and cannot add or remove them, download an SSH private key, or start a transfer. Read-only can look, not change, and has no terminal.
+- **Two-factor authentication.** Each account can require a TOTP code, from the same authenticator apps used anywhere else. Signing in then asks for that code after the password. A transfer carries the logins, the roles, the passwords and these codes, so the copy you move keeps the same accounts.
 - **Vault.** Provider, DNS and registry tokens, SSH private keys and application secrets are sealed with AES-GCM before they are stored. A list never returns a secret in clear text.
 - **Secrets for applications.** Declare keys, then choose the applications allowed to receive them.
 - **Copies.** Several MyInfra instances of the same owner keep their databases in sync; a replica does not drive the machines, but takes the lead when the main copy fails — or to act from your laptop — and gives it back afterwards.
@@ -97,7 +99,7 @@ chmod +x myinfra_*_linux_amd64        # macOS: also xattr -d com.apple.quarantin
 ./myinfra_*_linux_amd64
 ```
 
-It prints its address, for example `http://127.0.0.1:8080`, and opens it. On the first start it creates `~/.myinfra`, writes a master key there, and starts the PostgreSQL it carries. Choose a password, then follow the guided start: an SSH key, a provider token, a DNS account. Each step can be skipped.
+It prints its address, for example `http://127.0.0.1:8080`, and opens it. On the first start it creates `~/.myinfra`, writes a master key there, and starts the PostgreSQL it carries. Choose a password, then follow the guided start: an SSH key, a provider token, a DNS account. Each step can be skipped. Further accounts, each with a role and an optional TOTP code, share the same servers and applications.
 
 ### Docker Compose
 
@@ -266,7 +268,7 @@ Push a tag such as `v1.4.0`, or run the **Publication** workflow from the Action
 
 ## How it works
 
-**Startup.** With no variables, the binary creates `~/.myinfra`, writes a master key there, and starts the PostgreSQL it carries. The data stays when the process stops. Then you choose a password; one account per installation. On the pages that install a machine, a button installs Ansible into `~/.myinfra` when it is missing — with its own Python when the machine has none, and OpenTofu for Hetzner and Scaleway when `MYINFRA_TOFU_DIR` is set. Neither needs an administrator password.
+**Startup.** With no variables, the binary creates `~/.myinfra`, writes a master key there, and starts the PostgreSQL it carries. The data stays when the process stops. Then you choose a password for the first account. Further accounts share that installation: each has a login, a role (administration, deployment or read-only) and, if you turn it on, a TOTP code checked at sign-in. On the pages that install a machine, a button installs Ansible into `~/.myinfra` when it is missing — with its own Python when the machine has none, and OpenTofu for Hetzner and Scaleway when `MYINFRA_TOFU_DIR` is set. Neither needs an administrator password.
 
 **Create an application.** The catalogue fills in the image, the port, the disk and the variables. For any other image, MyInfra reads the port and the folders to keep that the image declares (`EXPOSE`, `VOLUME`). The control plane stores the application, then delivers it.
 
@@ -288,7 +290,7 @@ Push a tag such as `v1.4.0`, or run the **Publication** workflow from the Action
 
 **Reachability.** Every minute, MyInfra knocks on the SSH port of each server (without logging in) and calls the address of each application. Three misses in a row make it unreachable. Soon after, and every six hours otherwise, the provider is asked whether the machine still exists; only a clear "not found" marks it gone.
 
-**Transfer.** MyInfra can move itself: to a machine with cloud-init, or into the cluster as two pods with Postgres, under a name you choose in your zone. The data is copied; then the old copy either stops, or stays as a synced copy that no longer drives the machines — handy to keep MyInfra on a laptop. Each copy lists the other when it can reach it. In the cluster, MyInfra shows as an application that cannot be removed or changed.
+**Transfer.** MyInfra can move itself: to a machine with cloud-init, or into the cluster as two pods with Postgres, under a name you choose in your zone. The data is copied, including the accounts: logins, roles, passwords and two-factor secrets. Then the old copy either stops, or stays as a synced copy that no longer drives the machines — handy to keep MyInfra on a laptop. Each copy lists the other when it can reach it. In the cluster, MyInfra shows as an application that cannot be removed or changed.
 
 ## Updates
 
