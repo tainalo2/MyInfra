@@ -21,12 +21,23 @@ export function podCpu(milli: number) {
   return `${milli.toLocaleString(currentLocale())} m`;
 }
 
+type Priced = {
+  plan?: { hourly?: string; monthly?: string; currency?: string };
+  hosting?: { price?: string; period?: string; currency?: string };
+};
+
 // hourlyRate is the price of an hour of a machine, the month spread on 730 hours.
-export function hourlyRate(server: { plan?: { hourly?: string; monthly?: string } }): number {
-  const hourly = Number(server.plan?.hourly);
+// A machine added by hand uses the price its owner gave.
+export function hourlyRate(server: Priced): number {
+  const price = server.plan ?? (server.hosting?.period === "hour" ? { hourly: server.hosting.price } : { monthly: server.hosting?.price });
+  const hourly = Number(price.hourly);
   if (Number.isFinite(hourly) && hourly > 0) return hourly;
-  const monthly = Number(server.plan?.monthly);
+  const monthly = Number(price.monthly);
   return Number.isFinite(monthly) && monthly > 0 ? monthly / 730 : 0;
+}
+
+export function rateCurrency(server: Priced) {
+  return server.plan?.currency ?? server.hosting?.currency;
 }
 
 export function money(value: number) {

@@ -64,6 +64,8 @@ type serverView struct {
 	ProviderError     string     `json:"providerError,omitempty"`
 	// Place is the city of a machine added by hand. A bought machine uses its plan.
 	Place string `json:"place,omitempty"`
+	// Hosting is who rents a machine added by hand, and its price.
+	Hosting *hostingView `json:"hosting,omitempty"`
 }
 
 func (a *API) toServer(row store.Server) serverView {
@@ -82,9 +84,12 @@ func (a *API) toServer(row store.Server) serverView {
 		Deploy:       stepsOf(row.Deploy),
 		CreatedAt:    row.CreatedAt,
 		Place:        manualPlace(row.Plan),
+		Hosting:      manualHosting(row.Plan),
 	}
 	if plan != nil {
 		view.Cost = billOf(plan.Hourly, plan.Monthly, plan.Currency, row.CreatedAt)
+	} else if hourly, monthly := view.Hosting.rates(); hourly != "" || monthly != "" {
+		view.Cost = billOf(hourly, monthly, view.Hosting.Currency, row.CreatedAt)
 	}
 	a.reachServer(&view)
 	return view
@@ -138,6 +143,8 @@ func (a *API) createServer(w http.ResponseWriter, r *http.Request) {
 		StorageGB    int      `json:"storageGb"`
 		ProjectID    string   `json:"projectId"`
 		ControlPlane bool     `json:"controlPlane"`
+		// Hosting is only read for a machine added by hand.
+		Hosting *hostingView `json:"hosting"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
@@ -230,6 +237,20 @@ func (a *API) createServer(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			a.mapErr(w, err)
 			return
+		}
+	}
+	if providerID == "" && body.Hosting != nil {
+		hosting, problem := cleanHosting(*body.Hosting)
+		if problem != "" {
+			writeError(w, http.StatusBadRequest, problem)
+			return
+		}
+		if hosting.Provider != "" || hosting.Price != "" {
+			rawPlan, err = json.Marshal(map[string]hostingView{"hosting": hosting})
+			if err != nil {
+				a.mapErr(w, err)
+				return
+			}
 		}
 	}
 	id := newID()
