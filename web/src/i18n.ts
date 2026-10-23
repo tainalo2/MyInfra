@@ -1193,11 +1193,11 @@ const fr = {
   "package.exportYaml": "Exporter en YAML",
   "package.exportJson": "Exporter en JSON",
   "package.importTitle": "Importer un paquet",
-  "package.importHint": "Un paquet MyInfra en YAML ou en JSON. Un nom déjà pris reçoit un numéro.",
+  "package.importHint": "Un paquet MyInfra en YAML ou en JSON, ou un fichier docker-compose : il est converti puis ouvert dans l'éditeur, avec ce qui reste à vérifier. Un nom déjà pris reçoit un numéro.",
   "package.fromFile": "Fichier",
   "package.fromText": "Texte collé",
   "package.fromUrl": "Lien",
-  "package.file": "Fichier .yaml ou .json",
+  "package.file": "Fichier .yaml, .json ou docker-compose",
   "package.url": "Adresse https:// du fichier",
   "package.line": "ligne {line}",
   "package.view": "Vue",
@@ -1286,6 +1286,7 @@ const fr = {
   "package.noPort": "Tâche de fond : n'écoute aucun port (personne ne l'attend)",
   "address.follows": "suit le domaine",
   "address.hint": "{{url}} vaut https://{address} et {{host}} vaut {address} : ils suivent le domaine de l'application, et un nouveau nom redémarre ses copies avec la nouvelle adresse.",
+  "package.importWarnings": "À vérifier avant d'enregistrer",
 } as const;
 
 export type MsgKey = keyof typeof fr;
@@ -2410,11 +2411,11 @@ const en: Record<MsgKey, string> = {
   "package.exportYaml": "Export as YAML",
   "package.exportJson": "Export as JSON",
   "package.importTitle": "Import a package",
-  "package.importHint": "A MyInfra package in YAML or JSON. A name already in use gets a number.",
+  "package.importHint": "A MyInfra package in YAML or JSON, or a docker-compose file: it is converted, then opened in the editor with what is left to check. A name already in use gets a number.",
   "package.fromFile": "File",
   "package.fromText": "Pasted text",
   "package.fromUrl": "Link",
-  "package.file": ".yaml or .json file",
+  "package.file": ".yaml, .json or docker-compose file",
   "package.url": "https:// address of the file",
   "package.line": "line {line}",
   "package.view": "View",
@@ -2503,6 +2504,7 @@ const en: Record<MsgKey, string> = {
   "package.noPort": "Background task: listens on no port (nothing waits for it)",
   "address.follows": "follows the domain",
   "address.hint": "{{url}} is https://{address} and {{host}} is {address}: they follow the application's domain, and a new name restarts its copies with the new address.",
+  "package.importWarnings": "Check before saving",
 };
 
 const pt: Record<MsgKey, string> = {
@@ -3603,11 +3605,11 @@ const pt: Record<MsgKey, string> = {
   "package.exportYaml": "Exportar em YAML",
   "package.exportJson": "Exportar em JSON",
   "package.importTitle": "Importar um pacote",
-  "package.importHint": "Um pacote MyInfra em YAML ou JSON. Um nome já usado recebe um número.",
+  "package.importHint": "Um pacote MyInfra em YAML ou JSON, ou um ficheiro docker-compose: é convertido e aberto no editor, com o que falta verificar. Um nome já usado recebe um número.",
   "package.fromFile": "Ficheiro",
   "package.fromText": "Texto colado",
   "package.fromUrl": "Ligação",
-  "package.file": "Ficheiro .yaml ou .json",
+  "package.file": "Ficheiro .yaml, .json ou docker-compose",
   "package.url": "Endereço https:// do ficheiro",
   "package.line": "linha {line}",
   "package.view": "Vista",
@@ -3696,6 +3698,7 @@ const pt: Record<MsgKey, string> = {
   "package.noPort": "Tarefa de fundo: não escuta nenhuma porta (ninguém espera por ela)",
   "address.follows": "segue o domínio",
   "address.hint": "{{url}} vale https://{address} e {{host}} vale {address}: seguem o domínio da aplicação, e um novo nome reinicia as cópias com o novo endereço.",
+  "package.importWarnings": "A verificar antes de guardar",
 };
 
 const it: Record<MsgKey, string> = {
@@ -4795,11 +4798,11 @@ const it: Record<MsgKey, string> = {
   "package.exportYaml": "Esporta in YAML",
   "package.exportJson": "Esporta in JSON",
   "package.importTitle": "Importa un pacchetto",
-  "package.importHint": "Un pacchetto MyInfra in YAML o JSON. Un nome già usato riceve un numero.",
+  "package.importHint": "Un pacchetto MyInfra in YAML o JSON, o un file docker-compose: viene convertito e aperto nell'editor, con ciò che resta da verificare. Un nome già usato riceve un numero.",
   "package.fromFile": "File",
   "package.fromText": "Testo incollato",
   "package.fromUrl": "Link",
-  "package.file": "File .yaml o .json",
+  "package.file": "File .yaml, .json o docker-compose",
   "package.url": "Indirizzo https:// del file",
   "package.line": "riga {line}",
   "package.view": "Vista",
@@ -4888,6 +4891,7 @@ const it: Record<MsgKey, string> = {
   "package.noPort": "Attività in background: non ascolta nessuna porta (nessuno la attende)",
   "address.follows": "segue il dominio",
   "address.hint": "{{url}} vale https://{address} e {{host}} vale {address}: seguono il dominio dell'applicazione, e un nuovo nome riavvia le copie con il nuovo indirizzo.",
+  "package.importWarnings": "Da verificare prima di salvare",
 };
 
 const de: Record<MsgKey, string> = {
@@ -5989,11 +5993,11 @@ const de: Record<MsgKey, string> = {
   "package.exportYaml": "Als YAML exportieren",
   "package.exportJson": "Als JSON exportieren",
   "package.importTitle": "Paket importieren",
-  "package.importHint": "Ein MyInfra-Paket in YAML oder JSON. Ein bereits vergebener Name erhält eine Nummer.",
+  "package.importHint": "Ein MyInfra-Paket in YAML oder JSON oder eine docker-compose-Datei: Sie wird umgewandelt und im Editor geöffnet, mit dem, was noch zu prüfen ist. Ein bereits vergebener Name erhält eine Nummer.",
   "package.fromFile": "Datei",
   "package.fromText": "Eingefügter Text",
   "package.fromUrl": "Link",
-  "package.file": ".yaml- oder .json-Datei",
+  "package.file": ".yaml-, .json- oder docker-compose-Datei",
   "package.url": "https://-Adresse der Datei",
   "package.line": "Zeile {line}",
   "package.view": "Ansicht",
@@ -6082,6 +6086,7 @@ const de: Record<MsgKey, string> = {
   "package.noPort": "Hintergrundaufgabe: hört auf keinem Port (niemand wartet darauf)",
   "address.follows": "folgt der Domain",
   "address.hint": "{{url}} ist https://{address} und {{host}} ist {address}: Sie folgen der Domain der Anwendung, und ein neuer Name startet die Kopien mit der neuen Adresse neu.",
+  "package.importWarnings": "Vor dem Speichern prüfen",
 };
 
 const tables: Record<Lang, Record<MsgKey, string>> = { fr, en, pt, it, de };

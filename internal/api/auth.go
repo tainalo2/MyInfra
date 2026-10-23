@@ -264,6 +264,7 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("POST /api/packages", a.deployAuth(a.steady(a.createPackage)))
 	mux.HandleFunc("POST /api/packages/check", a.auth(a.checkPackage))
 	mux.HandleFunc("POST /api/packages/format", a.auth(a.formatPackage))
+	mux.HandleFunc("POST /api/packages/convert", a.deployAuth(a.convertPackage))
 	mux.HandleFunc("POST /api/packages/import", a.deployAuth(a.steady(a.importPackage)))
 	mux.HandleFunc("POST /api/packages/import-url", a.deployAuth(a.steady(a.importPackageURL)))
 	mux.HandleFunc("GET /api/packages/{id}", a.auth(a.getPackage))

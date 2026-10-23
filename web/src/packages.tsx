@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowRight, Package as PackageIcon, Plus, Trash2 } from "lucide-react";
 import { ApiError, api, peek, type Package, type PackageFile, type PackageProblem, type PackageRow, type PackageService } from "./api";
 import { Code, languageOf } from "./code-lazy";
@@ -31,6 +31,12 @@ const blank: Package = {
 };
 
 type Check = { package: Package; problems: PackageProblem[]; readable: boolean };
+
+// A source the editor opens before it is kept: a docker-compose file
+// converted, or a package that still has problems.
+type Warning = { service?: string; message: string };
+type Converted = { format: string; package: Package; yaml: string; warnings: Warning[]; problems: PackageProblem[] };
+type Draft = { yaml: string; warnings: Warning[]; format: string };
 
 // Problems found on a package: shown in the form by path, and underlined in
 // the YAML by line.
@@ -138,7 +144,13 @@ export function Packages() {
           ))}
         </ul>
       )}
-      {importing ? <ImportSheet onClose={() => setImporting(false)} onDone={(row) => navigate(`/paquets/${row.id}`)} /> : null}
+      {importing ? (
+        <ImportSheet
+          onClose={() => setImporting(false)}
+          onDone={(row) => navigate(`/paquets/${row.id}`)}
+          onDraft={(draft) => navigate("/paquets/nouveau", { state: { draft } })}
+        />
+      ) : null}
       {removing ? (
         <ConfirmDialog
           title={text("server.removeNamed", { name: removing.name })}
@@ -156,7 +168,7 @@ export function Packages() {
 
 // ImportSheet brings a package from a file, a pasted text or a link. What is
 // wrong in it shows with its line, in the text itself.
-function ImportSheet({ onClose, onDone }: { onClose: () => void; onDone: (row: PackageRow) => void }) {
+function ImportSheet({ onClose, onDone, onDraft }: { onClose: () => void; onDone: (row: PackageRow) => void; onDraft: (draft: Draft) => void }) {
   const [how, setHow] = useState<"file" | "paste" | "url">("file");
   const [pasted, setPasted] = useState("");
   const [url, setUrl] = useState("");
@@ -164,17 +176,24 @@ function ImportSheet({ onClose, onDone }: { onClose: () => void; onDone: (row: P
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function send(path: string, body: unknown) {
+  // Each source is converted first: a valid package is kept at once, a
+  // docker-compose file or a package with problems opens in the editor.
+  async function send(body: { text?: string; url?: string; name?: string }) {
     setBusy(true);
     setError("");
     setProblems([]);
     try {
-      onDone(await api<PackageRow>(path, { method: "POST", body: JSON.stringify(body) }));
+      const converted = await api<Converted>("/api/packages/convert", { method: "POST", body: JSON.stringify(body) });
+      if (converted.format === "package" && converted.problems.length === 0) {
+        onDone(await api<PackageRow>("/api/packages/import", { method: "POST", body: JSON.stringify({ text: converted.yaml }) }));
+      } else {
+        onDraft({ yaml: converted.yaml, warnings: converted.warnings, format: converted.format });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : text("common.error"));
-      // The server lists every problem: the pasted text shows them at their line.
-      if (how !== "url") {
-        const check = await api<Check>("/api/packages/check", { method: "POST", body: JSON.stringify(body) }).catch(() => null);
+      // A text that does not read shows its problems at their line.
+      if (body.text) {
+        const check = await api<Check>("/api/packages/check", { method: "POST", body: JSON.stringify({ text: body.text }) }).catch(() => null);
         if (check) setProblems(check.problems);
       }
     } finally {
@@ -185,8 +204,8 @@ function ImportSheet({ onClose, onDone }: { onClose: () => void; onDone: (row: P
   async function onFile(file: File) {
     const content = await file.text();
     setPasted(content);
-    await send("/api/packages/import", { text: content });
     setHow("paste");
+    await send({ text: content, name: nameOfFile(file.name) });
   }
 
   return (
@@ -222,7 +241,7 @@ function ImportSheet({ onClose, onDone }: { onClose: () => void; onDone: (row: P
             className="flex flex-col gap-4"
             onSubmit={(event) => {
               event.preventDefault();
-              void send("/api/packages/import", { text: pasted });
+              void send({ text: pasted });
             }}
           >
             <Code value={pasted} onChange={setPasted} language="yaml" problems={lined(problems)} label={text("package.fromText")} minHeight="14rem" maxHeight="50dvh" />
@@ -238,7 +257,7 @@ function ImportSheet({ onClose, onDone }: { onClose: () => void; onDone: (row: P
             className="flex flex-col gap-4"
             onSubmit={(event) => {
               event.preventDefault();
-              void send("/api/packages/import-url", { url });
+              void send({ url });
             }}
           >
             <Field label={text("package.url")}>
@@ -269,8 +288,36 @@ async function toYaml(pkg: Package): Promise<string | null> {
   }
 }
 
+// nameOfFile names a package after its file: wordpress.compose.yaml is
+// wordpress, docker-compose.yml nothing (the file may name itself).
+function nameOfFile(file: string) {
+  return file
+    .replace(/\.(ya?ml|json)$/i, "")
+    .replace(/[._-]?(docker-)?compose$/i, "")
+    .replace(/^(docker-)?compose[._-]?/i, "")
+    .trim();
+}
+
 function lined(problems: PackageProblem[]) {
   return problems.filter((problem) => problem.line).map((problem) => ({ line: problem.line!, message: problem.message }));
+}
+
+// WarningList shows what an import left out, for the person to check
+// before keeping the package.
+function WarningList({ warnings }: { warnings: Warning[] }) {
+  return (
+    <section className="flex max-w-[720px] flex-col gap-2 rounded-md border border-line bg-surface p-4" aria-label={text("package.importWarnings")}>
+      <h2 className="text-base text-warn">{text("package.importWarnings")}</h2>
+      <ul className="flex list-disc flex-col gap-1 pl-5">
+        {warnings.map((warning, index) => (
+          <li key={index}>
+            {warning.service ? <span className="font-mono text-[13px]">{warning.service} · </span> : null}
+            {warning.message}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 function ProblemList({ problems }: { problems: PackageProblem[] }) {
@@ -305,6 +352,18 @@ export function PackageEditor() {
   // never replaces a newer one.
   const asked = useRef(0);
   const yamlTimer = useRef(0);
+  const location = useLocation();
+  const [warnings, setWarnings] = useState<Warning[]>([]);
+
+  // An import opens here in the YAML view, with what it could not keep.
+  useEffect(() => {
+    const draft = (location.state as { draft?: Draft } | null)?.draft;
+    if (id || !draft) return;
+    setWarnings(draft.warnings);
+    setMode("yaml");
+    onYaml(draft.yaml);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, location.state]);
 
   useEffect(() => {
     if (!id) return;
@@ -320,8 +379,10 @@ export function PackageEditor() {
   // The form is the source in the visual view: the YAML follows it.
   useEffect(() => {
     if (!ready || mode !== "visual") return;
-    const turn = ++asked.current;
+    // The turn is taken when the call leaves: a call cancelled before never
+    // makes an answer already asked for look old.
     const timer = setTimeout(() => {
+      const turn = ++asked.current;
       api<{ yaml: string; problems: PackageProblem[] }>("/api/packages/format", { method: "POST", body: JSON.stringify({ package: pkg }) })
         .then((answer) => {
           if (turn !== asked.current) return;
@@ -411,6 +472,7 @@ export function PackageEditor() {
         }
       />
       <form onSubmit={save} className="flex flex-col gap-8">
+        {warnings.length > 0 ? <WarningList warnings={warnings} /> : null}
         <Tabs
           label={text("package.view")}
           active={mode}
@@ -1024,8 +1086,8 @@ export function AppServices() {
 
   useEffect(() => {
     if (!ready || mode !== "visual") return;
-    const turn = ++asked.current;
     const timer = setTimeout(() => {
+      const turn = ++asked.current;
       api<{ yaml: string; problems: PackageProblem[] }>("/api/packages/format", { method: "POST", body: JSON.stringify({ package: shown }) })
         .then((answer) => {
           if (turn !== asked.current) return;

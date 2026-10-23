@@ -1,7 +1,11 @@
 package api
 
 import (
+	"encoding/json"
+	"net/http"
+	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"myinfra/internal/pack"
@@ -33,5 +37,30 @@ func TestPlanServicesNamesWhatGoes(t *testing.T) {
 	middle := []store.Service{{Name: "web", Disk: true, DiskPath: "/data", DiskGi: 1, Replicas: 1, Spec: spec.Service{Volumes: []spec.Volume{{Path: "/b"}}}}, next[1]}
 	if _, err := planServices(current, middle, make([]pack.Service, 2)); err == nil {
 		t.Fatal("a disk in the middle goes")
+	}
+}
+
+func TestConvertReadsACompose(t *testing.T) {
+	data, err := os.ReadFile("../pack/testdata/nextcloud.compose.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &API{}
+	rec := packageCall(t, a, a.convertPackage, http.MethodPost, "/api/packages/convert", "", map[string]string{"text": string(data), "name": "Nextcloud"})
+	var out struct {
+		Format   string         `json:"format"`
+		YAML     string         `json:"yaml"`
+		Warnings []pack.Warning `json:"warnings"`
+		Problems []pack.Problem `json:"problems"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil || rec.Code != http.StatusOK {
+		t.Fatal(rec.Code, rec.Body.String())
+	}
+	if out.Format != "compose" || len(out.Problems) != 0 || len(out.Warnings) == 0 || !strings.Contains(out.YAML, "name: Nextcloud") || !strings.Contains(out.YAML, "public: true") {
+		t.Fatalf("%+v", out)
+	}
+	bad := packageCall(t, a, a.convertPackage, http.MethodPost, "/api/packages/convert", "", map[string]string{"text": "hello: world"})
+	if bad.Code != http.StatusBadRequest {
+		t.Fatal(bad.Code, bad.Body.String())
 	}
 }

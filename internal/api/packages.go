@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -252,6 +253,31 @@ func (a *API) importPackage(w http.ResponseWriter, r *http.Request) {
 	a.keepPackage(w, r, p, true)
 }
 
+// fetchText reads a package or a compose file from an https link.
+func fetchText(ctx context.Context, link string) ([]byte, int, string) {
+	target, err := url.Parse(strings.TrimSpace(link))
+	if err != nil || target.Scheme != "https" || target.Host == "" {
+		return nil, http.StatusBadRequest, "Indiquez une URL https:// vers un fichier YAML ou JSON."
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
+	if err != nil {
+		return nil, http.StatusBadRequest, "Indiquez une URL https:// vers un fichier YAML ou JSON."
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, http.StatusBadGateway, "Le fichier est injoignable."
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil, http.StatusBadGateway, "Le fichier répond " + res.Status + "."
+	}
+	raw, err := io.ReadAll(io.LimitReader(res.Body, pack.MaxSize+1))
+	if err != nil {
+		return nil, http.StatusBadGateway, "Le fichier est injoignable."
+	}
+	return raw, 0, ""
+}
+
 func (a *API) importPackageURL(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		URL string `json:"url"`
@@ -260,29 +286,9 @@ func (a *API) importPackageURL(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
 		return
 	}
-	target, err := url.Parse(strings.TrimSpace(body.URL))
-	if err != nil || target.Scheme != "https" || target.Host == "" {
-		writeError(w, http.StatusBadRequest, "Indiquez une URL https:// vers un fichier YAML ou JSON.")
-		return
-	}
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target.String(), nil)
-	if err != nil {
-		a.mapErr(w, err)
-		return
-	}
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, "Le fichier est injoignable.")
-		return
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		writeError(w, http.StatusBadGateway, "Le fichier répond "+res.Status+".")
-		return
-	}
-	raw, err := io.ReadAll(io.LimitReader(res.Body, pack.MaxSize+1))
-	if err != nil {
-		a.mapErr(w, err)
+	raw, status, message := fetchText(r.Context(), body.URL)
+	if message != "" {
+		writeError(w, status, message)
 		return
 	}
 	p, problems := pack.Parse(raw)
@@ -291,6 +297,72 @@ func (a *API) importPackageURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.keepPackage(w, r, p, true)
+}
+
+// convertPackage reads a text or a link as a package: a MyInfra package as
+// it is, a docker-compose file converted. Nothing is kept: the editor shows
+// the result, what was left out and what is still wrong, for the person to
+// fix and keep.
+func (a *API) convertPackage(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Text string `json:"text"`
+		URL  string `json:"url"`
+		Name string `json:"name"`
+	}
+	if err := readJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "Requête illisible.")
+		return
+	}
+	raw := []byte(body.Text)
+	if strings.TrimSpace(body.URL) != "" {
+		fetched, status, message := fetchText(r.Context(), body.URL)
+		if message != "" {
+			writeError(w, status, message)
+			return
+		}
+		raw = fetched
+	}
+	if len(raw) > pack.MaxSize {
+		writeError(w, http.StatusBadRequest, "Un fichier fait au plus 1 Mio.")
+		return
+	}
+	format := pack.Detect(raw)
+	var p pack.Package
+	warnings := []pack.Warning{}
+	switch format {
+	case "package":
+		var problems []pack.Problem
+		var readable bool
+		p, problems, readable = pack.Read(raw)
+		if !readable {
+			writeProblems(w, problems)
+			return
+		}
+	case "compose":
+		converted, notes, err := pack.Compose(raw, body.Name)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		p = converted
+		if notes != nil {
+			warnings = notes
+		}
+	default:
+		writeError(w, http.StatusBadRequest, "Ce fichier n'est ni un paquet MyInfra, ni un fichier docker-compose.")
+		return
+	}
+	text, err := pack.YAML(p)
+	if err != nil {
+		a.mapErr(w, err)
+		return
+	}
+	// The problems are read from the text, to point at its lines.
+	_, problems, _ := pack.Read(text)
+	if problems == nil {
+		problems = []pack.Problem{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"format": format, "package": p, "yaml": string(text), "warnings": warnings, "problems": problems})
 }
 
 // copyArticle keeps a catalogue article as a package, to change it.

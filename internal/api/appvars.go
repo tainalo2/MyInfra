@@ -6,17 +6,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"regexp"
 	"strings"
 
 	"myinfra/internal/box"
 	"myinfra/internal/manifest"
+	"myinfra/internal/pack"
 	"myinfra/internal/store"
 )
 
 // A variable whose name looks like a password or a key is sealed with the
 // master key before it is written, and only opened when it is delivered.
-var sensitiveName = regexp.MustCompile(`(?i)(PASS|SECRET|TOKEN|KEY|PRIVATE|CREDENTIAL|SALT)`)
 
 const sealedPrefix = "myinfra:sealed:v1:"
 
@@ -24,7 +23,7 @@ const sealedPrefix = "myinfra:sealed:v1:"
 const maskedValue = "••••••••"
 
 func sensitive(name string) bool {
-	return sensitiveName.MatchString(name)
+	return pack.Sensitive(name)
 }
 
 type sealedValue struct {

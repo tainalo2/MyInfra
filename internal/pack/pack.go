@@ -68,6 +68,15 @@ func (p Problem) Error() string {
 
 const maxServices = 12
 
+// sensitiveName is a variable that holds a password or a key: MyInfra seals
+// its value, and an import draws it anew instead of keeping it.
+var sensitiveName = regexp.MustCompile(`(?i)(PASS|SECRET|TOKEN|KEY|PRIVATE|CREDENTIAL|SALT)`)
+
+// Sensitive tells whether a variable holds a password or a key.
+func Sensitive(name string) bool {
+	return sensitiveName.MatchString(name)
+}
+
 var (
 	serviceName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
 	imageName   = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._:@+/-]{0,200}$`)
