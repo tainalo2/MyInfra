@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"myinfra/internal/boot"
+	"myinfra/internal/proc"
 )
 
 const tofuVersion = "1.13.1"
@@ -142,7 +143,7 @@ func installTofu(ctx context.Context) error {
 }
 
 func run(ctx context.Context, name string, args ...string) error {
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := proc.Hide(exec.CommandContext(ctx, name, args...))
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		text := strings.TrimSpace(string(out))

@@ -18,6 +18,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"myinfra/internal/proc"
 )
 
 // Repo is where releases are published. MYINFRA_UPDATE_REPO points at a fork.
@@ -28,9 +30,31 @@ func Repo() string {
 	return "tainalo2/MyInfra"
 }
 
-// Enabled is false when the person turned the check off.
+// Enabled is false when the person turned the check off, or when a .deb or
+// .rpm installed MyInfra: the system updates it.
 func Enabled() bool {
-	return os.Getenv("MYINFRA_UPDATE_CHECK") != "0"
+	return os.Getenv("MYINFRA_UPDATE_CHECK") != "0" && !packaged()
+}
+
+func packaged() bool {
+	exe, err := os.Executable()
+	return err == nil && runtime.GOOS == "linux" && strings.HasPrefix(exe, "/usr/bin/")
+}
+
+// Variant is the kind of file this executable came in, among those of its
+// system: "app" for the Windows app, "AppImage" for the Linux one, empty for
+// the executable alone. An update fetches the same kind.
+var Variant string
+
+// Executable is the file an update replaces: the AppImage, not the
+// executable it runs from its read-only mount.
+func Executable() (string, error) {
+	if Variant == "AppImage" {
+		if path := os.Getenv("APPIMAGE"); path != "" {
+			return path, nil
+		}
+	}
+	return os.Executable()
 }
 
 // API is the GitHub API; tests point it elsewhere.
@@ -156,9 +180,16 @@ func Newer(a, b string) bool {
 	}
 }
 
-// AssetName is the executable of a release for a system.
+// AssetName is the executable of a release for a system, of this Variant.
 func AssetName(version, goos, goarch string) string {
 	name := "myinfra_" + version + "_" + goos + "_" + goarch
+	switch Variant {
+	case "":
+	case "AppImage":
+		return name + ".AppImage"
+	default:
+		name += "_" + Variant
+	}
 	if goos == "windows" {
 		name += ".exe"
 	}
@@ -254,7 +285,7 @@ func saveChecked(ctx context.Context, rawURL, path, want string) error {
 func Check(ctx context.Context, next, version string) error {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, next, "--version").Output()
+	out, err := proc.Hide(exec.CommandContext(ctx, next, "--version")).Output()
 	if err != nil || strings.TrimSpace(string(out)) != version {
 		return fmt.Errorf("Le nouvel exécutable ne démarre pas sur ce système.")
 	}

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"myinfra/internal/firewall"
+	"myinfra/internal/proc"
 	"myinfra/internal/tools"
 
 	"golang.org/x/crypto/ssh"
@@ -671,7 +672,7 @@ func NodeName(name string) string {
 }
 
 func run(ctx context.Context, binary, dir string, args []string, work string) error {
-	cmd := exec.CommandContext(ctx, binary, args...)
+	cmd := proc.Hide(exec.CommandContext(ctx, binary, args...))
 	cmd.Dir = work
 	cmd.Env = append(os.Environ(),
 		"ANSIBLE_LOCAL_TEMP="+filepath.Join(dir, "local-tmp"),

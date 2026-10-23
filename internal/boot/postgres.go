@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"myinfra/internal/proc"
 )
 
 func startPostgres(home string) (string, func(), error) {
@@ -42,9 +44,9 @@ func startPostgres(home string) (string, func(), error) {
 		return "", nil, errString("PostgreSQL embarqué est incomplet.")
 	}
 	if _, err := os.Stat(filepath.Join(data, "PG_VERSION")); err != nil {
-		if err := os.MkdirAll(data, 0o700); err != nil {
-			return "", nil, err
-		}
+		// initdb creates pgdata itself. On Windows it runs with the
+		// administrator rights dropped: a folder made by an elevated MyInfra
+		// belongs to the administrators, and initdb could not restrict it.
 		if err := run(root, filepath.Join(root, "bin", exe("initdb")), "--username=myinfra", "--auth=trust", "--encoding=UTF8", "--locale=C", "--no-instructions", "-D", data); err != nil {
 			return "", nil, err
 		}
@@ -264,7 +266,7 @@ func freePort() (int, error) {
 }
 
 func run(root, name string, args ...string) error {
-	cmd := exec.Command(name, args...)
+	cmd := proc.Hide(exec.Command(name, args...))
 	cmd.Env = pgEnv(root)
 	// On Windows, pg_ctl start hands its inheritable handles to the server,
 	// which keeps the output pipe open for good: without a delay, waiting

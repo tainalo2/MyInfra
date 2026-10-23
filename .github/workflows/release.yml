@@ -126,6 +126,13 @@ jobs:
           - { goos: windows, goarch: amd64, ext: .exe }
           # Pas de PostgreSQL embarqué pour Windows arm64 : il en faut un à part.
           - { goos: windows, goarch: arm64, ext: .exe, external: true }
+          # L'app Windows, sans console, que pose l'installeur.
+          - { goos: windows, goarch: amd64, ext: .exe, target: windows-app, suffix: _app }
+          - { goos: windows, goarch: arm64, ext: .exe, target: windows-app, suffix: _app, external: true }
+          # L'app Linux des paquets : sa fenêtre la lie à la bibliothèque C,
+          # l'exécutable seul reste statique.
+          - { goos: linux, goarch: amd64, target: linux-app, suffix: _app }
+          - { goos: linux, goarch: arm64, target: linux-app, suffix: _app }
     env:
       VERSION: ${{ needs.version.outputs.version }}
       IMAGE: ${{ needs.version.outputs.image }}
@@ -141,11 +148,11 @@ jobs:
           go-version-file: go.mod
       # Le même script que sur un poste : ce qui est publié est ce qui se construit en local.
       - name: Exécutable
-        run: ./build ${{ matrix.goos }} ${{ matrix.goarch }}
+        run: ./build ${{ matrix.target || matrix.goos }} ${{ matrix.goarch }}
       - name: Contrôle
         run: |
-          src="dist/myinfra_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}"
-          out="dist/myinfra_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}"
+          src="dist/myinfra_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.suffix }}${{ matrix.ext }}"
+          out="dist/myinfra_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.suffix }}${{ matrix.ext }}"
           mv "$src" "$out"
           # -trimpath ôte les -ldflags des informations de build : la version se
           # vérifie par l'image gravée avec elle, et en lançant l'exécutable Linux.
@@ -155,9 +162,13 @@ jobs:
             # L'archive embarquée doit contenir PostgreSQL, pas seulement exister.
             tar -tzf internal/boot/postgres.tar.gz | grep -Eq '(^|/)bin/postgres(\.exe)?$' || { echo "::error::Archive PostgreSQL vide pour $out"; exit 1; }
           fi
+          # L'exécutable Linux seul tourne sur toute distribution, Alpine comprise.
+          if [ "${{ matrix.goos }}" = linux ] && [ -z "${{ matrix.suffix }}" ]; then
+            file "$out" | grep -q "statically linked" || { echo "::error::$out n'est pas statique"; exit 1; }
+          fi
           ls -lh "$out"
       - name: Démarrage
-        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64' && !matrix.suffix
         run: |
           out="dist/myinfra_${VERSION}_linux_amd64"
           test "$("./$out" --version)" = "$VERSION"
@@ -178,7 +189,7 @@ jobs:
           exit 1
       - uses: actions/upload-artifact@v4
         with:
-          name: myinfra-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: myinfra-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }}
           path: dist/myinfra_${{ needs.version.outputs.version }}_*
           if-no-files-found: error
 
@@ -284,6 +295,103 @@ jobs:
           path: dist/MyInfra_${{ needs.version.outputs.version }}_macos.dmg
           if-no-files-found: error
 
+  # L'installeur Windows : l'app s'installe sans droits d'administrateur, et
+  # se teste installée, ouverte depuis son raccourci, puis fermée.
+  windows-app:
+    needs: [version, binaries]
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: myinfra-windows-*_app
+          path: dist
+          merge-multiple: true
+      - name: Installeurs
+        shell: pwsh
+        run: |
+          if (-not (Get-Command iscc.exe -ErrorAction SilentlyContinue) -and -not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup -y --no-progress
+          }
+          foreach ($arch in "amd64", "arm64") {
+            deploy/windows/package.ps1 $env:VERSION $arch "dist/myinfra_${env:VERSION}_windows_${arch}_app.exe" out
+          }
+          Get-ChildItem out
+      - name: Démarrage
+        timeout-minutes: 8
+        shell: pwsh
+        run: deploy/windows/check.ps1 "out/MyInfra_${env:VERSION}_windows_amd64_setup.exe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: myinfra-windows-setup
+          path: out/MyInfra_*_setup.exe
+          if-no-files-found: error
+
+  # Les paquets Linux : AppImage, .deb et .rpm. Le .deb s'installe, et
+  # l'app s'ouvre dans sa fenêtre WebKitGTK sur un écran virtuel.
+  linux-app:
+    needs: [version, binaries]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: myinfra-linux-*_app
+          path: dist
+          merge-multiple: true
+      - name: Paquets
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q imagemagick
+          for arch in amd64 arm64; do
+            deploy/linux/package.sh "$VERSION" "$arch" "dist/myinfra_${VERSION}_linux_${arch}_app" out
+          done
+          test "$(./out/myinfra_${VERSION}_linux_amd64.AppImage --appimage-extract-and-run --version)" = "$VERSION"
+      - name: Démarrage
+        timeout-minutes: 5
+        run: |
+          sudo apt-get install -y -q "./out/myinfra_${VERSION}_linux_amd64.deb" xvfb xdotool
+          test -f /usr/share/applications/myinfra.desktop
+          home="$RUNNER_TEMP/myinfra"
+          fail() {
+            cat "$home/myinfra.log" "$home/pg.log" 2>/dev/null || true
+            echo "::error::$1"
+            exit 1
+          }
+          Xvfb :99 -screen 0 1600x1000x24 &
+          export DISPLAY=:99
+          # Comme depuis le menu des applications.
+          MYINFRA_HOME="$home" MYINFRA_ADDR=127.0.0.1:8080 myinfra --app &
+          pid=$!
+          for i in $(seq 1 120); do
+            curl -sf http://127.0.0.1:8080/api/health > /dev/null && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8080/api/health > /dev/null || fail "MyInfra ne démarre pas en app."
+          # WebKitGTK est chargé : la fenêtre existe.
+          timeout 30 xdotool search --sync --name '^MyInfra$' > /dev/null || fail "La fenêtre MyInfra n'apparaît pas."
+          kill -TERM "$pid"
+          for i in $(seq 1 30); do
+            [ -f "$home/pgdata/postmaster.pid" ] || break
+            sleep 1
+          done
+          [ ! -f "$home/pgdata/postmaster.pid" ] || fail "PostgreSQL tourne encore après l'arrêt."
+      - uses: actions/upload-artifact@v4
+        with:
+          name: myinfra-linux-packages
+          path: |
+            out/myinfra_*.AppImage
+            out/myinfra_*.deb
+            out/myinfra_*.rpm
+          if-no-files-found: error
+
   image:
     needs: [version, check]
     runs-on: ubuntu-latest
@@ -322,7 +430,7 @@ jobs:
           test "$(docker run --rm "${{ needs.version.outputs.image }}" --version)" = "${{ needs.version.outputs.version }}"
 
   release:
-    needs: [version, binaries, windows, macos, image]
+    needs: [version, binaries, windows, windows-app, macos, linux-app, image]
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -356,15 +464,15 @@ jobs:
 
           | Système | Fichier |
           | --- | --- |
-          | Linux x86-64 | \`myinfra_${VERSION}_linux_amd64\` |
-          | Linux ARM64 | \`myinfra_${VERSION}_linux_arm64\` |
+          | Linux x86-64 | \`myinfra_${VERSION}_linux_amd64.AppImage\`, \`.deb\` ou \`.rpm\` : l'app MyInfra ; \`myinfra_${VERSION}_linux_amd64\` seul pour un serveur |
+          | Linux ARM64 | \`myinfra_${VERSION}_linux_arm64.AppImage\`, \`.deb\` ou \`.rpm\` ; \`myinfra_${VERSION}_linux_arm64\` seul |
           | macOS, Intel et Apple Silicon | \`MyInfra_${VERSION}_macos.dmg\` : l'app MyInfra |
-          | Windows x86-64 | \`myinfra_${VERSION}_windows_amd64.exe\` |
+          | Windows x86-64 | \`MyInfra_${VERSION}_windows_amd64_setup.exe\` : l'app MyInfra ; \`myinfra_${VERSION}_windows_amd64.exe\` pour le terminal |
           | Windows ARM64 | \`myinfra_${VERSION}_windows_arm64.exe\` (sans PostgreSQL embarqué : indiquez \`DATABASE_URL\`) |
 
-          Sur Linux : \`chmod +x\` sur le fichier.
+          Sur Linux : le .deb ou le .rpm ajoute MyInfra au menu des applications, qui l'ouvre dans sa fenêtre ; fermer la fenêtre arrête MyInfra. La fenêtre demande WebKitGTK 4.1 (\`libwebkit2gtk-4.1-0\`), installé avec le paquet ; sans lui, MyInfra s'ouvre dans le navigateur. L'AppImage s'utilise sans installation : \`chmod +x\` puis double-clic. L'exécutable seul (\`chmod +x\`) reste fait pour un serveur et le terminal.
           Sur macOS : ouvrez le .dmg et glissez MyInfra dans Applications, puis ouvrez-le : il s'ouvre dans le navigateur. Son icône reste dans le Dock tant qu'il tourne : un clic le rouvre, Quitter l'arrête. L'app n'est pas signée par Apple : au premier lancement, Réglages Système → Confidentialité et sécurité → « Ouvrir quand même ». Les exécutables \`myinfra_${VERSION}_darwin_*\` restent publiés pour le terminal et les mises à jour.
-          Sur Windows, l'exécutable n'est pas signé non plus : si SmartScreen l'arrête, « Informations complémentaires » puis « Exécuter quand même ». Le premier démarrage prépare PostgreSQL et prend quelques secondes.
+          Sur Windows : l'installeur pose MyInfra dans le menu Démarrer, sans droits d'administrateur ; il s'ouvre dans sa fenêtre (WebView2, fourni avec Windows 10 et 11) et fermer la fenêtre l'arrête. Rien n'est signé : si SmartScreen l'arrête, « Informations complémentaires » puis « Exécuter quand même ». Le premier démarrage prépare PostgreSQL et prend quelques secondes.
           \`SHA256SUMS\` permet de vérifier les téléchargements : \`sha256sum -c SHA256SUMS --ignore-missing\`.
 
           ## Image Docker

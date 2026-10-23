@@ -4,16 +4,13 @@ package main
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
-	"time"
 	"unsafe"
 
 	"github.com/ebitengine/purego"
@@ -39,10 +36,6 @@ const (
 var (
 	// dockMenu is kept for the Dock, which asks for it on each right click.
 	dockMenu objc.ID
-
-	quitMu        sync.Mutex
-	quitStop      func()
-	quitRequested bool
 )
 
 func inApp() bool {
@@ -195,42 +188,6 @@ func menuItem(title, action, key string, target objc.ID) objc.ID {
 		item.Send(objc.RegisterName("setTarget:"), target)
 	}
 	return item
-}
-
-// openMyInfra opens the browser if MyInfra answers, and says whether it did.
-func openMyInfra() bool {
-	url := localURL(listenAddr())
-	client := http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(url + "/api/health")
-	if err != nil {
-		return false
-	}
-	resp.Body.Close()
-	boot.OpenBrowser(url)
-	return true
-}
-
-// onQuit gives the Dock the way to stop MyInfra once it serves.
-func onQuit(stop func()) {
-	quitMu.Lock()
-	quitStop = stop
-	asked := quitRequested
-	quitMu.Unlock()
-	if asked {
-		stop()
-	}
-}
-
-// requestQuit stops MyInfra, or will as soon as it serves: stopped while
-// starting, its PostgreSQL would keep running.
-func requestQuit() {
-	quitMu.Lock()
-	stop := quitStop
-	quitRequested = true
-	quitMu.Unlock()
-	if stop != nil {
-		stop()
-	}
 }
 
 // offerMove proposes to move the app into Applications, where it stays and

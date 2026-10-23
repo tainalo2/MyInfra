@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=MyInfra
+GenericName=Application platform
+GenericName[fr]=Plateforme d'applications
+Comment=Your own application platform, on servers you rent
+Comment[fr]=Votre plateforme d'applications, sur les serveurs que vous louez
+Exec=myinfra --app
+Icon=myinfra
+Terminal=false
+Categories=Network;System;
+Keywords=server;cluster;kubernetes;docker;deploy;
+StartupNotify=true
+StartupWMClass=myinfra

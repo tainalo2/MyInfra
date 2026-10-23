@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"myinfra/internal/catalog"
+	"myinfra/internal/proc"
 	"myinfra/internal/tools"
 )
 
@@ -273,7 +274,7 @@ func (c Client) tofu(ctx context.Context, dir string, env []string, args ...stri
 	if bin == "" {
 		bin = "tofu"
 	}
-	cmd := exec.CommandContext(ctx, bin, append([]string{"-chdir=" + dir}, args...)...)
+	cmd := proc.Hide(exec.CommandContext(ctx, bin, append([]string{"-chdir=" + dir}, args...)...))
 	cmd.Env = append(os.Environ(), append(env, "TF_IN_AUTOMATION=1", "TF_INPUT=0", "TF_PLUGIN_CACHE_DIR="+filepath.Join(root, ".plugins"))...)
 	var out bytes.Buffer
 	cmd.Stdout = &out
