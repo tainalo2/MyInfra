@@ -3,9 +3,7 @@
 package main
 
 import (
-	"net/http"
 	"os"
-	"strings"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -30,14 +28,6 @@ var (
 	delegate objc.ID
 	waiting  atomic.Bool
 )
-
-const startingPage = `<!doctype html><meta charset="utf-8"><style>
-:root { color-scheme: light dark; }
-body { margin: 0; height: 100vh; display: grid; place-items: center; font: 15px -apple-system, system-ui, sans-serif; background: #fafaf9; color: #57534e; }
-@media (prefers-color-scheme: dark) { body { background: #1c1917; color: #a8a29e; } }
-.spin { width: 22px; height: 22px; margin: 0 auto 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-</style><div><div class="spin"></div>Démarrage de MyInfra…</div>`
 
 func loadWebKit() error {
 	_, err := purego.Dlopen("/System/Library/Frameworks/WebKit.framework/WebKit", purego.RTLD_GLOBAL|purego.RTLD_NOW)
@@ -99,16 +89,6 @@ func loadMyInfra() {
 	}()
 }
 
-func answers() bool {
-	client := http.Client{Timeout: time.Second}
-	resp, err := client.Get(localURL(listenAddr()) + "/api/health")
-	if err != nil {
-		return false
-	}
-	resp.Body.Close()
-	return resp.StatusCode == http.StatusOK
-}
-
 // windowMethods answer WebKit for the window: what stays inside, what goes
 // to the browser, files to send and to save.
 func windowMethods() []objc.MethodDef {
@@ -139,12 +119,12 @@ func windowMethods() []objc.MethodDef {
 			Cmd: objc.RegisterName("webView:decidePolicyForNavigationResponse:decisionHandler:"),
 			Fn: func(_ objc.ID, _ objc.SEL, _ objc.ID, navigation objc.ID, handler objc.Block) {
 				response := navigation.Send(objc.RegisterName("response"))
-				attachment := false
+				save := false
 				if responds(response, "valueForHTTPHeaderField:") {
 					disposition := goString(response.Send(objc.RegisterName("valueForHTTPHeaderField:"), nsString("Content-Disposition")))
-					attachment = strings.HasPrefix(strings.ToLower(disposition), "attachment")
+					save = attachment(disposition)
 				}
-				if attachment || !objc.Send[bool](navigation, objc.RegisterName("canShowMIMEType")) {
+				if save || !objc.Send[bool](navigation, objc.RegisterName("canShowMIMEType")) {
 					callBlock(handler, policyDownload)
 					return
 				}
@@ -221,11 +201,7 @@ func inside(url objc.ID) bool {
 	if url == 0 {
 		return true
 	}
-	switch goString(url.Send(objc.RegisterName("scheme"))) {
-	case "about", "blob", "data":
-		return true
-	}
-	return strings.HasPrefix(goString(url.Send(objc.RegisterName("absoluteString"))), localURL(listenAddr()))
+	return insideURL(goString(url.Send(objc.RegisterName("absoluteString"))))
 }
 
 func openURL(url objc.ID) {

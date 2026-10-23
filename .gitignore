@@ -11,3 +11,4 @@ internal/boot/postgres.tar.gz
 internal/boot/postgres.txz
 web/test-results/
 web/playwright-report/
+cmd/myinfra/rsrc_windows_*.syso

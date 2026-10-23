@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"myinfra/internal/boot"
+	"myinfra/internal/proc"
 )
 
 const (
@@ -249,7 +250,7 @@ func fetch(ctx context.Context, url string, limit int64) ([]byte, error) {
 }
 
 func run(ctx context.Context, name string, args ...string) error {
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := proc.Hide(exec.CommandContext(ctx, name, args...))
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		text := strings.TrimSpace(string(out))

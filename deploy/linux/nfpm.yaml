@@ -1,0 +1,35 @@
+# The .deb and the .rpm of MyInfra, made by deploy/linux/package.sh: it sets
+# VERSION and ARCH, and runs nfpm in a folder holding the files below.
+name: myinfra
+version: ${VERSION}
+arch: ${ARCH}
+platform: linux
+section: net
+priority: optional
+maintainer: tainalo2 <tainalo2@users.noreply.github.com>
+vendor: MyInfra
+homepage: https://tainalo2.github.io/MyInfra/
+license: Apache-2.0
+description: |-
+  Your own application platform, on servers you rent.
+  MyInfra puts an application online without asking you to know Docker or
+  Kubernetes, on a machine you have or a cluster bought from your provider.
+  The applications menu opens it in its own window.
+contents:
+  - src: myinfra
+    dst: /usr/bin/myinfra
+    file_info:
+      mode: 0755
+  - src: myinfra.desktop
+    dst: /usr/share/applications/myinfra.desktop
+  - src: hicolor
+    dst: /usr/share/icons/hicolor
+    type: tree
+# The window needs WebKitGTK; without it, MyInfra opens the browser.
+overrides:
+  deb:
+    recommends:
+      - libwebkit2gtk-4.1-0
+  rpm:
+    recommends:
+      - webkit2gtk4.1

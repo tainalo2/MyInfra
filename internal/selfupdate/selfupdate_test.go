@@ -142,3 +142,18 @@ func TestPostgresOfARelease(t *testing.T) {
 		t.Fatal("sans PostgreSQL embarqué, la version ne compte pas")
 	}
 }
+
+func TestAssetNameVariant(t *testing.T) {
+	defer func() { Variant = "" }()
+	for _, c := range []struct{ variant, goos, want string }{
+		{"", "linux", "myinfra_1.4.0_linux_amd64"},
+		{"", "windows", "myinfra_1.4.0_windows_amd64.exe"},
+		{"app", "windows", "myinfra_1.4.0_windows_amd64_app.exe"},
+		{"AppImage", "linux", "myinfra_1.4.0_linux_amd64.AppImage"},
+	} {
+		Variant = c.variant
+		if got := AssetName("1.4.0", c.goos, "amd64"); got != c.want {
+			t.Errorf("AssetName(%q, %s) = %s, want %s", c.variant, c.goos, got, c.want)
+		}
+	}
+}

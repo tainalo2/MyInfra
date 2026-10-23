@@ -3,6 +3,8 @@ package boot
 import (
 	"os/exec"
 	"runtime"
+
+	"myinfra/internal/proc"
 )
 
 func OpenBrowser(url string) {
@@ -15,5 +17,5 @@ func OpenBrowser(url string) {
 	default:
 		cmd = exec.Command("xdg-open", url)
 	}
-	_ = cmd.Start()
+	_ = proc.Hide(cmd).Start()
 }

@@ -9,6 +9,7 @@ import (
 
 	"myinfra/internal/argo"
 	"myinfra/internal/box"
+	"myinfra/internal/proc"
 )
 
 func (a *API) importCluster(w http.ResponseWriter, r *http.Request) {
@@ -76,7 +77,7 @@ func (a *API) argoApps(w http.ResponseWriter, r *http.Request) {
 		a.mapErr(w, err)
 		return
 	}
-	out, err := exec.CommandContext(r.Context(), binary, "--kubeconfig", path, "get", "applications.argoproj.io", "-A", "-o", "json").Output()
+	out, err := proc.Hide(exec.CommandContext(r.Context(), binary, "--kubeconfig", path, "get", "applications.argoproj.io", "-A", "-o", "json")).Output()
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "Argo CD n'a pas répondu.")
 		return

@@ -192,7 +192,7 @@ func (a *API) updateLocal(ctx context.Context, rel selfupdate.Release) error {
 	if a.Restart == nil {
 		return fmt.Errorf("Cette copie ne peut pas redémarrer d'elle-même.")
 	}
-	exe, err := os.Executable()
+	exe, err := selfupdate.Executable()
 	if err != nil {
 		return fmt.Errorf("L'exécutable en cours est introuvable.")
 	}
