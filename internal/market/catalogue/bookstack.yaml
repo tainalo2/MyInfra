@@ -1,0 +1,47 @@
+type: myinfra-package
+version: 1
+name: BookStack
+summary: Des notices rangées en étagères.
+category: Sites
+env:
+  APP_URL: '{{url}}'
+  DB_DATABASE: bookstack
+  DB_HOST: mariadb
+  DB_PASSWORD: '{{secret:DB}}'
+  DB_PORT: "3306"
+  DB_USERNAME: bookstack
+  MARIADB_DATABASE: bookstack
+  MARIADB_PASSWORD: '{{secret:DB}}'
+  MARIADB_ROOT_PASSWORD: '{{secret:ROOT}}'
+  MARIADB_USER: bookstack
+services:
+  - name: web
+    image: linuxserver/bookstack:25.07.2
+    public: true
+    port: 80
+    volumes:
+      - path: /config
+        sizeGi: 4
+  - name: mariadb
+    image: mariadb:11
+    port: 3306
+    volumes:
+      - path: /var/lib/mysql
+        sizeGi: 8
+about:
+  site: https://www.bookstackapp.com
+  logo: bookstack
+  description: Des notices organisées en étagères, livres et chapitres. Les pages et les fichiers joints sont conservés.
+  translations:
+    de:
+      summary: Notizen in Regalen.
+      description: Notizen in Regalen, Büchern und Kapiteln. Seiten und Anhänge bleiben erhalten.
+    en:
+      summary: Notes arranged on shelves.
+      description: Notes organised as shelves, books, and chapters. Pages and attachments are kept.
+    it:
+      summary: Note ordinate in scaffali.
+      description: Note organizzate in scaffali, libri e capitoli. Pagine e allegati sono conservati.
+    pt:
+      summary: Notas arrumadas em estantes.
+      description: Notas organizadas em estantes, livros e capítulos. As páginas e os anexos são conservados.

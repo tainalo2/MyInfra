@@ -1,0 +1,54 @@
+type: myinfra-package
+version: 1
+name: Invoice Ninja
+summary: Des factures.
+category: Comptes personnels
+inputs:
+  - key: email
+    label: Adresse de contact
+env:
+  APP_KEY: base64:{{encoded:KEY}}
+  APP_URL: '{{url}}'
+  DB_DATABASE: ninja
+  DB_HOST: mariadb
+  DB_PASSWORD: '{{secret:DB}}'
+  DB_PORT: "3306"
+  DB_USERNAME: ninja
+  IN_PASSWORD: '{{secret:ADMIN}}'
+  IN_USER_EMAIL: '{{input:email}}'
+  MAIL_MAILER: log
+  MARIADB_DATABASE: ninja
+  MARIADB_PASSWORD: '{{secret:DB}}'
+  MARIADB_ROOT_PASSWORD: '{{secret:ROOT}}'
+  MARIADB_USER: ninja
+services:
+  - name: web
+    image: invoiceninja/invoiceninja:5.11.78
+    public: true
+    port: 80
+    volumes:
+      - path: /var/www/app/public/storage
+        sizeGi: 4
+  - name: mariadb
+    image: mariadb:11
+    port: 3306
+    volumes:
+      - path: /var/lib/mysql
+        sizeGi: 8
+about:
+  site: https://www.invoiceninja.com
+  logo: invoiceninja
+  description: Des devis, des factures et le suivi des paiements. Les documents sont conservés.
+  translations:
+    de:
+      summary: Rechnungen.
+      description: Angebote, Rechnungen und die Verfolgung der Zahlungen. Die Dokumente bleiben erhalten.
+    en:
+      summary: Invoices.
+      description: Quotes, invoices, and payment tracking. The documents are kept.
+    it:
+      summary: Fatture.
+      description: Preventivi, fatture e il seguito dei pagamenti. I documenti sono conservati.
+    pt:
+      summary: Faturas.
+      description: Orçamentos, faturas e o seguimento dos pagamentos. Os documentos são conservados.

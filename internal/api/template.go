@@ -18,6 +18,7 @@ import (
 	"myinfra/internal/deploy"
 	"myinfra/internal/dns"
 	"myinfra/internal/market"
+	"myinfra/internal/pack"
 	"myinfra/internal/store"
 )
 
@@ -846,16 +847,30 @@ func (a *API) createRunApp(ctx context.Context, owner string, run *blueprint.Run
 			app.Services[i] = blueprint.Service{Name: svc.Name, Image: svc.Image, Published: svc.Published, Disk: svc.Disk, Replicas: svc.Replicas, Listen: svc.Listen, DiskPath: svc.DiskPath, DiskGi: svc.DiskGi, Args: svc.Args}
 		}
 	}
+	publicHost := slug(name) + "." + appsDomain(a.AppsDomain)
+	for _, item := range app.Names {
+		if host, err := dns.Join(item.Subdomain, item.Zone); err == nil && strings.TrimSpace(item.Subdomain) != "" {
+			publicHost = host
+			break
+		}
+	}
+	var fromPackage []store.Service
+	if app.Package != nil {
+		// Like an article, a package draws its values now.
+		services, env, err := pack.Expand(*app.Package, publicHost, app.Inputs)
+		if err != nil {
+			return err
+		}
+		if fromPackage, err = packServices(services); err != nil {
+			return err
+		}
+		for key, value := range env {
+			vars[key] = value
+		}
+	}
 	if app.Catalog != "" {
 		// An app from the catalogue draws its variables, passwords included,
 		// now: the template never holds them.
-		publicHost := slug(name) + "." + appsDomain(a.AppsDomain)
-		for _, item := range app.Names {
-			if host, err := dns.Join(item.Subdomain, item.Zone); err == nil && strings.TrimSpace(item.Subdomain) != "" {
-				publicHost = host
-				break
-			}
-		}
 		_, env, err := market.Expand(app.Catalog, publicHost, nil)
 		if err != nil {
 			return err
@@ -875,13 +890,24 @@ func (a *API) createRunApp(ctx context.Context, owner string, run *blueprint.Run
 		})
 	}
 	stored, source, err := normalizeServices(name, app.SourceKind, source, app.Replicas, vars, services)
+	if fromPackage != nil {
+		app.SourceKind, stored, err = "image", fromPackage, nil
+		for _, svc := range stored {
+			if svc.Published {
+				source = svc.Image
+			}
+		}
+	}
 	if err != nil {
 		return err
 	}
 	if err := a.checkLocalImages(ctx, owner, serviceImages(stored)); err != nil {
 		return err
 	}
-	a.fillFromImages(ctx, stored, len(services) == 0)
+	a.fillFromImages(ctx, stored, len(services) == 0 && fromPackage == nil)
+	if fromPackage != nil {
+		quietServices(stored)
+	}
 	if err := a.shapeRedundancy(ctx, owner, clusterID, stored, app.Replicas); err != nil {
 		return err
 	}

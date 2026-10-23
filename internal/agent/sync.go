@@ -1,6 +1,10 @@
 package agent
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"sort"
@@ -10,6 +14,7 @@ import (
 	"myinfra/internal/firewall"
 	"myinfra/internal/imagefile"
 	"myinfra/internal/pause"
+	"myinfra/internal/spec"
 )
 
 // proxyImage must negotiate the Docker API: Docker Engine 29 refuses the old
@@ -47,6 +52,8 @@ type Workload struct {
 	Paused    bool
 	// Login opens the private registry the image comes from.
 	Login *Login
+	// Spec is what the service runs with besides the fields above.
+	Spec spec.Service
 }
 
 // Login is what docker login needs for one registry.
@@ -123,6 +130,7 @@ func Sync(baseURL, token string, apps []Workload) (string, error) {
 	fmt.Fprintf(&b, "report() {\n  echo \"myinfra-status $1 $2\"\n  curl -fsS -m 10 -X POST '%s' -H 'Authorization: Bearer %s' -H 'content-type: application/json' -d \"{\\\"id\\\":\\\"$1\\\",\\\"status\\\":\\\"$2\\\"}\" >/dev/null 2>&1 || true\n}\n", report, token)
 	b.WriteString(readyFunc)
 	b.WriteString(ensureProxy(proxyZones(apps)))
+	apps = startOrder(apps)
 	wanted := " "
 	for _, app := range apps {
 		if !idPattern.MatchString(app.ID) {
@@ -232,6 +240,7 @@ func writeService(b *strings.Builder, report string, app Workload) error {
 		fmt.Fprintf(b, "if [ \"$have\" != '%s' ]; then\n", spec)
 		writePull(b, app)
 		fmt.Fprintf(b, "  docker rm -f '%s' >/dev/null 2>&1 || true\n", runName)
+		writeFiles(b, app)
 		if app.Disk {
 			volume := "myinfra-data-" + compact(app.ID) + "-" + app.Service
 			if replicas > 1 {
@@ -256,7 +265,13 @@ func writeService(b *strings.Builder, report string, app Workload) error {
 		if app.Disk && strings.Contains(app.Image, "postgres") && app.Env["PGDATA"] == "" {
 			fmt.Fprintf(b, " -e 'PGDATA=%s'", diskPathOf(app))
 		}
+		b.WriteString(specFlags(app, i, replicas))
 		fmt.Fprintf(b, " '%s'", app.Image)
+		if len(app.Spec.Command) > 1 {
+			for _, word := range app.Spec.Command[1:] {
+				fmt.Fprintf(b, " '%s'", word)
+			}
+		}
 		for _, arg := range app.Args {
 			fmt.Fprintf(b, " '%s'", arg)
 		}
@@ -320,7 +335,7 @@ func writeSwap(b *strings.Builder, next, name string, port int) {
 
 // probePort is the port a new container must answer on, 0 when unknown.
 func probePort(app Workload) int {
-	if !app.Published && app.Listen < 1 {
+	if (!app.Published && app.Listen < 1) || app.Spec.NoPort {
 		return 0
 	}
 	return listenOf(app)
@@ -523,7 +538,7 @@ func safeWorkload(app Workload) bool {
 			return false
 		}
 	}
-	return true
+	return len(spec.Check(app.Spec)) == 0
 }
 
 func specOf(app Workload) string {
@@ -533,7 +548,14 @@ func specOf(app Workload) string {
 	for _, key := range envKeys(app.Env) {
 		parts = append(parts, key+"="+app.Env[key])
 	}
-	return app.Image + "|" + strings.Join(hosts, ",") + "|" + strings.Join(parts, ",") + "|" + fmt.Sprint(listenOf(app)) + "|" + diskPathOf(app) + "|" + fmt.Sprint(diskGiOf(app)) + "|" + strings.Join(app.Args, " ")
+	out := app.Image + "|" + strings.Join(hosts, ",") + "|" + strings.Join(parts, ",") + "|" + fmt.Sprint(listenOf(app)) + "|" + diskPathOf(app) + "|" + fmt.Sprint(diskGiOf(app)) + "|" + strings.Join(app.Args, " ")
+	if !app.Spec.Empty() {
+		// A container from before the spec keeps its label: nothing restarts.
+		raw, _ := json.Marshal(app.Spec)
+		sum := sha256.Sum256(raw)
+		out += "|" + hex.EncodeToString(sum[:8])
+	}
+	return out
 }
 
 func listenOf(app Workload) int {
@@ -590,4 +612,111 @@ func routerName(id string) string {
 		compact = compact[:12]
 	}
 	return "app" + compact
+}
+
+// startOrder starts the services an application's others depend on first.
+// Applications keep their order, and so do services that depend on nothing.
+func startOrder(apps []Workload) []Workload {
+	out := make([]Workload, 0, len(apps))
+	for i := 0; i < len(apps); {
+		j := i
+		for j < len(apps) && apps[j].ID == apps[i].ID {
+			j++
+		}
+		group := apps[i:j]
+		done := map[string]bool{}
+		for len(done) < len(group) {
+			moved := false
+			for _, app := range group {
+				if done[app.Service] {
+					continue
+				}
+				ready := true
+				for _, name := range app.Spec.DependsOn {
+					if !done[name] && hasService(group, name) {
+						ready = false
+					}
+				}
+				if ready {
+					out = append(out, app)
+					done[app.Service] = true
+					moved = true
+				}
+			}
+			if !moved {
+				// A loop: the rest starts in its first order.
+				for _, app := range group {
+					if !done[app.Service] {
+						out = append(out, app)
+						done[app.Service] = true
+					}
+				}
+			}
+		}
+		i = j
+	}
+	return out
+}
+
+func hasService(group []Workload, name string) bool {
+	for _, app := range group {
+		if app.Service == name {
+			return true
+		}
+	}
+	return false
+}
+
+// filesDir holds the files of a service, mounted read only in its containers.
+func filesDir(app Workload) string {
+	return "/var/lib/myinfra/files/" + compact(app.ID) + "/" + app.Service
+}
+
+// writeFiles writes the files of a service on the machine. The content goes
+// as base64: no character of it can break the script.
+func writeFiles(b *strings.Builder, app Workload) {
+	if len(app.Spec.Files) == 0 {
+		return
+	}
+	dir := filesDir(app)
+	fmt.Fprintf(b, "  rm -rf '%s' && mkdir -p '%s'\n", dir, dir)
+	for i, file := range app.Spec.Files {
+		fmt.Fprintf(b, "  printf '%%s' '%s' | base64 -d > '%s/f%d'\n", base64.StdEncoding.EncodeToString([]byte(file.Content)), dir, i)
+	}
+	fmt.Fprintf(b, "  chmod -R a+rX '%s'\n", dir)
+}
+
+// specFlags are the docker run options of a service's spec: entrypoint,
+// disks besides the first, files, variables and reservations.
+func specFlags(app Workload, copy, replicas int) string {
+	var b strings.Builder
+	if len(app.Spec.Command) > 0 {
+		fmt.Fprintf(&b, " --entrypoint '%s'", app.Spec.Command[0])
+	}
+	for i, volume := range app.Spec.Volumes {
+		name := fmt.Sprintf("myinfra-data-%s-%s-v%d", compact(app.ID), app.Service, i+1)
+		if replicas > 1 {
+			name = fmt.Sprintf("%s-%d", name, copy)
+		}
+		fmt.Fprintf(&b, " -v '%s:%s'", name, volume.Path)
+	}
+	for i, file := range app.Spec.Files {
+		fmt.Fprintf(&b, " -v '%s/f%d:%s:ro'", filesDir(app), i, file.Path)
+	}
+	for _, key := range envKeys(app.Spec.Env) {
+		if _, set := app.Env[key]; set {
+			continue
+		}
+		fmt.Fprintf(&b, " -e '%s=%s'", key, app.Spec.Env[key])
+	}
+	if r := app.Spec.Resources; r != nil {
+		if milli := spec.CPUMilli(r.CPU); milli > 0 {
+			fmt.Fprintf(&b, " --cpus '%d.%03d'", milli/1000, milli%1000)
+		}
+		if r.Memory != "" {
+			// Docker reads m and g where Kubernetes reads Mi and Gi.
+			fmt.Fprintf(&b, " --memory '%s'", strings.ToLower(strings.TrimSuffix(r.Memory, "i")))
+		}
+	}
+	return b.String()
 }

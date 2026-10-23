@@ -1,6 +1,10 @@
 package blueprint
 
-import "strings"
+import (
+	"strings"
+
+	"myinfra/internal/pack"
+)
 
 type Body struct {
 	ClusterName  string   `json:"clusterName,omitempty"`
@@ -30,7 +34,12 @@ type App struct {
 	Source     string `json:"source"`
 	// Catalog is the catalogue article the app comes from: its variables,
 	// passwords included, are only drawn when the template runs.
-	Catalog   string            `json:"catalog,omitempty"`
+	Catalog string `json:"catalog,omitempty"`
+	// Package is the package the app comes from, kept whole so that the
+	// template travels with it; Inputs answers its questions. Its values are
+	// drawn when the template runs, and its services replace Services.
+	Package   *pack.Package     `json:"package,omitempty"`
+	Inputs    map[string]string `json:"inputs,omitempty"`
 	Replicas  int               `json:"replicas,omitempty"`
 	Variables map[string]string `json:"variables,omitempty"`
 	Services  []Service         `json:"services,omitempty"`
@@ -91,6 +100,14 @@ func ValidateShape(body Body) string {
 	}
 	if strings.TrimSpace(body.ClusterName) != "" && len(body.Servers) == 0 {
 		return "Un cluster nouveau a au moins un serveur."
+	}
+	for _, app := range body.Applications {
+		if app.Package == nil {
+			continue
+		}
+		if problems := pack.Check(*app.Package); len(problems) > 0 {
+			return "Le paquet de " + app.Name + " n'est pas valide : " + problems[0].Error()
+		}
 	}
 	return ""
 }

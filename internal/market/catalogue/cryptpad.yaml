@@ -1,0 +1,30 @@
+type: myinfra-package
+version: 1
+name: CryptPad
+summary: Des documents chiffrés dans le navigateur.
+category: Collaboration
+services:
+  - name: cryptpad
+    image: cryptpad/cryptpad:version-2024.12.0
+    public: true
+    port: 3000
+    volumes:
+      - path: /cryptpad/data
+        sizeGi: 8
+about:
+  site: https://cryptpad.org
+  logo: cryptpad
+  description: Des documents, des tableaux et des présentations chiffrés dans le navigateur. Les pads sont conservés.
+  translations:
+    de:
+      summary: Im Browser verschlüsselte Dokumente.
+      description: Dokumente, Tabellen und Präsentationen, im Browser verschlüsselt. Die Pads bleiben erhalten.
+    en:
+      summary: Documents encrypted in the browser.
+      description: Documents, spreadsheets, and presentations encrypted in the browser. The pads are kept.
+    it:
+      summary: Documenti cifrati nel browser.
+      description: Documenti, fogli e presentazioni cifrati nel browser. I pad sono conservati.
+    pt:
+      summary: Documentos cifrados no navegador.
+      description: Documentos, folhas e apresentações cifrados no navegador. Os pads são conservados.

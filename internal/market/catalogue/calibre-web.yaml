@@ -1,0 +1,30 @@
+type: myinfra-package
+version: 1
+name: Calibre-Web
+summary: Une bibliothèque de livres.
+category: Médias
+services:
+  - name: calibre-web
+    image: linuxserver/calibre-web:0.6.24
+    public: true
+    port: 8083
+    volumes:
+      - path: /config
+        sizeGi: 8
+about:
+  site: https://github.com/janeczku/calibre-web
+  logo: calibreweb
+  description: Une bibliothèque de livres numériques, à parcourir et à télécharger. La bibliothèque est conservée.
+  translations:
+    de:
+      summary: Eine Bibliothek von Büchern.
+      description: Eine Bibliothek digitaler Bücher, zum Durchsehen und Herunterladen. Die Bibliothek bleibt erhalten.
+    en:
+      summary: A library of books.
+      description: A library of digital books, to browse and download. The library is kept.
+    it:
+      summary: Una biblioteca di libri.
+      description: Una biblioteca di libri digitali, da sfogliare e scaricare. La biblioteca è conservata.
+    pt:
+      summary: Uma biblioteca de livros.
+      description: Uma biblioteca de livros digitais, para percorrer e descarregar. A biblioteca é conservada.

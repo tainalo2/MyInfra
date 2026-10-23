@@ -17,7 +17,15 @@ func (a *API) workloads(ctx context.Context, token string) ([]agent.Workload, er
 		return nil, err
 	}
 	work := make([]agent.Workload, 0, len(apps))
+	addresses := map[string]string{}
 	for _, app := range apps {
+		address, seen := addresses[app.ID]
+		if !seen {
+			if address, err = a.Store.Address(ctx, app.ID); err != nil {
+				return nil, err
+			}
+			addresses[app.ID] = address
+		}
 		shared, err := a.sharedEnv(ctx, app.ID)
 		if err != nil {
 			return nil, err
@@ -26,10 +34,11 @@ func (a *API) workloads(ctx context.Context, token string) ([]agent.Workload, er
 		if err != nil {
 			return nil, err
 		}
+		merged := fillMap(mergeSecretEnv(env, []map[string]string{shared}), address)
 		work = append(work, agent.Workload{
-			ID: app.ID, Service: app.Service, Image: app.Image, Hosts: app.Hosts, Zones: app.Zones, Env: mergeSecretEnv(env, []map[string]string{shared}),
+			ID: app.ID, Service: app.Service, Image: app.Image, Hosts: app.Hosts, Zones: app.Zones, Env: merged,
 			Disk: app.Disk, DiskPath: app.DiskPath, DiskGi: app.DiskGi, Listen: app.Listen, Args: app.Args,
-			Published: app.Published, Replicas: app.Replicas, Paused: app.Paused,
+			Published: app.Published, Replicas: app.Replicas, Paused: app.Paused, Spec: specAt(app.Spec, address),
 			Login: a.agentLogin(ctx, app.Image),
 		})
 	}

@@ -1,0 +1,47 @@
+type: myinfra-package
+version: 1
+name: Matomo
+summary: Une mesure d'audience complète.
+category: Sites
+env:
+  MARIADB_DATABASE: matomo
+  MARIADB_PASSWORD: '{{secret:DB}}'
+  MARIADB_ROOT_PASSWORD: '{{secret:ROOT}}'
+  MARIADB_USER: matomo
+  MATOMO_DATABASE_ADAPTER: mysql
+  MATOMO_DATABASE_DBNAME: matomo
+  MATOMO_DATABASE_HOST: mariadb
+  MATOMO_DATABASE_PASSWORD: '{{secret:DB}}'
+  MATOMO_DATABASE_TABLES_PREFIX: matomo_
+  MATOMO_DATABASE_USERNAME: matomo
+services:
+  - name: web
+    image: matomo:5-apache
+    public: true
+    port: 80
+    volumes:
+      - path: /var/www/html
+        sizeGi: 8
+  - name: mariadb
+    image: mariadb:11
+    port: 3306
+    volumes:
+      - path: /var/lib/mysql
+        sizeGi: 8
+about:
+  site: https://matomo.org
+  logo: matomo
+  description: 'Une mesure d''audience complète : pages, campagnes et comportement. Les statistiques sont conservées.'
+  translations:
+    de:
+      summary: Eine vollständige Reichweitenmessung.
+      description: 'Eine vollständige Reichweitenmessung: Seiten, Kampagnen und Verhalten. Die Statistiken bleiben erhalten.'
+    en:
+      summary: A full audience measure.
+      description: 'A full audience measure: pages, campaigns, and behaviour. Statistics are kept.'
+    it:
+      summary: Una misura d'audience completa.
+      description: 'Una misura d''audience completa: pagine, campagne e comportamento. Le statistiche sono conservate.'
+    pt:
+      summary: Uma medida de audiência completa.
+      description: 'Uma medida de audiência completa: páginas, campanhas e comportamento. As estatísticas são conservadas.'

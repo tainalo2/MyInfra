@@ -1,0 +1,32 @@
+type: myinfra-package
+version: 1
+name: Baserow
+summary: Un tableur partagé.
+category: Collaboration
+env:
+  BASEROW_PUBLIC_URL: '{{url}}'
+services:
+  - name: baserow
+    image: baserow/baserow:1.33.3
+    public: true
+    port: 80
+    volumes:
+      - path: /baserow/data
+        sizeGi: 8
+about:
+  site: https://baserow.io
+  logo: baserow
+  description: Un tableur partagé, où chaque ligne est une donnée. Les tableaux sont conservés.
+  translations:
+    de:
+      summary: Eine geteilte Tabelle.
+      description: Eine geteilte Tabelle, in der jede Zeile ein Datensatz ist. Die Tabellen bleiben erhalten.
+    en:
+      summary: A shared spreadsheet.
+      description: A shared spreadsheet, where each row is a record. The tables are kept.
+    it:
+      summary: Un foglio condiviso.
+      description: Un foglio condiviso, in cui ogni riga è un dato. Le tabelle sono conservate.
+    pt:
+      summary: Uma folha de cálculo partilhada.
+      description: Uma folha de cálculo partilhada, em que cada linha é um dado. As tabelas são conservadas.

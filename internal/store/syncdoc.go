@@ -137,8 +137,10 @@ type syncService struct {
 	DiskPath      string `json:"diskPath"`
 	DiskGi        int    `json:"diskGi"`
 	Args          string `json:"args"`
-	Seq           int64  `json:"seq"`
-	Origin        string `json:"origin"`
+	// Spec is left out when empty: a row reads the same as before it existed.
+	Spec   json.RawMessage `json:"spec,omitempty"`
+	Seq    int64           `json:"seq"`
+	Origin string          `json:"origin"`
 }
 
 type syncDomain struct {
@@ -161,6 +163,17 @@ type syncTemplate struct {
 	Name      string          `json:"name"`
 	Body      json.RawMessage `json:"body"`
 	CreatedAt time.Time       `json:"createdAt"`
+	Seq       int64           `json:"seq"`
+	Origin    string          `json:"origin"`
+}
+
+type syncPackage struct {
+	ID        string          `json:"id"`
+	OwnerID   string          `json:"ownerId"`
+	Name      string          `json:"name"`
+	Body      json.RawMessage `json:"body"`
+	CreatedAt time.Time       `json:"createdAt"`
+	UpdatedAt time.Time       `json:"updatedAt"`
 	Seq       int64           `json:"seq"`
 	Origin    string          `json:"origin"`
 }
@@ -251,7 +264,9 @@ type SyncDoc struct {
 	AppSecrets   []syncAppSecret   `json:"appSecrets"`
 	Updates      []syncUpdate      `json:"updates"`
 	UpdateJobs   []syncUpdateJob   `json:"updateJobs"`
-	Tombs        []syncTomb        `json:"tombs"`
+	// Packages is left out when empty: a document reads as before them.
+	Packages []syncPackage `json:"packages,omitempty"`
+	Tombs    []syncTomb    `json:"tombs"`
 }
 
 func (d SyncDoc) Hash() string {
@@ -278,6 +293,7 @@ func mergeDocs(local, remote SyncDoc) SyncDoc {
 	doc.AppSecrets, doc.Tombs = mergeAppSecrets(local.AppSecrets, remote.AppSecrets, doc.Tombs)
 	doc.Updates, doc.Tombs = mergeUpdates(local.Updates, remote.Updates, doc.Tombs)
 	doc.UpdateJobs, doc.Tombs = mergeUpdateJobs(local.UpdateJobs, remote.UpdateJobs, doc.Tombs)
+	doc.Packages, doc.Tombs = mergePackages(local.Packages, remote.Packages, doc.Tombs)
 	return reconcile(doc).canon()
 }
 
@@ -311,6 +327,10 @@ func mergeServices(a, b []syncService, tombs []syncTomb) ([]syncService, []syncT
 
 func mergeDomains(a, b []syncDomain, tombs []syncTomb) ([]syncDomain, []syncTomb) {
 	return mergeByID("domains", a, b, tombs, func(r syncDomain) string { return r.ID }, func(r syncDomain) syncVersion { return syncVersion{r.Seq, r.Origin} })
+}
+
+func mergePackages(a, b []syncPackage, tombs []syncTomb) ([]syncPackage, []syncTomb) {
+	return mergeByID("packages", a, b, tombs, func(r syncPackage) string { return r.ID }, func(r syncPackage) syncVersion { return syncVersion{r.Seq, r.Origin} })
 }
 
 func mergeTemplates(a, b []syncTemplate, tombs []syncTomb) ([]syncTemplate, []syncTomb) {
@@ -532,6 +552,13 @@ func resurrect(doc *SyncDoc, tb syncTomb, v syncVersion) bool {
 		}
 		row.Seq, row.Origin = v.Seq, v.Origin
 		doc.Templates = append(doc.Templates, row)
+	case "packages":
+		row, err := packageFromPayload(tb.Payload)
+		if err != nil || row.ID == "" {
+			return false
+		}
+		row.Seq, row.Origin = v.Seq, v.Origin
+		doc.Packages = append(doc.Packages, row)
 	case "destructions":
 		row, err := destructionFromPayload(tb.Payload)
 		if err != nil || row.ID == "" {
@@ -644,6 +671,9 @@ func dropLostTombs(doc SyncDoc) SyncDoc {
 	for _, row := range doc.Templates {
 		alive["templates/"+row.ID] = syncVersion{row.Seq, row.Origin}
 	}
+	for _, row := range doc.Packages {
+		alive["packages/"+row.ID] = syncVersion{row.Seq, row.Origin}
+	}
 	for _, row := range doc.Destructions {
 		alive["destructions/"+row.ID] = syncVersion{row.Seq, row.Origin}
 	}
@@ -729,6 +759,12 @@ func rowAlive(doc SyncDoc, table, id string) bool {
 				return true
 			}
 		}
+	case "packages":
+		for _, row := range doc.Packages {
+			if row.ID == id {
+				return true
+			}
+		}
 	case "destructions":
 		for _, row := range doc.Destructions {
 			if row.ID == id {
@@ -805,6 +841,9 @@ func docLinks(doc SyncDoc) []syncLink {
 	for _, row := range doc.Templates {
 		out = append(out, syncLink{"templates", row.ID, "users", row.OwnerID, syncVersion{row.Seq, row.Origin}})
 	}
+	for _, row := range doc.Packages {
+		out = append(out, syncLink{"packages", row.ID, "users", row.OwnerID, syncVersion{row.Seq, row.Origin}})
+	}
 	for _, row := range doc.Destructions {
 		out = append(out, syncLink{"destructions", row.ID, "users", row.OwnerID, syncVersion{row.Seq, row.Origin}})
 	}
@@ -846,6 +885,8 @@ func takeRow(doc *SyncDoc, table, id string) (json.RawMessage, bool) {
 		return take(&doc.Domains, id, func(r syncDomain) string { return r.ID })
 	case "templates":
 		return take(&doc.Templates, id, func(r syncTemplate) string { return r.ID })
+	case "packages":
+		return take(&doc.Packages, id, func(r syncPackage) string { return r.ID })
 	case "destructions":
 		return take(&doc.Destructions, id, func(r syncDestruction) string { return r.ID })
 	case "template_runs":
@@ -894,6 +935,7 @@ func (d SyncDoc) canon() SyncDoc {
 	d.AppSecrets = canonAppSecrets(d.AppSecrets)
 	d.Updates = canonUpdates(d.Updates)
 	d.UpdateJobs = canonUpdateJobs(d.UpdateJobs)
+	d.Packages = canonPackages(d.Packages)
 	if d.Tombs == nil {
 		d.Tombs = []syncTomb{}
 	}
@@ -934,6 +976,8 @@ func canonPayload(table string, raw json.RawMessage) json.RawMessage {
 		out, err = domainFromPayload(raw)
 	case "templates":
 		out, err = templateFromPayload(raw)
+	case "packages":
+		out, err = packageFromPayload(raw)
 	case "destructions":
 		out, err = destructionFromPayload(raw)
 	case "template_runs":
@@ -993,6 +1037,9 @@ func maxSeq(doc SyncDoc) int64 {
 	for _, row := range doc.Templates {
 		bump(row.Seq)
 	}
+	for _, row := range doc.Packages {
+		bump(row.Seq)
+	}
 	for _, row := range doc.Destructions {
 		bump(row.Seq)
 	}
@@ -1030,6 +1077,15 @@ func utc(t time.Time) time.Time {
 		return time.Time{}
 	}
 	return t.UTC()
+}
+
+// canonSpec writes a service's spec the one way, and an empty one as nothing.
+func canonSpec(raw json.RawMessage) json.RawMessage {
+	s := readSpec(raw)
+	if s.Empty() {
+		return nil
+	}
+	return json.RawMessage(specJSON(s))
 }
 
 func canonJSON(raw json.RawMessage, fallback string) json.RawMessage {

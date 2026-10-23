@@ -3,9 +3,10 @@ import { ConfirmDialog, Sheet, Spinner, StatusBadge, Steps, appHealth, useToast 
 import { usePoll } from "./poll";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ChevronDown, ChevronUp, Copy, ExternalLink, Plus, Trash2 } from "lucide-react";
-import { api, type AppRuntime, type AppService, type Application, type CatalogueCard, type CatalogueVersions, type Cluster, type Destruction, type DnsZone, type Server } from "./api";
+import { api, type AppRuntime, type AppService, type Application, type CatalogueCard, type CatalogueVersions, type Cluster, type Destruction, type DnsZone, type PackageRow, type Server, fillAddress, followsAddress } from "./api";
 import { localizeCard } from "./catalogue-copy";
 import { knownMessage, text } from "./i18n";
+import { Code } from "./code-lazy";
 import { AppLogo } from "./app-logo";
 import { CatalogueBrowser } from "./catalogue";
 import { UsageMeters } from "./meters";
@@ -21,7 +22,7 @@ import { NameList, namesOf, type AppName } from "./names";
 import { ImageOrigin } from "./registries";
 import { TofuFiles } from "./tofu";
 import { AppBackups } from "./backups";
-import { ActionsMenu, Button, ErrorText, Field, Fold, Group, Icon, IconButton, Input, LoadingLines, MenuItem, PageTitle, SectionTitle, Select, TextArea, TextButton, focus, podFailed, podHealth, statusLabel, useTrail } from "./ui";
+import { ActionsMenu, Button, ErrorText, Field, Fold, Group, Icon, IconButton, Input, LoadingLines, MenuItem, PageTitle, SectionTitle, Select, TextButton, focus, podFailed, podHealth, statusLabel, useTrail } from "./ui";
 
 type RedundancyPreview = {
   plan: { scaled: string[]; failover: string[]; database: string[]; alone: string[] };
@@ -46,6 +47,7 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
   const [sourceKind, setSourceKind] = useState("catalogue");
   const [source, setSource] = useState("");
   const [article, setArticle] = useState<CatalogueCard | null>(null);
+  const [chosenPackage, setChosenPackage] = useState<PackageRow | null>(null);
   const [versions, setVersions] = useState<CatalogueVersions | null>(null);
   const [tag, setTag] = useState("latest");
   const [tagTouched, setTagTouched] = useState(false);
@@ -64,6 +66,8 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
   const [error, setError] = useState("");
 
   const nodes = linked.filter((server) => server.clusterId === clusterId).length;
+  // A catalogue article or a package must be chosen before anything is created.
+  const picked = sourceKind === "catalogue" ? article !== null : sourceKind === "package" ? chosenPackage !== null : true;
   const placed = destination === "server" ? Boolean(serverId) : Boolean(clusterId);
   // What each service becomes is decided by the server, which knows how each
   // image keeps its data.
@@ -127,6 +131,18 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
   }, [search]);
 
   useEffect(() => {
+    const id = search.get("package");
+    if (!id) return;
+    api<PackageRow>(`/api/packages/${id}`)
+      .then((row) => {
+        setSourceKind("package");
+        setChosenPackage(row);
+        setName((current) => current || row.name);
+      })
+      .catch(() => undefined);
+  }, [search]);
+
+  useEffect(() => {
     if (!article) return;
     setVersions(null);
     setTagTouched(false);
@@ -160,8 +176,28 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
       setError(text("ui.choisissezUneApplicationDuCatalogue"));
       return;
     }
+    if (sourceKind === "package" && !chosenPackage) {
+      setError(text("package.choose"));
+      return;
+    }
     setCreating(true);
     try {
+      if (sourceKind === "package" && chosenPackage) {
+        const created = await api<{ id: string }>(`/api/packages/${chosenPackage.id}/install`, {
+          method: "POST",
+          body: JSON.stringify({
+            name,
+            names: names.filter((item) => item.subdomain.trim() !== ""),
+            destinationKind: destination,
+            serverId: destination === "server" ? serverId : "",
+            clusterId: destination === "cluster" ? clusterId : "",
+            inputs,
+            copies: destination === "cluster" ? copies : 1,
+          }),
+        });
+        navigate(`/applications/${created.id}`);
+        return;
+      }
       if (sourceKind === "catalogue" && article) {
         const created = await api<{ id: string }>(`/api/catalogue/${article.id}`, {
           method: "POST",
@@ -206,14 +242,16 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
 
   function cancelSelection() {
     setArticle(null);
+    setChosenPackage(null);
     setVersions(null);
     setInputs({});
     setTag("latest");
     setTagTouched(false);
     if (!nameTouched) setName("");
-    if (search.has("article")) {
+    if (search.has("article") || search.has("package")) {
       const next = new URLSearchParams(search);
       next.delete("article");
+      next.delete("package");
       setSearch(next, { replace: true });
     }
   }
@@ -236,7 +274,7 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
           steps={[
             {
               title: text("steps.what"),
-              ready: sourceKind !== "catalogue" || article !== null,
+              ready: picked,
               content: (
                 <>
                   <Field label={text("field.source")}>
@@ -245,9 +283,11 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
                       onChange={(e) => {
                         setSourceKind(e.target.value);
                         setArticle(null);
+                        setChosenPackage(null);
                       }}
                     >
                       <option value="catalogue">{text("common.catalogue")}</option>
+                      <option value="package">{text("package.source")}</option>
                       <option value="image">{text("common.image")}</option>
                       <option value="git">{text("common.git")}</option>
                       <option value="template">{text("common.template")}</option>
@@ -308,6 +348,39 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
                           setArticle(card);
                           setInputs({});
                           if (!nameTouched) setName(card.name);
+                        }}
+                      />
+                    )
+                  ) : sourceKind === "package" ? (
+                    chosenPackage ? (
+                      <>
+                        <div className="flex items-start justify-between gap-4 rounded-md border border-line bg-surface p-4">
+                          <span>
+                            <span className="font-medium">{chosenPackage.name}</span>
+                            {chosenPackage.summary ? <p className="mt-1 text-muted">{chosenPackage.summary}</p> : null}
+                            <p className="mt-1 font-mono text-[13px] text-muted">{chosenPackage.services.join(" · ")}</p>
+                          </span>
+                          <Link to={`/applications/paquets/${chosenPackage.id}`} className="shrink-0 text-ink underline">
+                            {text("package.open")}
+                          </Link>
+                        </div>
+                        <div>
+                          <TextButton type="button" onClick={cancelSelection}>
+                            {text("common.clear")}
+                          </TextButton>
+                        </div>
+                        {chosenPackage.inputs.map((input) => (
+                          <Field key={input.key} label={input.label}>
+                            <Input value={inputs[input.key] ?? ""} onChange={(e) => setInputs((current) => ({ ...current, [input.key]: e.target.value }))} required />
+                          </Field>
+                        ))}
+                      </>
+                    ) : (
+                      <PackageChoice
+                        onSelect={(row) => {
+                          setChosenPackage(row);
+                          setInputs({});
+                          if (!nameTouched) setName(row.name);
                         }}
                       />
                     )
@@ -457,7 +530,7 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
                 </>
               ),
             },
-            ...(sourceKind === "catalogue"
+            ...(sourceKind === "catalogue" || sourceKind === "package"
               ? []
               : [
                   {
@@ -481,7 +554,7 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
                                 </>
                               ) : null}
                               <Field label={text("app.variables")}>
-                                <TextArea value={variables} onChange={(e) => setVariables(e.target.value)} placeholder={"NOM=valeur"} />
+                                <Code value={variables} onChange={setVariables} language="env" label={text("app.variables")} placeholder="NOM=valeur" minHeight="6rem" />
                               </Field>
                               {sourceKind === "image" ? (
                               <div className="flex flex-col gap-3">
@@ -546,7 +619,7 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
           ]}
           error={error ? <ErrorText>{error}</ErrorText> : null}
           submit={
-            <Button type="submit" disabled={creating || !placed || (sourceKind === "catalogue" && !article)}>
+            <Button type="submit" disabled={creating || !placed || !picked}>
               {creating ? <Spinner /> : <Icon icon={Plus} />}
               {text("common.create")}
             </Button>
@@ -554,6 +627,42 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
         />
       </form>
     </>
+  );
+}
+
+// PackageChoice lists the person's packages, to install one.
+function PackageChoice({ onSelect }: { onSelect: (row: PackageRow) => void }) {
+  const [rows, setRows] = useState<PackageRow[] | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    api<PackageRow[]>("/api/packages")
+      .then(setRows)
+      .catch((err) => setError(err.message));
+  }, []);
+  if (error) return <ErrorText>{error}</ErrorText>;
+  if (rows === null) return <LoadingLines lines={3} />;
+  if (rows.length === 0) {
+    return (
+      <p className="text-muted">
+        {text("package.noneYet")}{" "}
+        <Link to="/applications/paquets" className="text-ink underline">
+          {text("nav.packages")}
+        </Link>
+      </p>
+    );
+  }
+  return (
+    <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      {rows.map((row) => (
+        <li key={row.id}>
+          <button type="button" onClick={() => onSelect(row)} className={`flex h-full w-full flex-col gap-2 rounded-md border border-line bg-surface p-4 text-left hover:bg-status ${focus}`}>
+            <span className="font-medium">{row.name}</span>
+            {row.summary ? <span className="text-muted">{row.summary}</span> : null}
+            <span className="font-mono text-[13px] text-muted">{row.services.join(" · ")}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -612,6 +721,16 @@ export function ApplicationPage() {
     }
   }
 
+  // The running application becomes one of the person's packages, to install again.
+  async function keepAsPackage() {
+    try {
+      const row = await api<{ id: string }>(`/api/applications/${app!.id}/package`, { method: "POST" });
+      navigate(`/applications/paquets/${row.id}`);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : text("common.error"), "bad");
+    }
+  }
+
   const where = app.destinationKind === "cluster" ? app.clusterName : app.serverName;
   const address = app.domains?.find((domain) => domain.kind === "custom" && domain.status === "ready")?.hostname ?? app.domains?.find((domain) => domain.kind === "custom")?.hostname ?? "";
   const pods = runtime?.pods ?? [];
@@ -653,6 +772,8 @@ export function ApplicationPage() {
             {app.paused ? text("home.resume") : text("apps.pauseAction")}
           </Button>
           <ActionsMenu label={text("apps.more")}>
+            {app.sourceKind === "image" && !locked ? <MenuItem onClick={() => navigate(`/applications/${app.id}/services`)}>{text("appServices.edit")}</MenuItem> : null}
+            <MenuItem onClick={() => void keepAsPackage()}>{text("appServices.keep")}</MenuItem>
             <MenuItem tone="danger" onClick={() => setConfirm("delete")}>
               {text("common.delete")}
             </MenuItem>
@@ -826,7 +947,10 @@ function AppVariables({ app, onSaved }: { app: Application; onSaved: () => void 
             <li key={name} className="flex flex-wrap items-center justify-between gap-6 border-t border-line py-3">
               <span className="font-mono text-[13px]">{name}</span>
               <span className="flex min-w-0 items-center gap-3">
-                <span className="truncate font-mono text-[13px] text-muted">{shown[name] ?? value}</span>
+                <span className="truncate font-mono text-[13px] text-muted" title={followsAddress(value) ? value : undefined}>
+                  {fillAddress(shown[name] ?? value, app.address)}
+                </span>
+                {followsAddress(value) ? <span className="shrink-0 rounded border border-line px-1.5 text-[13px] text-faint">{text("address.follows")}</span> : null}
                 {canAdmin && value === masked && shown[name] === undefined ? (
                   <TextButton type="button" onClick={() => reveal(name)}>
                     {text("app.reveal")}
@@ -902,8 +1026,9 @@ function VariablesSheet({ app, onClose, onSaved }: { app: Application; onClose: 
       <form onSubmit={save} className="flex flex-col gap-4">
         <p className="text-muted">{text("app.variablesRestart")}</p>
         <Field label={text("app.variables")}>
-          <TextArea value={draft} onChange={(e) => setDraft(e.target.value)} rows={8} placeholder={"NOM=valeur"} spellCheck={false} />
+          <Code value={draft} onChange={setDraft} language="env" label={text("app.variables")} placeholder="NOM=valeur" minHeight="10rem" />
         </Field>
+        {app.address ? <p className="text-faint">{text("address.hint", { address: app.address })}</p> : null}
         {error ? <ErrorText>{error}</ErrorText> : null}
         <div className="flex flex-wrap items-center gap-4">
           <Button type="submit" disabled={busy}>

@@ -1,0 +1,41 @@
+type: myinfra-package
+version: 1
+name: OpenLDAP
+summary: Un annuaire LDAP et son écran d'administration.
+category: Identité
+env:
+  LDAP_ADMIN_PASSWORD: '{{secret:ADMIN}}'
+  LDAP_DOMAIN: myinfra.local
+  LDAP_ORGANISATION: MyInfra
+  LDAP_TLS: "false"
+  PHPLDAPADMIN_HTTPS: "false"
+  PHPLDAPADMIN_LDAP_CLIENT_TLS: "false"
+  PHPLDAPADMIN_LDAP_HOSTS: openldap
+services:
+  - name: web
+    image: osixia/phpldapadmin:0.9.0
+    public: true
+    port: 80
+  - name: openldap
+    image: osixia/openldap:1.5.0
+    port: 389
+    volumes:
+      - path: /var/lib/ldap
+        sizeGi: 8
+about:
+  site: https://www.openldap.org
+  logo: openldap
+  description: Un annuaire LDAP pour les services qui s'y connectent, avec phpLDAPadmin pour l'administration. Les données et la configuration sont conservées.
+  translations:
+    de:
+      summary: Ein LDAP-Verzeichnis.
+      description: Ein LDAP-Verzeichnis für Dienste, die sich daran anbinden, mit phpLDAPadmin zur Verwaltung. Daten und Konfiguration bleiben erhalten.
+    en:
+      summary: An LDAP directory.
+      description: An LDAP directory for services that connect to it, with phpLDAPadmin for administration. Data and configuration are kept.
+    it:
+      summary: Una rubrica LDAP.
+      description: Una rubrica LDAP per i servizi che vi si collegano, con phpLDAPadmin per l'amministrazione. Dati e configurazione sono conservati.
+    pt:
+      summary: Um diretório LDAP.
+      description: Um diretório LDAP para os serviços que se ligam a ele, com phpLDAPadmin para a administração. Os dados e a configuração são conservados.

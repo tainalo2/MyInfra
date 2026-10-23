@@ -42,6 +42,9 @@ const Templates = page(() => import("./templates"), "Templates");
 const TemplateEditor = page(() => import("./templates"), "TemplateEditor");
 const TemplateLaunch = page(() => import("./templates"), "TemplateLaunch");
 const TemplateRunPage = page(() => import("./templates"), "TemplateRunPage");
+const Packages = page(() => import("./packages"), "Packages");
+const PackageEditor = page(() => import("./packages"), "PackageEditor");
+const AppServices = page(() => import("./packages"), "AppServices");
 const DestructionPage = page(() => import("./destructions"), "DestructionPage");
 const DestructionsPage = page(() => import("./destructions"), "DestructionsPage");
 const DeploymentsPage = page(() => import("./deployments"), "DeploymentsPage");
@@ -260,6 +263,7 @@ export function App() {
         <Route path="/applications" element={<Home />} />
         <Route path="/nouveau" element={<RequireDeploy><NewApp /></RequireDeploy>} />
         <Route path="/applications/:id" element={<ApplicationPage />} />
+        <Route path="/applications/:id/services" element={<AppServices />} />
         <Route path="/applications/:id/terminal/:pod" element={<RequireDeploy><PodTerminal /></RequireDeploy>} />
         <Route path="/cles" element={<Keys />} />
         <Route path="/secrets" element={<Secrets />} />
@@ -287,6 +291,10 @@ export function App() {
         <Route path="/templates/suivis/:id" element={<TemplateRunPage />} />
         <Route path="/templates/:id" element={<TemplateEditor />} />
         <Route path="/templates/:id/deploy" element={<RequireDeploy><TemplateLaunch /></RequireDeploy>} />
+        <Route path="/applications/paquets" element={<Packages />} />
+        <Route path="/applications/paquets/nouveau" element={<RequireDeploy><PackageEditor /></RequireDeploy>} />
+        <Route path="/applications/paquets/:id" element={<PackageEditor />} />
+        <Route path="/paquets/*" element={<Navigate to="/applications/paquets" replace />} />
         <Route path="/compte" element={<Account />} />
         <Route path="/utilisateurs" element={<RequireAdmin><UsersPage /></RequireAdmin>} />
         <Route path="/transfert" element={<RequireAdmin><Transfer /></RequireAdmin>} />

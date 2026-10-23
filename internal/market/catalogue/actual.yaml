@@ -1,0 +1,30 @@
+type: myinfra-package
+version: 1
+name: Actual
+summary: Un budget personnel.
+category: Comptes personnels
+services:
+  - name: actual
+    image: actualbudget/actual-server:25.10.0
+    public: true
+    port: 5006
+    volumes:
+      - path: /data
+        sizeGi: 2
+about:
+  site: https://actualbudget.org
+  logo: actualbudget
+  description: Un budget personnel, avec les comptes et les opérations du mois. Le budget est conservé.
+  translations:
+    de:
+      summary: Ein persönliches Budget.
+      description: Ein persönliches Budget, mit den Konten und Buchungen des Monats. Das Budget bleibt erhalten.
+    en:
+      summary: A personal budget.
+      description: A personal budget, with the month's accounts and operations. The budget is kept.
+    it:
+      summary: Un budget personale.
+      description: Un budget personale, con i conti e le operazioni del mese. Il budget è conservato.
+    pt:
+      summary: Um orçamento pessoal.
+      description: Um orçamento pessoal, com as contas e as operações do mês. O orçamento é conservado.

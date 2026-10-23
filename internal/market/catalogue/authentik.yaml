@@ -1,0 +1,55 @@
+type: myinfra-package
+version: 1
+name: Authentik
+summary: Une porte d'identité pour les autres services.
+category: Identité
+env:
+  AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+  AUTHENTIK_POSTGRESQL__HOST: postgres
+  AUTHENTIK_POSTGRESQL__NAME: authentik
+  AUTHENTIK_POSTGRESQL__PASSWORD: '{{secret:DB}}'
+  AUTHENTIK_POSTGRESQL__USER: authentik
+  AUTHENTIK_REDIS__HOST: redis
+  AUTHENTIK_SECRET_KEY: '{{secret:SECRET}}'
+  POSTGRES_DB: authentik
+  POSTGRES_PASSWORD: '{{secret:DB}}'
+  POSTGRES_USER: authentik
+services:
+  - name: server
+    image: authentik/server:2025.8.4
+    public: true
+    port: 9000
+    volumes:
+      - path: /data
+        sizeGi: 2
+  - name: worker
+    image: authentik/server:2025.8.4
+    port: 9000
+    args:
+      - worker
+  - name: postgres
+    image: postgres:16
+    port: 5432
+    volumes:
+      - path: /var/lib/postgresql/data
+        sizeGi: 8
+  - name: redis
+    image: redis:7-alpine
+    port: 6379
+about:
+  site: https://goauthentik.io
+  logo: authentik
+  description: 'Une porte d''identité : comptes, groupes et connexion pour les autres services. Les comptes sont dans la base.'
+  translations:
+    de:
+      summary: Eine Identitätstür für die anderen Dienste.
+      description: 'Eine Identitätstür: Konten, Gruppen und Anmeldung für die anderen Dienste. Die Konten liegen in der Datenbank.'
+    en:
+      summary: An identity door for the other services.
+      description: 'An identity door: accounts, groups, and sign-in for the other services. Accounts are in the database.'
+    it:
+      summary: Una porta d'identità per gli altri servizi.
+      description: 'Una porta d''identità: account, gruppi e accesso per gli altri servizi. Gli account stanno nel database.'
+    pt:
+      summary: Uma porta de identidade para os outros serviços.
+      description: 'Uma porta de identidade: contas, grupos e entrada para os outros serviços. As contas estão na base.'

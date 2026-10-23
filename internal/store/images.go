@@ -167,7 +167,7 @@ func (s *Store) RolloutApp(ctx context.Context, id string) (RolloutApp, error) {
 		return RolloutApp{}, err
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, name, image, published, disk, replicas, listen, disk_path, disk_gi, args, backup
+		SELECT id, name, image, published, disk, replicas, listen, disk_path, disk_gi, args, backup, spec
 		FROM application_services WHERE application_id = $1 ORDER BY published DESC, name`, id)
 	if err != nil {
 		return RolloutApp{}, err
@@ -176,10 +176,12 @@ func (s *Store) RolloutApp(ctx context.Context, id string) (RolloutApp, error) {
 	for rows.Next() {
 		var svc Service
 		var args string
-		if err := rows.Scan(&svc.ID, &svc.Name, &svc.Image, &svc.Published, &svc.Disk, &svc.Replicas, &svc.Listen, &svc.DiskPath, &svc.DiskGi, &args, &svc.Backup); err != nil {
+		var specRaw []byte
+		if err := rows.Scan(&svc.ID, &svc.Name, &svc.Image, &svc.Published, &svc.Disk, &svc.Replicas, &svc.Listen, &svc.DiskPath, &svc.DiskGi, &args, &svc.Backup, &specRaw); err != nil {
 			return RolloutApp{}, err
 		}
 		svc.Args = splitArgs(args)
+		svc.Spec = readSpec(specRaw)
 		app.Services = append(app.Services, svc)
 	}
 	return app, rows.Err()
@@ -284,4 +286,52 @@ func (s *Store) RollbackVariables(ctx context.Context, applicationID string) (ma
 		return nil, err
 	}
 	return vars, nil
+}
+
+// ReplaceServices sets the services of an application: a service whose ID is
+// known is changed in place, keeping its backup and database state; one left
+// out is removed; one with a new ID is added. source is the public image.
+func (s *Store) ReplaceServices(ctx context.Context, ownerID, applicationID, source string, services []Service) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	tag, err := tx.Exec(ctx, `UPDATE applications SET source = $3 WHERE id = $1 AND owner_id = $2`, applicationID, ownerID, source)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	ids := make([]string, 0, len(services))
+	for _, svc := range services {
+		ids = append(ids, svc.ID)
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM application_services WHERE application_id = $1 AND NOT (id = ANY($2::text[]))`, applicationID, ids); err != nil {
+		return err
+	}
+	// A name freed by a service removed or renamed may be taken in the same
+	// change: the names are set once every row is in.
+	if _, err := tx.Exec(ctx, `UPDATE application_services SET name = 'tmp-' || id WHERE application_id = $1`, applicationID); err != nil {
+		return err
+	}
+	for _, svc := range services {
+		replicas := svc.Replicas
+		if replicas < 1 {
+			replicas = 1
+		}
+		listen, path, gi := servicePlace(svc)
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO application_services (id, application_id, name, image, published, disk, replicas, listen, disk_path, disk_gi, args, spec)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			ON CONFLICT (id) DO UPDATE SET
+				name = EXCLUDED.name, image = EXCLUDED.image, published = EXCLUDED.published, disk = EXCLUDED.disk,
+				replicas = EXCLUDED.replicas, listen = EXCLUDED.listen, disk_path = EXCLUDED.disk_path,
+				disk_gi = EXCLUDED.disk_gi, args = EXCLUDED.args, spec = EXCLUDED.spec`,
+			svc.ID, applicationID, svc.Name, svc.Image, svc.Published, svc.Disk, replicas, listen, path, gi, joinArgs(svc.Args), specJSON(svc.Spec)); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }

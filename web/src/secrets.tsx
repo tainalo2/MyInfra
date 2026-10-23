@@ -3,9 +3,10 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { Plus, Shield, Trash2 } from "lucide-react";
 import { api, type AppSecret, type Application } from "./api";
 import { text } from "./i18n";
+import { Code } from "./code-lazy";
 import { ConfirmDialog, Spinner, useToast } from "./kit";
 import { useSession } from "./session";
-import { Button, EmptyList, ErrorText, Field, Icon, Input, ItemList, ListActions, ListModeButton, LoadingCards, PageTitle, SectionTitle, TextArea, TextButton, entryClass, useListMode, useTrail } from "./ui";
+import { Button, EmptyList, ErrorText, Field, Icon, Input, ItemList, ListActions, ListModeButton, LoadingCards, PageTitle, SectionTitle, TextButton, entryClass, useListMode, useTrail } from "./ui";
 
 function parseEntries(source: string) {
   const entries: Record<string, string> = {};
@@ -99,7 +100,7 @@ export function Secrets() {
             <Input value={name} onChange={(e) => setName(e.target.value)} required />
           </Field>
           <Field label={text("field.keys")}>
-            <TextArea value={entries} onChange={(e) => setEntries(e.target.value)} rows={8} placeholder={text("secret.placeholder")} required />
+            <Code value={entries} onChange={setEntries} language="env" label={text("field.keys")} placeholder={text("secret.placeholder")} minHeight="10rem" />
           </Field>
           <div>
             <Button type="submit">
@@ -238,7 +239,7 @@ export function SecretPage() {
           )}
         </section>
         <Field label={text("secret.add")}>
-          <TextArea value={entries} onChange={(e) => setEntries(e.target.value)} rows={6} placeholder={text("secret.placeholder")} />
+          <Code value={entries} onChange={setEntries} language="env" label={text("secret.add")} placeholder={text("secret.placeholder")} minHeight="7rem" />
         </Field>
         <section>
           <SectionTitle>{text("secret.allowed")}</SectionTitle>

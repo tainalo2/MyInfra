@@ -29,6 +29,8 @@ func Ansible() string { return look("ansible-playbook") }
 
 func Tofu() string { return look("tofu") }
 
+func Helm() string { return look("helm") }
+
 func look(name string) string {
 	home, err := boot.Home()
 	if err == nil {

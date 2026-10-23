@@ -1,0 +1,30 @@
+type: myinfra-package
+version: 1
+name: Uptime Kuma
+summary: La surveillance de sites.
+category: Automatisation
+services:
+  - name: uptime-kuma
+    image: louislam/uptime-kuma:1.23.16
+    public: true
+    port: 3001
+    volumes:
+      - path: /app/data
+        sizeGi: 2
+about:
+  site: https://github.com/louislam/uptime-kuma
+  logo: uptimekuma
+  description: La surveillance de sites et de services, avec une page d'état. L'historique des contrôles est conservé.
+  translations:
+    de:
+      summary: Die Überwachung von Seiten.
+      description: Die Überwachung von Seiten und Diensten, mit einer Statusseite. Die Prüfhistorie bleibt erhalten.
+    en:
+      summary: Watching sites.
+      description: Watching sites and services, with a status page. The check history is kept.
+    it:
+      summary: La sorveglianza dei siti.
+      description: La sorveglianza di siti e servizi, con una pagina di stato. La cronologia dei controlli è conservata.
+    pt:
+      summary: A vigilância de sites.
+      description: A vigilância de sites e serviços, com uma página de estado. O histórico dos controlos é conservado.

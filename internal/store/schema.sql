@@ -314,6 +314,10 @@ ALTER TABLE application_services ADD COLUMN IF NOT EXISTS backup text NOT NULL D
 -- is being built and the data moved into it. ready: the service runs from it.
 ALTER TABLE application_services ADD COLUMN IF NOT EXISTS database text NOT NULL DEFAULT '';
 
+-- What a service runs with besides its image, port and first disk: command,
+-- ports, disks, files, variables, reservations, health and order (spec.Service).
+ALTER TABLE application_services ADD COLUMN IF NOT EXISTS spec jsonb NOT NULL DEFAULT '{}';
+
 -- Images a person brought: an archive from docker save, sent or fetched from a
 -- URL. MyInfra loads them on the servers itself, under myinfra.local/<name>:<tag>:
 -- the servers need not reach MyInfra, which often runs behind a home router.
@@ -405,3 +409,16 @@ CREATE TABLE IF NOT EXISTS server_health (
     provider_checked_at timestamptz,
     provider_error text NOT NULL DEFAULT ''
 );
+
+-- Application packages a person wrote or brought: the services of an
+-- application, kept as the JSON of a pack.Package, to install again.
+CREATE TABLE IF NOT EXISTS packages (
+    id text PRIMARY KEY,
+    owner_id text NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    name text NOT NULL,
+    body jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS packages_owner_name_key ON packages (owner_id, lower(btrim(name)));

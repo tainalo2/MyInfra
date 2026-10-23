@@ -1,0 +1,34 @@
+type: myinfra-package
+version: 1
+name: LLDAP
+summary: Un annuaire léger et son écran.
+category: Identité
+env:
+  LLDAP_JWT_SECRET: '{{secret:JWT}}'
+  LLDAP_LDAP_BASE_DN: dc=myinfra,dc=local
+  LLDAP_LDAP_USER_PASS: '{{secret:ADMIN}}'
+services:
+  - name: lldap
+    image: lldap/lldap:v0.6.1
+    public: true
+    port: 17170
+    volumes:
+      - path: /data
+        sizeGi: 1
+about:
+  site: https://github.com/lldap/lldap
+  logo: lldap
+  description: Un annuaire léger et son écran, pour gérer des utilisateurs et des groupes. L'annuaire est conservé.
+  translations:
+    de:
+      summary: Ein leichtes Verzeichnis und sein Bildschirm.
+      description: Ein leichtes Verzeichnis und sein Bildschirm, um Benutzer und Gruppen zu verwalten. Das Verzeichnis bleibt erhalten.
+    en:
+      summary: A light directory and its screen.
+      description: A light directory and its screen, to manage users and groups. The directory is kept.
+    it:
+      summary: Una rubrica leggera e la sua schermata.
+      description: Una rubrica leggera e la sua schermata, per gestire utenti e gruppi. La rubrica è conservata.
+    pt:
+      summary: Um diretório leve e o seu ecrã.
+      description: Um diretório leve e o seu ecrã, para gerir utilizadores e grupos. O diretório é conservado.

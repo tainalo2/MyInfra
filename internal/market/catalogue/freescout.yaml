@@ -1,0 +1,53 @@
+type: myinfra-package
+version: 1
+name: FreeScout
+summary: Une boîte mail d'assistance.
+category: Échanges
+inputs:
+  - key: email
+    label: Adresse de contact
+env:
+  ADMIN_EMAIL: '{{input:email}}'
+  ADMIN_PASS: '{{secret:ADMIN}}'
+  APP_URL: '{{url}}'
+  DB_HOST: mariadb
+  DB_NAME: freescout
+  DB_PASS: '{{secret:DB}}'
+  DB_PORT: "3306"
+  DB_USER: freescout
+  MARIADB_DATABASE: freescout
+  MARIADB_PASSWORD: '{{secret:DB}}'
+  MARIADB_ROOT_PASSWORD: '{{secret:ROOT}}'
+  MARIADB_USER: freescout
+  SITE_URL: '{{url}}'
+services:
+  - name: web
+    image: tiredofit/freescout:1.17.5
+    public: true
+    port: 80
+    volumes:
+      - path: /data
+        sizeGi: 4
+  - name: mariadb
+    image: mariadb:11
+    port: 3306
+    volumes:
+      - path: /var/lib/mysql
+        sizeGi: 8
+about:
+  site: https://freescout.net
+  logo: freescout
+  description: Une boîte partagée pour répondre aux e-mails d'assistance. Les conversations sont conservées.
+  translations:
+    de:
+      summary: Ein Hilfe-Postfach.
+      description: Ein geteiltes Postfach, um Hilfe-E-Mails zu beantworten. Die Gespräche bleiben erhalten.
+    en:
+      summary: A support mailbox.
+      description: A shared box for answering support emails. Conversations are kept.
+    it:
+      summary: Una casella di assistenza.
+      description: Una casella condivisa per rispondere alle email di assistenza. Le conversazioni sono conservate.
+    pt:
+      summary: Uma caixa de correio de assistência.
+      description: Uma caixa partilhada para responder aos e-mails de assistência. As conversas são conservadas.

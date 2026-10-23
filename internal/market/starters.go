@@ -55,15 +55,18 @@ func StarterOf(id string) (Starter, bool) {
 	return Starter{}, false
 }
 
-// ArticleName is the name of a catalogue article, for a starter to show.
+// ArticleName is the name of a catalogue application, for a starter to show.
 func ArticleName(id string) string {
-	if article, ok := find(id); ok {
-		return article.Name
+	if item, ok := find(id); ok {
+		return item.pkg.Name
 	}
 	return ""
 }
 
-// ArticleLogo is the logo of a catalogue article.
+// ArticleLogo is the logo of a catalogue application.
 func ArticleLogo(id string) string {
-	return profiles[id].Logo
+	if item, ok := find(id); ok {
+		return item.pkg.About.Logo
+	}
+	return ""
 }

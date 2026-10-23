@@ -1,0 +1,33 @@
+type: myinfra-package
+version: 1
+name: Linkding
+summary: Des liens enregistrés.
+category: Sites
+env:
+  LD_SUPERUSER_NAME: admin
+  LD_SUPERUSER_PASSWORD: '{{secret:ADMIN}}'
+services:
+  - name: linkding
+    image: sissbruecker/linkding:1.39.1
+    public: true
+    port: 9090
+    volumes:
+      - path: /etc/linkding/data
+        sizeGi: 2
+about:
+  site: https://linkding.link
+  logo: linkding
+  description: Une collection de liens, avec des étiquettes et une recherche. Les liens enregistrés sont conservés.
+  translations:
+    de:
+      summary: Gespeicherte Links.
+      description: Eine Sammlung von Links, mit Schlagwörtern und Suche. Gespeicherte Links bleiben erhalten.
+    en:
+      summary: Saved links.
+      description: A collection of links, with tags and search. Saved links are kept.
+    it:
+      summary: Link salvati.
+      description: Una raccolta di link, con etichette e ricerca. I link salvati sono conservati.
+    pt:
+      summary: Ligações guardadas.
+      description: Uma coleção de ligações, com etiquetas e pesquisa. As ligações guardadas são conservadas.

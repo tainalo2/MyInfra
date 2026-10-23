@@ -74,21 +74,19 @@ func (a *API) useStarter(w http.ResponseWriter, r *http.Request) {
 		zone = zones[0]
 	}
 	for _, id := range starter.Apps {
-		services, ok := market.ServicesOf(id)
+		// The template carries the application whole, as a package: it runs
+		// as the catalogue describes it, files and checks included.
+		p, ok := market.PackageOf(id)
 		if !ok {
 			writeError(w, http.StatusInternalServerError, "Cet article est introuvable.")
 			return
 		}
-		app := blueprint.App{Name: market.ArticleName(id), SourceKind: "image", Catalog: id, Replicas: 1,
+		app := blueprint.App{Name: p.Name, SourceKind: "image", Replicas: 1, Package: &p, Inputs: map[string]string{},
 			Names: []blueprint.Name{{Subdomain: id, Zone: zone}}}
-		for _, svc := range services {
-			if svc.Published {
+		for _, svc := range p.Services {
+			if svc.Public {
 				app.Source = svc.Image
 			}
-			app.Services = append(app.Services, blueprint.Service{
-				Name: svc.Name, Image: svc.Image, Published: svc.Published, Disk: svc.Disk, Replicas: svc.Replicas,
-				Listen: svc.Listen, DiskPath: svc.DiskPath, DiskGi: svc.DiskGi, Args: svc.Args,
-			})
 		}
 		body.Applications = append(body.Applications, app)
 	}

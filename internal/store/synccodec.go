@@ -135,11 +135,14 @@ func serviceFromPayload(raw json.RawMessage) (syncService, error) {
 		return syncService{
 			ID: b.str("id"), ApplicationID: b.str("application_id"), Name: b.str("name"), Image: b.str("image"),
 			Published: b.boolean("published"), Disk: b.boolean("disk"), Replicas: b.num("replicas"), Listen: b.num("listen"),
-			DiskPath: b.str("disk_path"), DiskGi: b.num("disk_gi"), Args: b.str("args"), Seq: b.i64("sync_seq"), Origin: b.str("sync_origin"),
+			DiskPath: b.str("disk_path"), DiskGi: b.num("disk_gi"), Args: b.str("args"), Spec: canonSpec(b.raw("spec", "{}")),
+			Seq: b.i64("sync_seq"), Origin: b.str("sync_origin"),
 		}, nil
 	}
 	var row syncService
-	return row, json.Unmarshal(raw, &row)
+	err := json.Unmarshal(raw, &row)
+	row.Spec = canonSpec(row.Spec)
+	return row, err
 }
 
 func domainFromPayload(raw json.RawMessage) (syncDomain, error) {
@@ -153,6 +156,19 @@ func domainFromPayload(raw json.RawMessage) (syncDomain, error) {
 	var row syncDomain
 	err := json.Unmarshal(raw, &row)
 	row.CreatedAt = utc(row.CreatedAt)
+	return row, err
+}
+
+func packageFromPayload(raw json.RawMessage) (syncPackage, error) {
+	if isSnake(raw) {
+		b := bagOf(raw)
+		return syncPackage{ID: b.str("id"), OwnerID: b.str("owner_id"), Name: b.str("name"), Body: b.raw("body", "{}"), CreatedAt: b.stamp("created_at"), UpdatedAt: b.stamp("updated_at"), Seq: b.i64("sync_seq"), Origin: b.str("sync_origin")}, nil
+	}
+	var row syncPackage
+	err := json.Unmarshal(raw, &row)
+	row.CreatedAt = utc(row.CreatedAt)
+	row.UpdatedAt = utc(row.UpdatedAt)
+	row.Body = canonJSON(row.Body, "{}")
 	return row, err
 }
 
@@ -342,6 +358,7 @@ func canonServices(rows []syncService) []syncService {
 		if rows[i].DiskGi < 1 {
 			rows[i].DiskGi = 1
 		}
+		rows[i].Spec = canonSpec(rows[i].Spec)
 		if rows[i].DiskPath == "" {
 			rows[i].DiskPath = "/data"
 		}
@@ -356,6 +373,20 @@ func canonDomains(rows []syncDomain) []syncDomain {
 	}
 	for i := range rows {
 		rows[i].CreatedAt = utc(rows[i].CreatedAt)
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
+	return rows
+}
+
+// canonPackages keeps none as nothing, so that the document is unchanged.
+func canonPackages(rows []syncPackage) []syncPackage {
+	if len(rows) == 0 {
+		return nil
+	}
+	for i := range rows {
+		rows[i].CreatedAt = utc(rows[i].CreatedAt)
+		rows[i].UpdatedAt = utc(rows[i].UpdatedAt)
+		rows[i].Body = canonJSON(rows[i].Body, "{}")
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
 	return rows

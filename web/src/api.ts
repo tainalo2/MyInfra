@@ -285,6 +285,8 @@ export type Domain = {
 export type DnsZone = { name: string; accountId: string; account: string; provider: string };
 
 export type Application = {
+  // address is what {{url}} and {{host}} read now: it follows the domains.
+  address?: string;
   id: string;
   name: string;
   sourceKind: string;
@@ -357,6 +359,8 @@ export type CatalogueCard = {
   keepsFiles: boolean;
   inputs: CatalogueInput[];
   services: CatalogueService[];
+  // translations hold the summary and the description in the other languages.
+  translations?: Record<string, PackageWords>;
 };
 
 export type CatalogueGroup = { name: string; articles: CatalogueCard[] };
@@ -397,6 +401,10 @@ export type TemplateName = { subdomain: string; zone: string };
 export type TemplateApp = {
   // catalog is the catalogue article the app comes from.
   catalog?: string;
+  // package is the package the app comes from, kept whole; inputs answers
+  // its questions.
+  package?: Package;
+  inputs?: Record<string, string>;
   name: string;
   sourceKind: string;
   source: string;
@@ -532,3 +540,78 @@ export type UpdateJob = {
   createdAt: string;
   finishedAt?: string;
 };
+
+// An application package: the services of an application, with their disks,
+// files and variables, as MyInfra reads and writes it in YAML or JSON.
+export type PackageInput = { key: string; label: string };
+
+export type PackageVolume = { path: string; sizeGi?: number };
+
+export type PackageFile = { path: string; content: string };
+
+export type PackagePort = { name?: string; port: number };
+
+export type PackageService = {
+  name: string;
+  image: string;
+  public?: boolean;
+  port?: number;
+  replicas?: number;
+  args?: string[];
+  command?: string[];
+  ports?: PackagePort[];
+  volumes?: PackageVolume[];
+  files?: PackageFile[];
+  env?: Record<string, string>;
+  resources?: { cpu?: string; memory?: string };
+  health?: { http?: string; port?: number };
+  dependsOn?: string[];
+  // noPort is a service that listens on nothing, such as a worker.
+  noPort?: boolean;
+};
+
+export type PackageWords = { summary?: string; description?: string };
+
+// PackageAbout presents a package: where it comes from, its logo (as Simple
+// Icons names it) and its words in other languages.
+export type PackageAbout = { site?: string; logo?: string; description?: string; translations?: Record<string, PackageWords> };
+
+export type Package = {
+  type: string;
+  version: number;
+  name: string;
+  summary?: string;
+  category?: string;
+  inputs?: PackageInput[];
+  env?: Record<string, string>;
+  services: PackageService[];
+  about?: PackageAbout;
+};
+
+// A problem in a package: where it is (services[1].image) and, from a text,
+// its line.
+export type PackageProblem = { path: string; line?: number; message: string };
+
+export type PackageRow = {
+  id: string;
+  name: string;
+  logo?: string;
+  summary: string;
+  category: string;
+  services: string[];
+  inputs: PackageInput[];
+  updatedAt: string;
+  package?: Package;
+  yaml?: string;
+};
+
+// fillAddress shows a value as the application reads it now: {{url}} and
+// {{host}} follow its domain at each delivery.
+export function fillAddress(value: string, address?: string) {
+  if (!address) return value;
+  return value.replaceAll("{{url}}", `https://${address}`).replaceAll("{{host}}", address);
+}
+
+export function followsAddress(value: string) {
+  return value.includes("{{url}}") || value.includes("{{host}}");
+}

@@ -1,0 +1,30 @@
+type: myinfra-package
+version: 1
+name: Trilium
+summary: Des notes reliées entre elles.
+category: Collaboration
+services:
+  - name: trilium
+    image: triliumnext/notes:v0.95.0
+    public: true
+    port: 8080
+    volumes:
+      - path: /home/node/trilium-data
+        sizeGi: 4
+about:
+  site: https://triliumnotes.org
+  logo: trilium
+  description: Des notes reliées entre elles, avec une arborescence et des liens. Le carnet est conservé.
+  translations:
+    de:
+      summary: Miteinander verbundene Notizen.
+      description: Notizen, die miteinander verbunden sind, mit einem Baum und Links. Das Notizbuch bleibt erhalten.
+    en:
+      summary: Notes linked together.
+      description: Notes linked together, with a tree and links. The notebook is kept.
+    it:
+      summary: Note collegate tra loro.
+      description: Note collegate tra loro, con un albero e dei link. Il quaderno è conservato.
+    pt:
+      summary: Notas ligadas entre si.
+      description: Notas ligadas entre si, com uma árvore e ligações. O caderno é conservado.

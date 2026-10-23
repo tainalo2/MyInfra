@@ -12,6 +12,7 @@ import (
 
 	"myinfra/internal/cert"
 	"myinfra/internal/pause"
+	"myinfra/internal/spec"
 )
 
 var (
@@ -67,7 +68,7 @@ func Deployable(app App) bool {
 		if svc.Backup != nil && !backupOK(svc) {
 			return false
 		}
-		if !EnvOK(svc.Env) {
+		if !EnvOK(svc.Env) || !specOK(app, svc) {
 			return false
 		}
 		for key, ref := range svc.SecretEnv {
@@ -135,6 +136,8 @@ type Service struct {
 	SecretEnv map[string]SecretKey
 	// Stopped runs no copy while its data moves elsewhere.
 	Stopped bool
+	// Spec is what the service runs with besides the fields above.
+	Spec spec.Service
 	// configSum changes with the variables and secrets the copies read: a
 	// change of the Secrets alone restarts them, one after the other.
 	configSum string
@@ -375,8 +378,10 @@ func Render(app App) string {
 	}
 	refs := envRefs(app)
 	sum := configSum(app)
+	ports := servicePorts(app)
 	for _, svc := range app.Services {
-		svc.configSum = sum
+		svc.configSum = withFiles(sum, svc)
+		writeFiles(&b, ns, svc)
 		replicas := svc.Replicas
 		if replicas < 1 {
 			replicas = 1
@@ -389,17 +394,19 @@ func Render(app App) string {
 			stored = 1
 		}
 		if svc.Disk && svc.Backup != nil {
-			writeBackedUp(&b, ns, app.ID, svc, replicas, refs)
+			writeClaims(&b, ns, svc)
+			writeBackedUp(&b, ns, app.ID, svc, replicas, refs, ports)
 		} else if svc.Disk && stored > 1 {
-			writeStateful(&b, ns, app.ID, svc, replicas, refs)
+			writeStateful(&b, ns, app.ID, svc, replicas, refs, ports)
 		} else {
 			strategy := "RollingUpdate"
-			if svc.Disk {
+			if svc.Disk || len(svc.Spec.Volumes) > 0 {
 				strategy = "Recreate"
 			}
 			if svc.Disk {
 				fmt.Fprintf(&b, "---\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: %s\n  namespace: %s\nspec:\n  accessModes: [ReadWriteOnce]\n  resources:\n    requests:\n      storage: %dGi\n", svc.Name, ns, diskGiOf(svc))
 			}
+			writeClaims(&b, ns, svc)
 			fmt.Fprintf(&b, `---
 apiVersion: apps/v1
 kind: Deployment
@@ -426,20 +433,18 @@ spec:
 				b.WriteString(spread(svc.Name))
 			}
 			b.WriteString(moveAway())
-			fmt.Fprintf(&b, `      containers:
-        - name: %s
-          image: %s
-          ports:
-            - containerPort: %d
-%s`, svc.Name, svc.Image, listenOf(svc), readiness(svc))
+			b.WriteString(waitFor(svc, ports))
+			b.WriteString("      containers:\n")
+			b.WriteString(containerHead(svc, true))
+			writeContainerTail(&b, refs, svc, false)
 		}
+		// After the workload's last line: the budget is a document of its own.
 		if replicas > 1 {
 			writeBudget(&b, ns, svc.Name)
 		}
-		if svc.Backup == nil && !(svc.Disk && replicas > 1) {
-			writeContainerTail(&b, refs, svc)
-		}
-		fmt.Fprintf(&b, `---
+		// A service without port has no address: no other service reaches it.
+		if !svc.Spec.NoPort {
+			fmt.Fprintf(&b, `---
 apiVersion: v1
 kind: Service
 metadata:
@@ -449,9 +454,8 @@ spec:
   selector:
     myinfra.io/service: %s
   ports:
-    - port: %d
-      targetPort: %d
-`, svc.Name, ns, svc.Name, listenOf(svc), listenOf(svc))
+%s`, svc.Name, ns, svc.Name, servicePortLines(svc))
+		}
 		if svc.Published && len(app.Hosts) > 0 {
 			fmt.Fprintf(&b, `---
 apiVersion: traefik.io/v1alpha1
@@ -557,7 +561,7 @@ spec:
 `, ns, pause.Image, pause.Script, pause.Page, pause.Port, ns, pause.Port, pause.Port)
 }
 
-func writeStateful(b *strings.Builder, ns, appID string, svc Service, replicas int, refs []string) {
+func writeStateful(b *strings.Builder, ns, appID string, svc Service, replicas int, refs []string, ports map[string]int) {
 	fmt.Fprintf(b, `---
 apiVersion: v1
 kind: Service
@@ -591,13 +595,9 @@ spec:
       labels:
         myinfra.io/service: %s
 %s    spec:
-%s%s      containers:
-        - name: %s
-          image: %s
-          ports:
-            - containerPort: %d
-%s`, svc.Name, ns, svc.Name, listenOf(svc), listenOf(svc), svc.Name, ns, appID, svc.Name, replicas, svc.Name, svc.Name, configAnnotation(svc, true), spread(svc.Name), moveAway(), svc.Name, svc.Image, listenOf(svc), readiness(svc))
-	writeContainerTail(b, refs, svc)
+%s%s%s      containers:
+%s`, svc.Name, ns, svc.Name, listenOf(svc), listenOf(svc), svc.Name, ns, appID, svc.Name, replicas, svc.Name, svc.Name, configAnnotation(svc, true), spread(svc.Name), moveAway(), waitFor(svc, ports), containerHead(svc, true))
+	writeContainerTail(b, refs, svc, true)
 	fmt.Fprintf(b, `  volumeClaimTemplates:
     - metadata:
         name: data
@@ -607,6 +607,16 @@ spec:
           requests:
             storage: %dGi
 `, diskGiOf(svc))
+	for i, volume := range svc.Spec.Volumes {
+		fmt.Fprintf(b, `    - metadata:
+        name: %s
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: %dGi
+`, volumeName(i), sizeOf(volume))
+	}
 }
 
 func envRefs(app App) []string {
@@ -622,7 +632,31 @@ func envRefs(app App) []string {
 	return refs
 }
 
-func writeContainerTail(b *strings.Builder, refs []string, svc Service) {
+// writeContainerTail ends a service's container and its pod: arguments,
+// variables, disks and files. A stateful service claims its disks from
+// templates, written after.
+func writeContainerTail(b *strings.Builder, refs []string, svc Service, stateful bool) {
+	writeContainerEnv(b, refs, svc, nil)
+	var mounts, volumes strings.Builder
+	if svc.Disk {
+		fmt.Fprintf(&mounts, "            - name: data\n              mountPath: %s\n", diskPathOf(svc))
+		if !stateful {
+			volumes.WriteString("        - name: data\n          persistentVolumeClaim:\n            claimName: " + svc.Name + "\n")
+		}
+	}
+	mounts.WriteString(extraMounts(svc))
+	volumes.WriteString(extraVolumes(svc, stateful))
+	if mounts.Len() > 0 {
+		b.WriteString("          volumeMounts:\n" + mounts.String())
+	}
+	if volumes.Len() > 0 {
+		b.WriteString("      volumes:\n" + volumes.String())
+	}
+}
+
+// writeContainerEnv writes the arguments and the variables of a container.
+// extra is set last, over the others.
+func writeContainerEnv(b *strings.Builder, refs []string, svc Service, extra map[string]string) {
 	if len(svc.Args) > 0 {
 		b.WriteString("          args:\n")
 		for _, arg := range svc.Args {
@@ -636,11 +670,17 @@ func writeContainerTail(b *strings.Builder, refs []string, svc Service) {
 		}
 	}
 	env := map[string]string{}
+	for key, value := range svc.Spec.Env {
+		env[key] = value
+	}
 	for key, value := range svc.Env {
 		env[key] = value
 	}
 	if svc.Disk && strings.Contains(svc.Image, "postgres") {
 		env["PGDATA"] = diskPathOf(svc)
+	}
+	for key, value := range extra {
+		env[key] = value
 	}
 	if len(env)+len(svc.SecretEnv) > 0 {
 		b.WriteString("          env:\n")
@@ -655,12 +695,6 @@ func writeContainerTail(b *strings.Builder, refs []string, svc Service) {
 		for _, key := range keys {
 			ref := svc.SecretEnv[key]
 			fmt.Fprintf(b, "            - name: %s\n              valueFrom:\n                secretKeyRef:\n                  name: %s\n                  key: %s\n", key, ref.Secret, ref.Key)
-		}
-	}
-	if svc.Disk {
-		fmt.Fprintf(b, "          volumeMounts:\n            - name: data\n              mountPath: %s\n", diskPathOf(svc))
-		if svc.Replicas <= 1 {
-			b.WriteString("      volumes:\n        - name: data\n          persistentVolumeClaim:\n            claimName: " + svc.Name + "\n")
 		}
 	}
 }
@@ -728,8 +762,18 @@ func rolling(strategy string) string {
 // readiness sends visitors to a copy only once it accepts connections on its
 // port: a new version that does not start never replaces the old one. Only
 // for a service known to listen: a published one, or one with its port set.
+// A service that tells how it answers is asked that way, and restarted when
+// it stops answering for a minute.
 func readiness(svc Service) string {
-	if !svc.Published && svc.Listen < 1 {
+	if h := svc.Spec.Health; h != nil {
+		check := fmt.Sprintf("            tcpSocket:\n              port: %d\n", healthPort(svc))
+		if h.HTTP != "" {
+			check = fmt.Sprintf("            httpGet:\n              path: %q\n              port: %d\n", h.HTTP, healthPort(svc))
+		}
+		return "          readinessProbe:\n" + check + "            periodSeconds: 5\n            failureThreshold: 3\n" +
+			"          livenessProbe:\n" + check + "            initialDelaySeconds: 30\n            periodSeconds: 10\n            failureThreshold: 6\n"
+	}
+	if (!svc.Published && svc.Listen < 1) || svc.Spec.NoPort {
 		return ""
 	}
 	return fmt.Sprintf("          readinessProbe:\n            tcpSocket:\n              port: %d\n            periodSeconds: 5\n            failureThreshold: 3\n", listenOf(svc))

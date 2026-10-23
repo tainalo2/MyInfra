@@ -1,0 +1,30 @@
+type: myinfra-package
+version: 1
+name: Readarr
+summary: Le suivi des livres et des auteurs.
+category: Médias
+services:
+  - name: readarr
+    image: linuxserver/readarr:0.4.19-nightly
+    public: true
+    port: 8787
+    volumes:
+      - path: /config
+        sizeGi: 8
+about:
+  site: https://readarr.com
+  logo: readarr
+  description: 'Le suivi des livres et des auteurs : indexeurs, formats et bibliothèque. La configuration et l''historique sont conservés.'
+  translations:
+    de:
+      summary: Bücher.
+      description: 'Bücher und Autoren: Indexer, Formate und Bibliothek. Konfiguration und Verlauf bleiben erhalten.'
+    en:
+      summary: Books.
+      description: 'Books and authors: indexers, formats, and library. The configuration and history are kept.'
+    it:
+      summary: Libri.
+      description: 'Libri e autori: indexer, formati e libreria. La configurazione e la cronologia sono conservate.'
+    pt:
+      summary: Livros.
+      description: 'Livros e autores: indexadores, formatos e biblioteca. A configuração e o histórico são conservados.'

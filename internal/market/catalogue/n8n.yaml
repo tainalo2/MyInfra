@@ -1,0 +1,51 @@
+type: myinfra-package
+version: 1
+name: n8n
+summary: Des automatisations entre services.
+category: Automatisation
+env:
+  DB_POSTGRESDB_DATABASE: n8n
+  DB_POSTGRESDB_HOST: postgres
+  DB_POSTGRESDB_PASSWORD: '{{secret:DB}}'
+  DB_POSTGRESDB_PORT: "5432"
+  DB_POSTGRESDB_USER: n8n
+  DB_TYPE: postgresdb
+  N8N_ENCRYPTION_KEY: '{{secret:KEY}}'
+  N8N_HOST: '{{host}}'
+  N8N_PORT: "5678"
+  N8N_PROTOCOL: https
+  POSTGRES_DB: n8n
+  POSTGRES_PASSWORD: '{{secret:DB}}'
+  POSTGRES_USER: n8n
+  WEBHOOK_URL: '{{url}}/'
+services:
+  - name: web
+    image: n8nio/n8n:1.109.1
+    public: true
+    port: 5678
+    volumes:
+      - path: /home/node/.n8n
+        sizeGi: 4
+  - name: postgres
+    image: postgres:16
+    port: 5432
+    volumes:
+      - path: /var/lib/postgresql/data
+        sizeGi: 8
+about:
+  site: https://n8n.io
+  logo: n8n
+  description: Des automatisations qui relient des services entre eux, étape par étape. Les scénarios sont conservés.
+  translations:
+    de:
+      summary: Automatisierungen zwischen Diensten.
+      description: Automatisierungen, die Dienste Schritt für Schritt verbinden. Die Abläufe bleiben erhalten.
+    en:
+      summary: Automations between services.
+      description: Automations that connect services, step by step. The scenarios are kept.
+    it:
+      summary: Automazioni tra servizi.
+      description: Automazioni che collegano servizi, passo dopo passo. Gli scenari sono conservati.
+    pt:
+      summary: Automatizações entre serviços.
+      description: Automatizações que ligam serviços entre si, passo a passo. Os cenários são conservados.

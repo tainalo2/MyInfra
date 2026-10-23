@@ -1,9 +1,13 @@
 package tools
 
 import (
+	"archive/tar"
 	"archive/zip"
 	"bytes"
+	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,7 +22,10 @@ import (
 	"myinfra/internal/proc"
 )
 
-const tofuVersion = "1.13.1"
+const (
+	tofuVersion = "1.13.1"
+	helmVersion = "3.19.0"
+)
 
 func Install(ctx context.Context, name string) error {
 	switch name {
@@ -26,6 +33,8 @@ func Install(ctx context.Context, name string) error {
 		return installAnsible(ctx)
 	case "tofu":
 		return installTofu(ctx)
+	case "helm":
+		return installHelm(ctx)
 	default:
 		return errString("Outil inconnu.")
 	}
@@ -140,6 +149,104 @@ func installTofu(ctx context.Context) error {
 	}
 	PreparePath()
 	return nil
+}
+
+// installHelm fetches Helm, checks it against the digest its site
+// publishes, and keeps its one binary. MyInfra only renders charts with it.
+func installHelm(ctx context.Context) error {
+	home, err := boot.Home()
+	if err != nil {
+		return err
+	}
+	failed := errString("Helm n'a pas pu être installé.")
+	ext := "tar.gz"
+	if runtime.GOOS == "windows" {
+		ext = "zip"
+	}
+	name := fmt.Sprintf("helm-v%s-%s-%s.%s", helmVersion, runtime.GOOS, runtime.GOARCH, ext)
+	archive, err := fetch(ctx, "https://get.helm.sh/"+name, 80<<20)
+	if err != nil {
+		return failed
+	}
+	sum, err := fetch(ctx, "https://get.helm.sh/"+name+".sha256sum", 4<<10)
+	if err != nil {
+		return failed
+	}
+	digest := sha256.Sum256(archive)
+	if fields := strings.Fields(string(sum)); len(fields) == 0 || fields[0] != hex.EncodeToString(digest[:]) {
+		return errString("Helm téléchargé ne correspond pas à son empreinte : il n'est pas installé.")
+	}
+	want := exe("helm")
+	var binary []byte
+	if ext == "zip" {
+		reader, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+		if err != nil {
+			return failed
+		}
+		for _, item := range reader.File {
+			if filepath.Base(item.Name) == want {
+				src, err := item.Open()
+				if err != nil {
+					return failed
+				}
+				binary, err = io.ReadAll(io.LimitReader(src, 200<<20))
+				src.Close()
+				if err != nil {
+					return failed
+				}
+			}
+		}
+	} else {
+		gz, err := gzip.NewReader(bytes.NewReader(archive))
+		if err != nil {
+			return failed
+		}
+		tr := tar.NewReader(gz)
+		for {
+			header, err := tr.Next()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return failed
+			}
+			if header.Typeflag == tar.TypeReg && filepath.Base(header.Name) == want {
+				if binary, err = io.ReadAll(io.LimitReader(tr, 200<<20)); err != nil {
+					return failed
+				}
+			}
+		}
+	}
+	if len(binary) == 0 {
+		return failed
+	}
+	dir := filepath.Join(home, "bin")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, want), binary, 0o755); err != nil {
+		return err
+	}
+	PreparePath()
+	return nil
+}
+
+func fetch(ctx context.Context, url string, limit int64) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "myinfra")
+	client := &http.Client{Timeout: 2 * time.Minute}
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%s", res.Status)
+	}
+	return io.ReadAll(io.LimitReader(res.Body, limit))
 }
 
 func run(ctx context.Context, name string, args ...string) error {

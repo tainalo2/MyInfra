@@ -1,0 +1,27 @@
+type: myinfra-package
+version: 1
+name: Excalidraw
+summary: Un tableau blanc.
+category: Collaboration
+services:
+  - name: excalidraw
+    image: excalidraw/excalidraw:v0.18.0
+    public: true
+    port: 80
+about:
+  site: https://excalidraw.com
+  logo: excalidraw
+  description: Un tableau blanc pour dessiner un schéma à la main, seul ou à plusieurs. Cette installation ne garde pas les dessins.
+  translations:
+    de:
+      summary: Ein Whiteboard.
+      description: Ein Whiteboard, um ein Schema von Hand zu zeichnen, allein oder gemeinsam. Diese Installation behält die Zeichnungen nicht.
+    en:
+      summary: A whiteboard.
+      description: A whiteboard for drawing a diagram by hand, alone or together. This install does not keep the drawings.
+    it:
+      summary: Una lavagna.
+      description: Una lavagna per disegnare uno schema a mano, da soli o in più persone. Questa installazione non conserva i disegni.
+    pt:
+      summary: Um quadro branco.
+      description: Um quadro branco para desenhar um esquema à mão, sozinho ou a várias pessoas. Esta instalação não guarda os desenhos.

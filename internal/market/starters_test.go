@@ -25,11 +25,11 @@ func TestStartersAreComplete(t *testing.T) {
 			t.Fatalf("%s sans application", starter.ID)
 		}
 		for _, id := range starter.Apps {
-			article, ok := find(id)
+			item, ok := find(id)
 			if !ok {
 				t.Fatalf("%s : article %s introuvable", starter.ID, id)
 			}
-			if len(article.Inputs) > 0 {
+			if len(item.pkg.Inputs) > 0 {
 				t.Fatalf("%s : %s demande une saisie", starter.ID, id)
 			}
 			if _, _, err := Expand(id, id+".exemple.fr", nil); err != nil {

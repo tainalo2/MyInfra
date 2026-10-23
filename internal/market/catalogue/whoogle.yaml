@@ -1,0 +1,27 @@
+type: myinfra-package
+version: 1
+name: Whoogle
+summary: Une recherche sans compte.
+category: Outils
+services:
+  - name: whoogle
+    image: benbusby/whoogle-search:0.9.3
+    public: true
+    port: 5000
+about:
+  site: https://github.com/benbusby/whoogle-search
+  logo: whoogle
+  description: Une recherche sans compte et sans historique gardé par le service. Rien n'est conservé d'une visite à l'autre.
+  translations:
+    de:
+      summary: Eine Suche ohne Konto.
+      description: Eine Suche ohne Konto und ohne Verlauf, den der Dienst behält. Von einem Besuch zum nächsten bleibt nichts.
+    en:
+      summary: A search without an account.
+      description: A search without an account and without a history kept by the service. Nothing is kept from one visit to the next.
+    it:
+      summary: Una ricerca senza account.
+      description: Una ricerca senza account e senza cronologia tenuta dal servizio. Niente è conservato da una visita all'altra.
+    pt:
+      summary: Uma pesquisa sem conta.
+      description: Uma pesquisa sem conta e sem histórico guardado pelo serviço. Nada é conservado de uma visita à seguinte.

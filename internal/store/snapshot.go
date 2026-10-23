@@ -90,6 +90,8 @@ type snapService struct {
 	DiskPath      string   `json:"diskPath,omitempty"`
 	DiskGi        int      `json:"diskGi,omitempty"`
 	Args          []string `json:"args,omitempty"`
+	// Spec is left out when empty, as in snapshots made before it.
+	Spec json.RawMessage `json:"spec,omitempty"`
 }
 
 type snapServer struct {
@@ -267,7 +269,7 @@ func (s *Store) ExportSnapshot(ctx context.Context) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 
-	services, err := s.pool.Query(ctx, `SELECT id, application_id, name, image, published, disk, replicas, listen, disk_path, disk_gi, args FROM application_services ORDER BY name`)
+	services, err := s.pool.Query(ctx, `SELECT id, application_id, name, image, published, disk, replicas, listen, disk_path, disk_gi, args, spec FROM application_services ORDER BY name`)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -275,10 +277,12 @@ func (s *Store) ExportSnapshot(ctx context.Context) (Snapshot, error) {
 	for services.Next() {
 		var row snapService
 		var args string
-		if err := services.Scan(&row.ID, &row.ApplicationID, &row.Name, &row.Image, &row.Published, &row.Disk, &row.Replicas, &row.Listen, &row.DiskPath, &row.DiskGi, &args); err != nil {
+		var specRaw []byte
+		if err := services.Scan(&row.ID, &row.ApplicationID, &row.Name, &row.Image, &row.Published, &row.Disk, &row.Replicas, &row.Listen, &row.DiskPath, &row.DiskGi, &args, &specRaw); err != nil {
 			return Snapshot{}, err
 		}
 		row.Args = splitArgs(args)
+		row.Spec = canonSpec(specRaw)
 		snap.Services = append(snap.Services, row)
 	}
 	if err := services.Err(); err != nil {
@@ -441,9 +445,9 @@ func (s *Store) ImportSnapshot(ctx context.Context, snap Snapshot) error {
 		}
 		listen, path, gi := servicePlace(Service{Listen: row.Listen, DiskPath: row.DiskPath, DiskGi: row.DiskGi})
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO application_services (id, application_id, name, image, published, disk, replicas, listen, disk_path, disk_gi, args)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-			row.ID, row.ApplicationID, row.Name, row.Image, row.Published, row.Disk, replicas, listen, path, gi, joinArgs(row.Args)); err != nil {
+			INSERT INTO application_services (id, application_id, name, image, published, disk, replicas, listen, disk_path, disk_gi, args, spec)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+			row.ID, row.ApplicationID, row.Name, row.Image, row.Published, row.Disk, replicas, listen, path, gi, joinArgs(row.Args), specJSON(readSpec(row.Spec))); err != nil {
 			return err
 		}
 	}

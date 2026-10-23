@@ -1,0 +1,30 @@
+type: myinfra-package
+version: 1
+name: Gatus
+summary: Une page d'état de services.
+category: Outils
+services:
+  - name: gatus
+    image: twinproduction/gatus:v5.17.0
+    public: true
+    port: 8080
+    volumes:
+      - path: /data
+        sizeGi: 1
+about:
+  site: https://gatus.io
+  logo: gatus
+  description: Une page qui dit si des services répondent, et depuis quand. La configuration est conservée.
+  translations:
+    de:
+      summary: Eine Statusseite der Dienste.
+      description: Eine Seite, die sagt, ob Dienste antworten, und seit wann. Die Konfiguration bleibt erhalten.
+    en:
+      summary: A status page for services.
+      description: A page that says whether services answer, and since when. The configuration is kept.
+    it:
+      summary: Una pagina di stato dei servizi.
+      description: Una pagina che dice se i servizi rispondono, e da quando. La configurazione è conservata.
+    pt:
+      summary: Uma página de estado de serviços.
+      description: Uma página que diz se os serviços respondem, e desde quando. A configuração é conservada.

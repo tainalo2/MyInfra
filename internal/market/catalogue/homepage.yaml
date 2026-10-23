@@ -1,0 +1,30 @@
+type: myinfra-package
+version: 1
+name: Homepage
+summary: Une page d'accueil de services.
+category: Outils
+services:
+  - name: homepage
+    image: gethomepage/homepage:v1.2.0
+    public: true
+    port: 3000
+    volumes:
+      - path: /app/config
+        sizeGi: 1
+about:
+  site: https://gethomepage.dev
+  logo: homepage
+  description: Une page d'accueil qui rassemble les liens vers les services. La disposition est conservée.
+  translations:
+    de:
+      summary: Eine Startseite der Dienste.
+      description: Eine Startseite, die Links zu den Diensten sammelt. Die Anordnung bleibt erhalten.
+    en:
+      summary: A home page of services.
+      description: A home page that gathers links to services. The layout is kept.
+    it:
+      summary: Una pagina iniziale dei servizi.
+      description: Una pagina iniziale che riunisce i link verso i servizi. La disposizione è conservata.
+    pt:
+      summary: Uma página de entrada de serviços.
+      description: Uma página de entrada que junta as ligações para os serviços. A disposição é conservada.

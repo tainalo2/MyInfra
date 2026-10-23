@@ -1,0 +1,30 @@
+type: myinfra-package
+version: 1
+name: Prowlarr
+summary: Les indexeurs pour la famille Servarr.
+category: Médias
+services:
+  - name: prowlarr
+    image: linuxserver/prowlarr:1.32.2
+    public: true
+    port: 9696
+    volumes:
+      - path: /config
+        sizeGi: 4
+about:
+  site: https://prowlarr.com
+  logo: prowlarr
+  description: La gestion des indexeurs partagée entre Sonarr, Radarr et les autres applications Servarr. La configuration est conservée.
+  translations:
+    de:
+      summary: Indexer für Servarr.
+      description: Gemeinsame Indexer-Verwaltung für Sonarr, Radarr und die übrigen Servarr-Anwendungen. Die Konfiguration bleibt erhalten.
+    en:
+      summary: Indexers for Servarr.
+      description: Shared indexer management for Sonarr, Radarr, and the rest of the Servarr family. The configuration is kept.
+    it:
+      summary: Indexer Servarr.
+      description: La gestione condivisa degli indexer per Sonarr, Radarr e il resto della famiglia Servarr. La configurazione è conservata.
+    pt:
+      summary: Indexadores Servarr.
+      description: A gestão partilhada de indexadores entre Sonarr, Radarr e o resto da família Servarr. A configuração é conservada.

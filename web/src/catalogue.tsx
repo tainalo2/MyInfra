@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Plus } from "lucide-react";
-import { api, type CatalogueCard, type CatalogueGroup, type CatalogueVersions } from "./api";
+import { api, type CatalogueCard, type CatalogueGroup, type CatalogueVersions, type PackageRow } from "./api";
 import { cardMatches, categoryName, localizeCard } from "./catalogue-copy";
 import { knownMessage, text } from "./i18n";
 import { AppLogo } from "./app-logo";
 import { ImageOrigin, imageSource } from "./registries";
-import { Button, ErrorText, Fold, Icon, Input, LoadingCards, LoadingLines, PageTitle, useTrail } from "./ui";
+import { Button, ErrorText, Fold, Icon, Input, LoadingCards, LoadingLines, PageTitle, TextButton, useTrail } from "./ui";
 
 export function CatalogueBrowser({ selected, onSelect }: { selected: string; onSelect: (article: CatalogueCard) => void }) {
   const [groups, setGroups] = useState<CatalogueGroup[] | null>(null);
@@ -114,6 +114,19 @@ export function CatalogueArticle() {
   const [versions, setVersions] = useState<CatalogueVersions | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
+  const [copying, setCopying] = useState(false);
+
+  // A copy becomes the person's own package, to change at will.
+  async function copy() {
+    setCopying(true);
+    try {
+      const row = await api<PackageRow>(`/api/catalogue/${id}/copy`, { method: "POST" });
+      navigate(`/applications/paquets/${row.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : text("common.error"));
+      setCopying(false);
+    }
+  }
 
   useEffect(() => {
     api<CatalogueCard>(`/api/catalogue/${id}`)
@@ -145,13 +158,19 @@ export function CatalogueArticle() {
         title={article.name}
         mark={<AppLogo slug={article.logo} name={article.name} size={48} />}
         action={
-          <Button type="button" onClick={() => navigate(`/nouveau?article=${article.id}`)}>
-            <Icon icon={Plus} />
-            {text("catalogue.install")}
-          </Button>
+          <span className="flex items-center gap-4">
+            <TextButton type="button" onClick={() => void copy()} disabled={copying}>
+              {text("package.copy")}
+            </TextButton>
+            <Button type="button" onClick={() => navigate(`/nouveau?article=${article.id}`)}>
+              <Icon icon={Plus} />
+              {text("catalogue.install")}
+            </Button>
+          </span>
         }
       />
       <div className="flex max-w-[720px] flex-col gap-4">
+        {error ? <ErrorText>{error}</ErrorText> : null}
         <p>{shownCard.description}</p>
         <p>
           <a className="text-link" href={article.site} target="_blank" rel="noreferrer">

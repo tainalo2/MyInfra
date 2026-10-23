@@ -1,0 +1,27 @@
+type: myinfra-package
+version: 1
+name: draw.io
+summary: Des schémas.
+category: Outils
+services:
+  - name: drawio
+    image: jgraph/drawio:27.0.9
+    public: true
+    port: 8080
+about:
+  site: https://www.diagrams.net
+  logo: diagramsdotnet
+  description: Des schémas et des diagrammes dessinés dans le navigateur. Cette installation n'enregistre pas les dessins sur un disque.
+  translations:
+    de:
+      summary: Schemata.
+      description: Schemata und Diagramme, im Browser gezeichnet. Diese Installation speichert die Zeichnungen nicht auf einer Platte.
+    en:
+      summary: Diagrams.
+      description: Diagrams drawn in the browser. This install does not save the drawings to a disk.
+    it:
+      summary: Schemi.
+      description: Schemi e diagrammi disegnati nel browser. Questa installazione non registra i disegni su un disco.
+    pt:
+      summary: Esquemas.
+      description: Esquemas e diagramas desenhados no navegador. Esta instalação não grava os desenhos num disco.

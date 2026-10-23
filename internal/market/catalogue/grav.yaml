@@ -1,0 +1,30 @@
+type: myinfra-package
+version: 1
+name: Grav
+summary: Un site de pages en fichiers.
+category: Sites
+services:
+  - name: grav
+    image: linuxserver/grav:1.7.48
+    public: true
+    port: 80
+    volumes:
+      - path: /config
+        sizeGi: 2
+about:
+  site: https://getgrav.org
+  logo: grav
+  description: 'Un site composé de fichiers : pages, thèmes et médias. Rien n''est confié à une base.'
+  translations:
+    de:
+      summary: Eine Website aus Dateien.
+      description: 'Eine Website aus Dateien: Seiten, Themen und Medien. Nichts liegt in einer Datenbank.'
+    en:
+      summary: A site of pages as files.
+      description: 'A site made of files: pages, themes, and media. Nothing is stored in a database.'
+    it:
+      summary: Un sito di pagine in file.
+      description: 'Un sito fatto di file: pagine, temi e media. Niente è affidato a un database.'
+    pt:
+      summary: Um site de páginas em ficheiros.
+      description: 'Um site feito de ficheiros: páginas, temas e média. Nada fica numa base.'

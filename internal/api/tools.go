@@ -12,7 +12,7 @@ func (a *API) hostTools(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) installTool(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	if name != "ansible" && name != "tofu" {
+	if name != "ansible" && name != "tofu" && name != "helm" {
 		writeError(w, http.StatusNotFound, "Outil inconnu.")
 		return
 	}
@@ -27,6 +27,7 @@ func toolState() map[string]bool {
 	return map[string]bool{
 		"ansible":     tools.Ansible() != "",
 		"tofu":        tools.Tofu() != "",
+		"helm":        tools.Helm() != "",
 		"tofuEnabled": true,
 	}
 }

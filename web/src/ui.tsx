@@ -169,8 +169,8 @@ export function Group({ label, hint, children }: { label: string; hint?: ReactNo
 
 const control = "w-full rounded-md border border-line bg-surface px-3 py-2 outline-none focus:border-focus";
 
-export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={control} />;
+export function Input({ className = "", ...props }: InputHTMLAttributes<HTMLInputElement>) {
+  return <input {...props} className={`${control} ${className}`} />;
 }
 
 export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
@@ -557,7 +557,7 @@ function useCrumbNames(pathname: string) {
 
 async function loadCrumbNames(pathname: string) {
   const app = pathname.match(/^\/applications\/([^/]+)/);
-  if (app) {
+  if (app && app[1] !== "paquets") {
     const id = decodeURIComponent(app[1]);
     const row = await api<{ name: string }>(`/api/applications/${id}`);
     return { [`app:${id}`]: row.name };
@@ -581,6 +581,12 @@ async function loadCrumbNames(pathname: string) {
     const row = await api<{ name: string }>(`/api/templates/${id}`);
     return { [`template:${id}`]: row.name };
   }
+  const pkg = pathname.match(/^\/applications\/paquets\/([^/]+)$/);
+  if (pkg && pkg[1] !== "nouveau") {
+    const id = decodeURIComponent(pkg[1]);
+    const row = await api<{ name: string }>(`/api/packages/${id}`);
+    return { [`package:${id}`]: row.name };
+  }
   const job = pathname.match(/^\/destructions\/([^/]+)$/);
   if (job) {
     const id = decodeURIComponent(job[1]);
@@ -595,11 +601,20 @@ function crumbsFor(pathname: string, names: Record<string, string>): Crumb[] {
   if (path === "/") return [];
   if (path === "/applications") return [{ label: text("nav.apps") }];
   if (path === "/nouveau") return [{ label: text("nav.apps"), to: "/applications" }, { label: text("crumb.newApp") }];
-  const app = path.match(/^\/applications\/([^/]+)(\/terminal\/[^/]+)?$/);
+  // Packages live under Applications: they are what applications are made from.
+  if (path === "/applications/paquets") return [{ label: text("nav.apps"), to: "/applications" }, { label: text("nav.packages") }];
+  if (path === "/applications/paquets/nouveau") return [{ label: text("nav.apps"), to: "/applications" }, { label: text("nav.packages"), to: "/applications/paquets" }, { label: text("package.new") }];
+  const pkg = path.match(/^\/applications\/paquets\/([^/]+)$/);
+  if (pkg) {
+    const id = decodeURIComponent(pkg[1]);
+    return current([{ label: text("nav.apps"), to: "/applications" }, { label: text("nav.packages"), to: "/applications/paquets" }, { label: names[`package:${id}`] || text("nav.packages") }]);
+  }
+  const app = path.match(/^\/applications\/([^/]+)(\/terminal\/[^/]+|\/services)?$/);
   if (app) {
     const id = decodeURIComponent(app[1]);
     const crumbs: Crumb[] = [{ label: text("nav.apps"), to: "/applications" }, { label: names[`app:${id}`] || text("crumb.application"), to: `/applications/${id}` }];
-    if (app[2]) crumbs.push({ label: text("crumb.terminal") });
+    if (app[2] === "/services") crumbs.push({ label: text("appServices.crumb") });
+    else if (app[2]) crumbs.push({ label: text("crumb.terminal") });
     return current(crumbs);
   }
   if (path === "/clusters") return [{ label: text("nav.clusters") }];
