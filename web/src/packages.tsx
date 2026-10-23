@@ -983,7 +983,7 @@ function EnvEditor({ value, onChange, label }: { value?: Record<string, string>;
   );
 }
 
-type AppPackage = { package: Package; yaml: string; problems: PackageProblem[] };
+type AppPackage = { package: Package; yaml: string; problems: PackageProblem[]; address?: string };
 
 // AppServices changes the services of a running application, as a package
 // is edited: add one, remove one, give it disks, files or a health check.
@@ -995,6 +995,7 @@ export function AppServices() {
   const toast = useToast();
   const { canDeploy } = useSession();
   const [name, setName] = useState("");
+  const [address, setAddress] = useState("");
   const [services, setServices] = useState<PackageService[]>([]);
   const [yamlText, setYamlText] = useState("");
   const [mode, setMode] = useState<"visual" | "yaml">("visual");
@@ -1011,6 +1012,7 @@ export function AppServices() {
     api<AppPackage>(`/api/applications/${id}/package`)
       .then((answer) => {
         setName(answer.package.name);
+        setAddress(answer.address ?? "");
         setServices(answer.package.services);
       })
       .catch((err) => setError(err.message))
@@ -1117,6 +1119,7 @@ export function AppServices() {
         }}
       >
         <p className="max-w-[720px] text-muted">{text("appServices.intro")}</p>
+        {address ? <p className="-mt-4 max-w-[720px] text-faint">{text("address.hint", { address })}</p> : null}
         <Tabs
           label={text("package.view")}
           active={mode}

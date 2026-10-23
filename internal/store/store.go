@@ -839,6 +839,22 @@ func readyHosts(ctx context.Context, s *Store, applicationID string) ([]string, 
 	return hosts, zones, rows.Err()
 }
 
+// Address is the name an application answers on now: its own name once
+// ready, else the one MyInfra gave it. Its {{url}} and {{host}} read it at
+// each delivery, so that a new name reaches them.
+func (s *Store) Address(ctx context.Context, applicationID string) (string, error) {
+	var host string
+	err := s.pool.QueryRow(ctx, `
+		SELECT hostname FROM domains
+		WHERE application_id = $1 AND (kind = 'default' OR status = 'ready')
+		ORDER BY (kind = 'custom') DESC, created_at, hostname
+		LIMIT 1`, applicationID).Scan(&host)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	return host, err
+}
+
 // AppNames are the names a person gave an application, with the DNS account
 // that publishes each one.
 func (s *Store) AppNames(ctx context.Context, applicationID string) ([]Name, error) {

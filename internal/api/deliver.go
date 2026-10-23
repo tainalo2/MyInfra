@@ -175,6 +175,9 @@ func (a *API) deliverCluster(ctx context.Context, leader store.ClusterLeader) {
 			keep[manifest.Namespace(app.ID)] = true
 			continue
 		}
+		if address, err := a.Store.Address(ctx, app.ID); err == nil {
+			withAddress(&spec, address)
+		}
 		if !manifest.Deployable(spec) {
 			_ = a.Store.SetRunStatus(ctx, app.ID, "failed")
 			keep[manifest.Namespace(app.ID)] = true

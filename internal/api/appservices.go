@@ -10,15 +10,52 @@ import (
 
 	"myinfra/internal/deploy"
 	"myinfra/internal/manifest"
+	"myinfra/internal/market"
 	"myinfra/internal/pack"
 	"myinfra/internal/spec"
 	"myinfra/internal/store"
 )
 
+// withAddress fills {{url}} and {{host}} with the name the application
+// answers on now, in its variables and in each service's own variables and
+// files: a new name reaches them at the next delivery, and the copies
+// restart with it.
+func withAddress(app *manifest.App, address string) {
+	app.Env = fillMap(app.Env, address)
+	for i := range app.Services {
+		app.Services[i].Spec = specAt(app.Services[i].Spec, address)
+	}
+}
+
+// specAt is a service's spec with its address filled in; the stored one
+// keeps its tokens.
+func specAt(s spec.Service, address string) spec.Service {
+	s.Env = fillMap(s.Env, address)
+	if len(s.Files) > 0 {
+		files := make([]spec.File, len(s.Files))
+		for i, file := range s.Files {
+			files[i] = spec.File{Path: file.Path, Content: market.FillAddress(file.Content, address)}
+		}
+		s.Files = files
+	}
+	return s
+}
+
+func fillMap(values map[string]string, address string) map[string]string {
+	if len(values) == 0 {
+		return values
+	}
+	out := make(map[string]string, len(values))
+	for key, value := range values {
+		out[key] = market.FillAddress(value, address)
+	}
+	return out
+}
+
 // publicHost is the name the application answers on: its own domain when
-// one is ready, else the one MyInfra gave it.
+// one is ready, else the one MyInfra gave it, as Store.Address reads it.
 func publicHost(app store.Application) string {
-	fallback := app.Hostname
+	fallback := ""
 	for _, domain := range app.Domains {
 		if domain.Kind == "custom" && domain.Status == "ready" {
 			return domain.Hostname
@@ -26,6 +63,9 @@ func publicHost(app store.Application) string {
 		if domain.Kind == "default" && fallback == "" {
 			fallback = domain.Hostname
 		}
+	}
+	if fallback == "" {
+		return app.Hostname
 	}
 	return fallback
 }
@@ -103,7 +143,7 @@ func (a *API) applicationPackage(w http.ResponseWriter, r *http.Request) {
 	if problems == nil {
 		problems = []pack.Problem{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"package": p, "yaml": string(text), "problems": problems})
+	writeJSON(w, http.StatusOK, map[string]any{"package": p, "yaml": string(text), "problems": problems, "address": publicHost(app)})
 }
 
 // keepApplicationPackage keeps a running application as one of the person's

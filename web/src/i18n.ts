@@ -1284,6 +1284,8 @@ const fr = {
   "template.fromPackage": "Ajouter depuis un paquet",
   "template.packageNamed": "Paquet {name}, emporté avec le template",
   "package.noPort": "Tâche de fond : n'écoute aucun port (personne ne l'attend)",
+  "address.follows": "suit le domaine",
+  "address.hint": "{{url}} vaut https://{address} et {{host}} vaut {address} : ils suivent le domaine de l'application, et un nouveau nom redémarre ses copies avec la nouvelle adresse.",
 } as const;
 
 export type MsgKey = keyof typeof fr;
@@ -2499,6 +2501,8 @@ const en: Record<MsgKey, string> = {
   "template.fromPackage": "Add from a package",
   "template.packageNamed": "Package {name}, carried with the template",
   "package.noPort": "Background task: listens on no port (nothing waits for it)",
+  "address.follows": "follows the domain",
+  "address.hint": "{{url}} is https://{address} and {{host}} is {address}: they follow the application's domain, and a new name restarts its copies with the new address.",
 };
 
 const pt: Record<MsgKey, string> = {
@@ -3690,6 +3694,8 @@ const pt: Record<MsgKey, string> = {
   "template.fromPackage": "Adicionar a partir de um pacote",
   "template.packageNamed": "Pacote {name}, levado com o modelo",
   "package.noPort": "Tarefa de fundo: não escuta nenhuma porta (ninguém espera por ela)",
+  "address.follows": "segue o domínio",
+  "address.hint": "{{url}} vale https://{address} e {{host}} vale {address}: seguem o domínio da aplicação, e um novo nome reinicia as cópias com o novo endereço.",
 };
 
 const it: Record<MsgKey, string> = {
@@ -4880,6 +4886,8 @@ const it: Record<MsgKey, string> = {
   "template.fromPackage": "Aggiungi da un pacchetto",
   "template.packageNamed": "Pacchetto {name}, portato con il template",
   "package.noPort": "Attività in background: non ascolta nessuna porta (nessuno la attende)",
+  "address.follows": "segue il dominio",
+  "address.hint": "{{url}} vale https://{address} e {{host}} vale {address}: seguono il dominio dell'applicazione, e un nuovo nome riavvia le copie con il nuovo indirizzo.",
 };
 
 const de: Record<MsgKey, string> = {
@@ -6072,6 +6080,8 @@ const de: Record<MsgKey, string> = {
   "template.fromPackage": "Aus einem Paket hinzufügen",
   "template.packageNamed": "Paket {name}, im Template enthalten",
   "package.noPort": "Hintergrundaufgabe: hört auf keinem Port (niemand wartet darauf)",
+  "address.follows": "folgt der Domain",
+  "address.hint": "{{url}} ist https://{address} und {{host}} ist {address}: Sie folgen der Domain der Anwendung, und ein neuer Name startet die Kopien mit der neuen Adresse neu.",
 };
 
 const tables: Record<Lang, Record<MsgKey, string>> = { fr, en, pt, it, de };

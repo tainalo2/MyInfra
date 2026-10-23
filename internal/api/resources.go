@@ -886,28 +886,30 @@ type domainView struct {
 }
 
 type appView struct {
-	ID              string            `json:"id"`
-	Name            string            `json:"name"`
-	SourceKind      string            `json:"sourceKind"`
-	Source          string            `json:"source"`
-	DestinationKind string            `json:"destinationKind"`
-	ServerID        string            `json:"serverId,omitempty"`
-	ServerName      string            `json:"serverName,omitempty"`
-	ClusterID       string            `json:"clusterId,omitempty"`
-	ClusterName     string            `json:"clusterName,omitempty"`
-	Hostname        string            `json:"hostname"`
-	RunStatus       string            `json:"runStatus,omitempty"`
-	Rollout         string            `json:"rollout,omitempty"`
-	RolloutDetail   string            `json:"rolloutDetail,omitempty"`
-	RunDetail       string            `json:"runDetail,omitempty"`
-	Failover        bool              `json:"failover,omitempty"`
-	Replicas        int               `json:"replicas,omitempty"`
-	Paused          bool              `json:"paused,omitempty"`
-	Logo            string            `json:"logo,omitempty"`
-	Variables       map[string]string `json:"variables,omitempty"`
-	Domains         []domainView      `json:"domains,omitempty"`
-	Services        []serviceView     `json:"services,omitempty"`
-	Guarded         bool              `json:"guarded,omitempty"`
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	SourceKind      string `json:"sourceKind"`
+	Source          string `json:"source"`
+	DestinationKind string `json:"destinationKind"`
+	ServerID        string `json:"serverId,omitempty"`
+	ServerName      string `json:"serverName,omitempty"`
+	ClusterID       string `json:"clusterId,omitempty"`
+	ClusterName     string `json:"clusterName,omitempty"`
+	Hostname        string `json:"hostname"`
+	// Address is what {{url}} and {{host}} read now: it follows the domains.
+	Address       string            `json:"address,omitempty"`
+	RunStatus     string            `json:"runStatus,omitempty"`
+	Rollout       string            `json:"rollout,omitempty"`
+	RolloutDetail string            `json:"rolloutDetail,omitempty"`
+	RunDetail     string            `json:"runDetail,omitempty"`
+	Failover      bool              `json:"failover,omitempty"`
+	Replicas      int               `json:"replicas,omitempty"`
+	Paused        bool              `json:"paused,omitempty"`
+	Logo          string            `json:"logo,omitempty"`
+	Variables     map[string]string `json:"variables,omitempty"`
+	Domains       []domainView      `json:"domains,omitempty"`
+	Services      []serviceView     `json:"services,omitempty"`
+	Guarded       bool              `json:"guarded,omitempty"`
 }
 
 type serviceBody struct {
@@ -976,7 +978,7 @@ func toApp(app store.Application) appView {
 		ClusterID: app.ClusterID, ClusterName: app.ClusterName,
 		Hostname: app.Hostname, Replicas: app.Replicas, Variables: maskVars(app.Variables),
 		RunStatus: app.RunStatus, Rollout: app.Rollout, RolloutDetail: app.RolloutDetail, RunDetail: app.RunDetail, Failover: app.Failover,
-		Paused: app.Paused, Logo: market.Logo(logoImages(app)...),
+		Paused: app.Paused, Logo: market.Logo(logoImages(app)...), Address: publicHost(app),
 	}
 	var defaultHost string
 	customs := 0

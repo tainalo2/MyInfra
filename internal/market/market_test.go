@@ -55,7 +55,14 @@ func TestExpandAsksForTheContact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if env["LISTMONK_ADMIN_USER"] != "ada@exemple.fr" || env["LISTMONK_app__address"] != "https://listes.exemple.fr" {
+	// The address stays a token, filled at each delivery with the name then.
+	if env["LISTMONK_ADMIN_USER"] != "ada@exemple.fr" || env["LISTMONK_app__address"] != "{{url}}" {
 		t.Fatal(env)
+	}
+	if got := FillAddress(env["LISTMONK_app__address"], "listes.exemple.fr"); got != "https://listes.exemple.fr" {
+		t.Fatal(got)
+	}
+	if got := FillAddress("{{host}}:{{host}}", "a.fr"); got != "a.fr:a.fr" {
+		t.Fatal(got)
 	}
 }

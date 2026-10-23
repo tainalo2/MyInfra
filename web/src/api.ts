@@ -274,6 +274,8 @@ export type Domain = {
 export type DnsZone = { name: string; accountId: string; account: string; provider: string };
 
 export type Application = {
+  // address is what {{url}} and {{host}} read now: it follows the domains.
+  address?: string;
   id: string;
   name: string;
   sourceKind: string;
@@ -581,3 +583,14 @@ export type PackageRow = {
   package?: Package;
   yaml?: string;
 };
+
+// fillAddress shows a value as the application reads it now: {{url}} and
+// {{host}} follow its domain at each delivery.
+export function fillAddress(value: string, address?: string) {
+  if (!address) return value;
+  return value.replaceAll("{{url}}", `https://${address}`).replaceAll("{{host}}", address);
+}
+
+export function followsAddress(value: string) {
+  return value.includes("{{url}}") || value.includes("{{host}}");
+}

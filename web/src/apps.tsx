@@ -3,7 +3,7 @@ import { ConfirmDialog, Sheet, Spinner, StatusBadge, Steps, appHealth, useToast 
 import { usePoll } from "./poll";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ChevronDown, ChevronUp, Copy, ExternalLink, Plus, Trash2 } from "lucide-react";
-import { api, type AppRuntime, type AppService, type Application, type CatalogueCard, type CatalogueVersions, type Cluster, type Destruction, type DnsZone, type PackageRow, type Server } from "./api";
+import { api, type AppRuntime, type AppService, type Application, type CatalogueCard, type CatalogueVersions, type Cluster, type Destruction, type DnsZone, type PackageRow, type Server, fillAddress, followsAddress } from "./api";
 import { localizeCard } from "./catalogue-copy";
 import { knownMessage, text } from "./i18n";
 import { Code } from "./code-lazy";
@@ -947,7 +947,10 @@ function AppVariables({ app, onSaved }: { app: Application; onSaved: () => void 
             <li key={name} className="flex flex-wrap items-center justify-between gap-6 border-t border-line py-3">
               <span className="font-mono text-[13px]">{name}</span>
               <span className="flex min-w-0 items-center gap-3">
-                <span className="truncate font-mono text-[13px] text-muted">{shown[name] ?? value}</span>
+                <span className="truncate font-mono text-[13px] text-muted" title={followsAddress(value) ? value : undefined}>
+                  {fillAddress(shown[name] ?? value, app.address)}
+                </span>
+                {followsAddress(value) ? <span className="shrink-0 rounded border border-line px-1.5 text-[13px] text-faint">{text("address.follows")}</span> : null}
                 {canAdmin && value === masked && shown[name] === undefined ? (
                   <TextButton type="button" onClick={() => reveal(name)}>
                     {text("app.reveal")}
@@ -1025,6 +1028,7 @@ function VariablesSheet({ app, onClose, onSaved }: { app: Application; onClose: 
         <Field label={text("app.variables")}>
           <Code value={draft} onChange={setDraft} language="env" label={text("app.variables")} placeholder="NOM=valeur" minHeight="10rem" />
         </Field>
+        {app.address ? <p className="text-faint">{text("address.hint", { address: app.address })}</p> : null}
         {error ? <ErrorText>{error}</ErrorText> : null}
         <div className="flex flex-wrap items-center gap-4">
           <Button type="submit" disabled={busy}>

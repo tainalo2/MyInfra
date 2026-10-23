@@ -166,7 +166,7 @@ func TestExpandFillsEveryValueOnce(t *testing.T) {
 	if env["ADMIN_EMAIL"] != "moi@exemple.fr" || len(env["DB_PASSWORD"]) != 64 || env["DB_URL"] != "postgres://wiki:"+env["DB_PASSWORD"]+"@db/wiki" {
 		t.Fatal(env)
 	}
-	if services[0].Files[0].Content != "[server]\nurl = https://wiki.exemple.fr\n" || p.Services[0].Files[0].Content != "[server]\nurl = {{url}}\n" {
+	if services[0].Files[0].Content != "[server]\nurl = {{url}}\n" || p.Services[0].Files[0].Content != "[server]\nurl = {{url}}\n" {
 		t.Fatalf("%+v", services[0].Files)
 	}
 }

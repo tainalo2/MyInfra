@@ -107,6 +107,37 @@ func TestPackageIsKeptAndInstalled(t *testing.T) {
 	if web.Env["ADMIN"] != "moi@exemple.fr" || len(web.Env["DB_PASSWORD"]) != 64 {
 		t.Fatalf("%+v", web.Env)
 	}
+
+	// A new name, once ready, reaches the files at the next delivery: the
+	// store keeps {{url}}, each delivery fills it.
+	var app struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(installed.Body.Bytes(), &app)
+	if err := a.Store.AddNames(ctx, app.ID, []store.Name{{ID: "n1", Hostname: "wiki.exemple.fr", Zone: "exemple.fr"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Store.MarkName(ctx, "n1", "ready", ""); err != nil {
+		t.Fatal(err)
+	}
+	work, err = a.workloads(ctx, "tok-solo-123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range work {
+		if item.Service == "web" && item.Spec.Files[0].Content != "url = https://wiki.exemple.fr\n" {
+			t.Fatalf("%+v", item.Spec.Files)
+		}
+	}
+	stored, err := a.Store.Application(ctx, "u1", app.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, svc := range stored.Services {
+		if svc.Name == "web" && svc.Spec.Files[0].Content != "url = {{url}}\n" {
+			t.Fatalf("%+v", svc.Spec.Files)
+		}
+	}
 }
 
 func TestApplicationServicesChangeInPlace(t *testing.T) {

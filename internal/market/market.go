@@ -83,6 +83,8 @@ var (
 	envPattern   = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 	argPattern   = regexp.MustCompile(`^[A-Za-z0-9_.,:/=@+-]+$`)
 	tokenPattern = regexp.MustCompile(`\{\{([a-z]+)(?::([A-Za-z0-9_-]+))?\}\}`)
+	// addressPattern is what is left at installation for each delivery.
+	addressPattern = regexp.MustCompile(`\{\{(url|host)\}\}`)
 )
 
 func init() {
@@ -247,10 +249,9 @@ func fill(value, host string, inputs, secrets map[string]string) (string, error)
 		}
 		parts := tokenPattern.FindStringSubmatch(token)
 		switch parts[1] {
-		case "url":
-			return "https://" + host
-		case "host":
-			return host
+		case "url", "host":
+			// The address stays a token: it is filled at each delivery.
+			return token
 		case "input":
 			got := strings.TrimSpace(inputs[parts[2]])
 			if got == "" {
@@ -269,10 +270,20 @@ func fill(value, host string, inputs, secrets map[string]string) (string, error)
 	if failure != nil {
 		return "", failure
 	}
-	if strings.Contains(out, "{{") {
+	if strings.Contains(addressPattern.ReplaceAllString(out, ""), "{{") {
 		return "", fmt.Errorf("Une variable de l'article est illisible.")
 	}
 	return out, nil
+}
+
+// FillAddress puts the name an application answers on in place of {{url}}
+// and {{host}}, at each delivery: a new name reaches every value.
+func FillAddress(value, host string) string {
+	if host == "" || !strings.Contains(value, "{{") {
+		return value
+	}
+	value = strings.ReplaceAll(value, "{{url}}", "https://"+host)
+	return strings.ReplaceAll(value, "{{host}}", host)
 }
 
 func remember(secrets map[string]string, name string, encoded bool) string {
