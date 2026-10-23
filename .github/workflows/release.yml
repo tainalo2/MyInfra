@@ -182,6 +182,42 @@ jobs:
           path: dist/myinfra_${{ needs.version.outputs.version }}_*
           if-no-files-found: error
 
+  # L'exécutable Windows démarre sur Windows : pg_ctl s'y comporte autrement
+  # que sous Linux, un exécutable pouvait attendre PostgreSQL sans fin.
+  windows:
+    needs: [version, binaries]
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: myinfra-windows-amd64
+          path: dist
+      - name: Démarrage
+        timeout-minutes: 5
+        run: |
+          out="dist/myinfra_${VERSION}_windows_amd64.exe"
+          test "$("./$out" --version | tr -d '\r')" = "$VERSION"
+          home="$RUNNER_TEMP/myinfra"
+          MYINFRA_HOME="$home" MYINFRA_NO_BROWSER=1 MYINFRA_ADDR=127.0.0.1:8080 "./$out" > boot.log 2>&1 &
+          for i in $(seq 1 120); do
+            if curl -sf http://127.0.0.1:8080/api/health > /dev/null; then
+              echo "Démarré en ${i}s avec PostgreSQL embarqué."
+              taskkill //F //IM "$(basename "$out")" > /dev/null
+              "$home/pg/bin/pg_ctl.exe" -D "$home/pgdata" -m fast -w stop
+              exit 0
+            fi
+            sleep 1
+          done
+          cat boot.log
+          cat "$home/pg.log" 2>/dev/null || true
+          echo "::error::L'exécutable Windows ne démarre pas avec son PostgreSQL."
+          exit 1
+
   image:
     needs: [version, check]
     runs-on: ubuntu-latest
@@ -220,7 +256,7 @@ jobs:
           test "$(docker run --rm "${{ needs.version.outputs.image }}" --version)" = "${{ needs.version.outputs.version }}"
 
   release:
-    needs: [version, binaries, image]
+    needs: [version, binaries, windows, image]
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -262,6 +298,7 @@ jobs:
           | Windows ARM64 | \`myinfra_${VERSION}_windows_arm64.exe\` (sans PostgreSQL embarqué : indiquez \`DATABASE_URL\`) |
 
           Sur Linux et macOS : \`chmod +x\` sur le fichier. Sur macOS, l'exécutable n'est pas signé : \`xattr -d com.apple.quarantine\` sur le fichier avant le premier lancement.
+          Sur Windows, l'exécutable n'est pas signé non plus : si SmartScreen l'arrête, « Informations complémentaires » puis « Exécuter quand même ». Le premier démarrage prépare PostgreSQL et prend quelques secondes.
           \`SHA256SUMS\` permet de vérifier les téléchargements : \`sha256sum -c SHA256SUMS --ignore-missing\`.
 
           ## Image Docker

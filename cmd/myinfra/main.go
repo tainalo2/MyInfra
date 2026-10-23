@@ -40,13 +40,11 @@ func main() {
 	exe, exeErr := os.Executable()
 	if serve() {
 		if exeErr != nil {
-			slog.Error("redémarrage", "err", exeErr)
-			os.Exit(1)
+			fatal("redémarrage", "err", exeErr)
 		}
 		// Every deferred step ran: PostgreSQL is stopped, the port is free.
 		if err := restart(exe); err != nil {
-			slog.Error("redémarrage", "err", err)
-			os.Exit(1)
+			fatal("redémarrage", "err", err)
 		}
 	}
 }
@@ -56,8 +54,7 @@ func main() {
 func serve() bool {
 	rt, err := boot.Start()
 	if err != nil {
-		slog.Error("démarrage", "err", err)
-		os.Exit(1)
+		fatal("démarrage", "err", err)
 	}
 	defer rt.Close()
 	databaseURL := os.Getenv("DATABASE_URL")
@@ -70,14 +67,12 @@ func serve() bool {
 	} else {
 		master, err = masterKey()
 		if err != nil {
-			slog.Error("clé maîtresse", "err", err)
-			os.Exit(1)
+			fatal("clé maîtresse", "err", err)
 		}
 	}
 	seal, err := box.New(master)
 	if err != nil {
-		slog.Error("coffre", "err", err)
-		os.Exit(1)
+		fatal("coffre", "err", err)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), shutdownSignals()...)
@@ -85,8 +80,7 @@ func serve() bool {
 
 	db, err := store.Open(ctx, databaseURL)
 	if err != nil {
-		slog.Error("base", "err", err)
-		os.Exit(1)
+		fatal("base", "err", err)
 	}
 	defer db.Close()
 
@@ -165,8 +159,7 @@ func serve() bool {
 		}
 	}
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		slog.Error("serveur", "err", err)
-		os.Exit(1)
+		fatal("serveur", "err", err)
 	}
 	return restarting.Load()
 }
@@ -217,6 +210,14 @@ func masterKey() ([]byte, error) {
 		return nil, errString("MYINFRA_MASTER_KEY doit être 32 octets en base64")
 	}
 	return key, nil
+}
+
+// fatal logs the error and ends the process. A window opened by a double
+// click stays until Enter, else it would close before the error is read.
+func fatal(msg string, args ...any) {
+	slog.Error(msg, args...)
+	holdConsole()
+	os.Exit(1)
 }
 
 type errString string

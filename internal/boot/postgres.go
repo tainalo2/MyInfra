@@ -7,8 +7,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"os/exec"
@@ -29,6 +31,8 @@ func startPostgres(home string) (string, func(), error) {
 	}
 	root := filepath.Join(home, "pg")
 	data := filepath.Join(home, "pgdata")
+	// The first start unpacks and initializes PostgreSQL: it takes a while.
+	slog.Info("démarrage de PostgreSQL", "dossier", home)
 	fresh, err := extractPostgres(archive, root)
 	if err != nil {
 		return "", nil, err
@@ -262,7 +266,14 @@ func freePort() (int, error) {
 func run(root, name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Env = pgEnv(root)
+	// On Windows, pg_ctl start hands its inheritable handles to the server,
+	// which keeps the output pipe open for good: without a delay, waiting
+	// for the end of the output never returns once PostgreSQL runs.
+	cmd.WaitDelay = 2 * time.Second
 	out, err := cmd.CombinedOutput()
+	if errors.Is(err, exec.ErrWaitDelay) {
+		err = nil
+	}
 	if err != nil {
 		text := string(out)
 		if len(text) > 400 {
