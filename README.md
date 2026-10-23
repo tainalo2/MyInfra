@@ -90,18 +90,26 @@ On a phone, the same application, laid out for the thumb:
 
 ## Quick start
 
+### The app
+
+Download the file for your system from the [latest release](https://github.com/tainalo2/MyInfra/releases/latest). The app shows MyInfra in its own window, with no address bar; links to other sites open in your browser. Its log is `myinfra.log` in `~/.myinfra`.
+
+- **macOS**: open `MyInfra_*_macos.dmg` and drag MyInfra into Applications, then open it. Closing the window leaves MyInfra running: its icon stays in the Dock, a click opens the window again, Quit stops it. The app is not signed by Apple: on the first start, allow it in System Settings → Privacy & Security → Open Anyway.
+- **Windows**: run `MyInfra_*_windows_amd64_setup.exe`. It installs MyInfra for your account, without administrator rights, and adds it to the Start menu. Closing the window stops MyInfra. The window uses WebView2, shipped with Windows 10 and 11. The setup is not signed: if SmartScreen stops it, choose More info, then Run anyway.
+- **Linux**: install `myinfra_*_linux_amd64.deb` (Debian, Ubuntu) or `.rpm` (Fedora, openSUSE), then open MyInfra from the applications menu. Closing the window stops MyInfra. The window uses WebKitGTK 4.1, installed with the package. The `.AppImage` needs no installation: make it executable and open it. A `.deb` or `.rpm` is updated by your system; the AppImage updates itself.
+
+Without the web engine of the system, the app opens MyInfra in the browser instead.
+
 ### The executable
 
-Download the file for your system from the [latest release](https://github.com/tainalo2/MyInfra/releases/latest), then run it:
+On a server, or from a terminal, the executable alone is enough:
 
 ```sh
 chmod +x myinfra_*_linux_amd64
 ./myinfra_*_linux_amd64
 ```
 
-On macOS, download `MyInfra_*_macos.dmg`, open it and drag MyInfra into Applications, then open it: it opens in the browser. Its icon stays in the Dock while it runs: click it to get back to MyInfra, Quit stops it. Its log is `~/.myinfra/myinfra.log`. The app is not signed by Apple: on the first start, allow it in System Settings → Privacy & Security → Open Anyway.
-
-On Windows, double-click the `.exe`. A window shows the log; closing it stops MyInfra.
+On Windows, double-click `myinfra_*_windows_amd64.exe`. A window shows the log; closing it stops MyInfra.
 
 The executable prints its address, for example `http://127.0.0.1:8080`, and opens it. On the first start it creates `~/.myinfra`, writes a master key there, and starts the PostgreSQL it carries. Choose a password, then follow the guided start: an SSH key, a provider token, a DNS account. Each step can be skipped. Further accounts, each with a role and an optional TOTP code, share the same servers and applications.
 

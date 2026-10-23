@@ -50,7 +50,18 @@ function Get-Postgres($goos, $goarch) {
   return $true
 }
 
-function Build-One($goos, $goarch, $out) {
+# The icon, the manifest and the version of the Windows executables, which
+# go build takes from cmd/myinfra. Windows only takes numbers: 1.4.0-rc.1
+# shows as 1.4.0.
+function Write-WinRes($goarch) {
+  $ver = if ($env:VERSION) { ($env:VERSION -split '-')[0] } else { "0.0.0" }
+  Remove-Item -Force -ErrorAction SilentlyContinue cmd/myinfra/rsrc_windows_*.syso
+  go run github.com/tc-hib/go-winres@v0.3.3 make --in deploy/windows/winres.json --out cmd/myinfra/rsrc --arch $goarch --product-version "$ver.0" --file-version "$ver.0"
+  if ($LASTEXITCODE -ne 0) { throw "Les ressources Windows ne se construisent pas." }
+}
+
+# $app builds the Windows app: no console, and it shows its own window.
+function Build-One($goos, $goarch, $out, $app = "") {
   $env:CGO_ENABLED = "0"
   $env:GOOS = $goos
   $env:GOARCH = $goarch
@@ -61,7 +72,8 @@ function Build-One($goos, $goarch, $out) {
     Write-Error "PostgreSQL embarqué introuvable pour $goos/$goarch."
   }
   $version = if ($env:VERSION) { $env:VERSION } else { "dev" }
-  go build -trimpath @tags -ldflags "-s -w -X main.version=$version -X main.image=$env:IMAGE" -o $out ./cmd/myinfra
+  if ($goos -eq "windows") { Write-WinRes $goarch }
+  go build -trimpath @tags -ldflags "-s -w -X main.version=$version -X main.image=$env:IMAGE $app" -o $out ./cmd/myinfra
   Write-Output $out
 }
 
@@ -82,11 +94,16 @@ switch ($target) {
     Build-One darwin arm64 dist/myinfra_darwin_arm64
     Build-One windows amd64 dist/myinfra_windows_amd64.exe
     Build-One windows arm64 dist/myinfra_windows_arm64.exe
+    Build-One windows amd64 dist/myinfra_windows_amd64_app.exe "-H windowsgui -X main.gui=1"
+    Build-One windows arm64 dist/myinfra_windows_arm64_app.exe "-H windowsgui -X main.gui=1"
+  }
+  "windows-app" {
+    Build-One windows $arch "dist/myinfra_windows_${arch}_app.exe" "-H windowsgui -X main.gui=1"
   }
   { $_ -in "linux", "darwin", "windows" } {
     $ext = ""
     if ($target -eq "windows") { $ext = ".exe" }
     Build-One $target $arch "dist/myinfra_${target}_${arch}${ext}"
   }
-  default { Write-Error "Usage: .\build.ps1 [all|linux|darwin|windows] [amd64|arm64]" }
+  default { Write-Error "Usage: .\build.ps1 [all|linux|darwin|windows|windows-app] [amd64|arm64]" }
 }

@@ -51,6 +51,10 @@ jobs:
           go vet ./...
           go test ./...
           go build -o myinfra ./cmd/myinfra
+          # Each system has its own app and window: every one must build.
+          for target in darwin/arm64 windows/amd64 windows/arm64 linux/arm64 freebsd/amd64; do
+            CGO_ENABLED=0 GOOS="${target%/*}" GOARCH="${target#*/}" go vet ./cmd/...
+          done
       - name: Démarrage
         run: |
           export MYINFRA_MASTER_KEY=$(head -c 32 /dev/urandom | base64)

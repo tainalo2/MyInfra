@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"myinfra/internal/proc"
 )
 
 func startPostgres(home string) (string, func(), error) {
@@ -264,7 +266,7 @@ func freePort() (int, error) {
 }
 
 func run(root, name string, args ...string) error {
-	cmd := exec.Command(name, args...)
+	cmd := proc.Hide(exec.Command(name, args...))
 	cmd.Env = pgEnv(root)
 	// On Windows, pg_ctl start hands its inheritable handles to the server,
 	// which keeps the output pipe open for good: without a delay, waiting

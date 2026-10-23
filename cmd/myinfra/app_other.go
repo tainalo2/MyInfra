@@ -1,8 +1,8 @@
-//go:build !darwin
+//go:build !darwin && !windows && !linux
 
 package main
 
-// Only macOS opens MyInfra as an app.
+// Only macOS, Windows and Linux open MyInfra as an app.
 
 func inApp() bool { return false }
 
