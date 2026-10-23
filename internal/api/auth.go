@@ -334,6 +334,14 @@ func (a *API) routes() http.Handler {
 	)
 	dist, err := fs.Sub(ui.Dist, "dist")
 	if err == nil {
+		if _, err = fs.Stat(dist, "index.html"); err != nil {
+			// Built by go build alone: ./build puts the interface in.
+			mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+				http.Error(w, "Interface absente de cet exécutable : construisez-le avec ./build.", http.StatusServiceUnavailable)
+			})
+		}
+	}
+	if err == nil {
 		files := http.FileServer(http.FS(dist))
 		mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 			name := strings.TrimPrefix(r.URL.Path, "/")

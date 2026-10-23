@@ -4,6 +4,8 @@ if (-not (Test-Path web/node_modules)) { npm ci --prefix web }
 npm run build --prefix web
 if (Test-Path internal/ui/dist) { Remove-Item -Recurse -Force internal/ui/dist }
 Copy-Item -Recurse web/dist internal/ui/dist
+# The only file of the folder git keeps, for a go build without the interface.
+New-Item -ItemType File -Force -Path internal/ui/dist/.keep | Out-Null
 New-Item -ItemType Directory -Force -Path dist | Out-Null
 
 function Get-PostgresArtifact($goos, $goarch) {
