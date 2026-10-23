@@ -59,6 +59,10 @@ func appPackage(app store.Application) pack.Package {
 			Name: svc.Name, Image: svc.Image, Public: svc.Published, Port: svc.Listen,
 			Args: append([]string(nil), svc.Args...),
 		}
+		if svc.Spec.NoPort {
+			// The store keeps a port for every service; this one uses none.
+			out.Port = 0
+		}
 		if svc.Replicas > 1 {
 			out.Replicas = svc.Replicas
 		}
@@ -160,6 +164,7 @@ func (a *API) setServices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.fillFromImages(r.Context(), next, false)
+	quietServices(next)
 	change, err := planServices(app.Services, next, expanded)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -200,6 +205,8 @@ type serviceChange struct {
 	gone   []string
 	claims []claimGone
 	lost   []string
+	// silent lost their port: their Kubernetes Service has no reason left.
+	silent []string
 }
 
 // claimGone is a disk to erase: its claim, or the claims of a StatefulSet
@@ -237,6 +244,9 @@ func planServices(current, next []store.Service, asked []pack.Service) (serviceC
 		}
 		if prev.Disk && svc.Disk && prev.DiskGi != svc.DiskGi {
 			return change, fmt.Errorf("La taille du disque de %s ne change pas après sa création.", svc.Name)
+		}
+		if svc.Spec.NoPort && !prev.Spec.NoPort {
+			change.silent = append(change.silent, svc.Name)
 		}
 		stateful := prev.Disk && prev.Replicas > 1
 		if prev.Disk && !svc.Disk {
@@ -313,7 +323,7 @@ func (a *API) deliverServices(owner, clusterID, appID string, change serviceChan
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	a.deliverClusters(ctx)
-	if len(change.gone) == 0 && len(change.claims) == 0 {
+	if len(change.gone) == 0 && len(change.claims) == 0 && len(change.silent) == 0 {
 		return
 	}
 	host, err := a.clusterHost(ctx, owner, clusterID)
@@ -323,6 +333,9 @@ func (a *API) deliverServices(owner, clusterID, appID string, change serviceChan
 	}
 	ns := manifest.Namespace(appID)
 	kubectl := "k3s kubectl -n " + ns + " "
+	for _, name := range change.silent {
+		_, _ = deploy.SSH(ctx, host, kubectl+"delete svc "+name+" --ignore-not-found --wait=false")
+	}
 	for _, name := range change.gone {
 		_, _ = deploy.SSH(ctx, host, kubectl+"delete deploy,statefulset,svc,pdb "+name+" --ignore-not-found --wait=false")
 		_, _ = deploy.SSH(ctx, host, kubectl+"delete svc "+name+"-copies --ignore-not-found --wait=false")

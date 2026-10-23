@@ -442,7 +442,9 @@ spec:
 		if replicas > 1 {
 			writeBudget(&b, ns, svc.Name)
 		}
-		fmt.Fprintf(&b, `---
+		// A service without port has no address: no other service reaches it.
+		if !svc.Spec.NoPort {
+			fmt.Fprintf(&b, `---
 apiVersion: v1
 kind: Service
 metadata:
@@ -453,6 +455,7 @@ spec:
     myinfra.io/service: %s
   ports:
 %s`, svc.Name, ns, svc.Name, servicePortLines(svc))
+		}
 		if svc.Published && len(app.Hosts) > 0 {
 			fmt.Fprintf(&b, `---
 apiVersion: traefik.io/v1alpha1
@@ -770,7 +773,7 @@ func readiness(svc Service) string {
 		return "          readinessProbe:\n" + check + "            periodSeconds: 5\n            failureThreshold: 3\n" +
 			"          livenessProbe:\n" + check + "            initialDelaySeconds: 30\n            periodSeconds: 10\n            failureThreshold: 6\n"
 	}
-	if !svc.Published && svc.Listen < 1 {
+	if (!svc.Published && svc.Listen < 1) || svc.Spec.NoPort {
 		return ""
 	}
 	return fmt.Sprintf("          readinessProbe:\n            tcpSocket:\n              port: %d\n            periodSeconds: 5\n            failureThreshold: 3\n", listenOf(svc))

@@ -186,3 +186,23 @@ func TestDeployableChecksTheSpec(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderLeavesAWorkerWithoutPort(t *testing.T) {
+	raw := Render(App{ID: specApp, Services: []Service{
+		{Name: "web", Image: "nginx:1", Published: true, Spec: spec.Service{DependsOn: []string{"worker", "db"}}},
+		{Name: "worker", Image: "busybox:1", Listen: 80, Spec: spec.Service{NoPort: true, Command: []string{"sh", "-c", "sleep 1"}}},
+		{Name: "db", Image: "postgres:16", Listen: 5432},
+	}})
+	docs := documents(t, raw)
+	worker := dig(docs["Deployment/worker"], "spec", "template", "spec", "containers", 0)
+	if dig(worker, "readinessProbe") != nil || dig(worker, "ports") != nil {
+		t.Fatal(raw)
+	}
+	if _, ok := docs["Service/worker"]; ok {
+		t.Fatal(raw)
+	}
+	waits := dig(docs["Deployment/web"], "spec", "template", "spec", "initContainers")
+	if list, _ := waits.([]any); len(list) != 1 || dig(list, 0, "name") != "wait-db" {
+		t.Fatal(raw)
+	}
+}

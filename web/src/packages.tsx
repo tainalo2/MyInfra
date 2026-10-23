@@ -258,6 +258,17 @@ function ImportSheet({ onClose, onDone }: { onClose: () => void; onDone: (row: P
   );
 }
 
+// toYaml writes a package as the advanced view shows it; null when the
+// server cannot be reached, and the view stays as it is.
+async function toYaml(pkg: Package): Promise<string | null> {
+  try {
+    const answer = await api<{ yaml: string }>("/api/packages/format", { method: "POST", body: JSON.stringify({ package: pkg }) });
+    return answer.yaml;
+  } catch {
+    return null;
+  }
+}
+
 function lined(problems: PackageProblem[]) {
   return problems.filter((problem) => problem.line).map((problem) => ({ line: problem.line!, message: problem.message }));
 }
@@ -340,7 +351,7 @@ export function PackageEditor() {
     }, 300);
   }
 
-  function switchTo(next: "visual" | "yaml") {
+  async function switchTo(next: "visual" | "yaml") {
     if (next === mode) return;
     if (next === "visual" && !readable) {
       setError(text("package.fixYamlFirst"));
@@ -348,8 +359,11 @@ export function PackageEditor() {
     }
     setError("");
     if (next === "yaml") {
-      // Lines come from the text: check it once to place the problems.
-      onYaml(yamlText);
+      // The form was the source: the text is written from it now, not from
+      // an answer still on its way, then checked to place the problems.
+      const written = await toYaml(pkg);
+      if (written === null) return;
+      onYaml(written);
     }
     setMode(next);
   }
@@ -400,7 +414,7 @@ export function PackageEditor() {
         <Tabs
           label={text("package.view")}
           active={mode}
-          onChange={switchTo}
+          onChange={(next) => void switchTo(next)}
           tabs={[
             { key: "visual", label: text("package.visual") },
             { key: "yaml", label: text("package.advanced"), mark: !readable },
@@ -647,7 +661,7 @@ function ServiceCard({
         {onRemove ? <IconButton type="button" icon={Trash2} label={text("package.removeService", { name: service.name })} onClick={onRemove} /> : null}
       </header>
       <Tabs label={service.name} active={tab} onChange={setTab} tabs={tabs.map((item) => ({ ...item, mark: marked.has(item.key) }))} />
-      {tab === "general" ? <GeneralTab service={service} others={others} set={set} /> : null}
+      {tab === "general" ? <GeneralTab service={service} others={others} set={set} onChange={onChange} /> : null}
       {tab === "network" ? <NetworkTab service={service} set={set} /> : null}
       {tab === "storage" ? <StorageTab service={service} set={set} /> : null}
       {tab === "files" ? <FilesTab service={service} set={set} /> : null}
@@ -719,7 +733,7 @@ function WordsInput({ value, onChange, placeholder, label }: { value?: string[];
   );
 }
 
-function GeneralTab({ service, others, set }: { service: PackageService; others: string[]; set: Setter }) {
+function GeneralTab({ service, others, set, onChange }: { service: PackageService; others: string[]; set: Setter; onChange: (service: PackageService) => void }) {
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       <Field label={text("package.serviceName")}>
@@ -735,8 +749,17 @@ function GeneralTab({ service, others, set }: { service: PackageService; others:
         <Input inputMode="numeric" value={service.replicas ?? ""} placeholder="1" onChange={(e) => set("replicas", numberOrUndefined(e.target.value))} />
       </Field>
       <label className="flex items-center gap-3 md:col-span-2">
-        <input type="checkbox" checked={Boolean(service.public)} onChange={(e) => set("public", e.target.checked || undefined)} />
+        <input type="checkbox" checked={Boolean(service.public)} disabled={service.noPort} onChange={(e) => set("public", e.target.checked || undefined)} />
         <span>{text("package.public")}</span>
+      </label>
+      <label className="flex items-center gap-3 md:col-span-2">
+        <input
+          type="checkbox"
+          checked={Boolean(service.noPort)}
+          disabled={service.public}
+          onChange={(e) => onChange({ ...service, noPort: e.target.checked || undefined, port: e.target.checked ? undefined : service.port, ports: e.target.checked ? undefined : service.ports })}
+        />
+        <span>{text("package.noPort")}</span>
       </label>
       <Field label={text("package.command")} hint={text("package.commandHint")}>
         <WordsInput value={service.command} onChange={(value) => set("command", value)} placeholder="/bin/app serve" label={text("package.command")} />
@@ -1029,14 +1052,18 @@ export function AppServices() {
     }, 300);
   }
 
-  function switchTo(next: "visual" | "yaml") {
+  async function switchTo(next: "visual" | "yaml") {
     if (next === mode) return;
     if (next === "visual" && !readable) {
       setError(text("package.fixYamlFirst"));
       return;
     }
     setError("");
-    if (next === "yaml") onYaml(yamlText);
+    if (next === "yaml") {
+      const written = await toYaml(shown);
+      if (written === null) return;
+      onYaml(written);
+    }
     setMode(next);
   }
 
@@ -1093,7 +1120,7 @@ export function AppServices() {
         <Tabs
           label={text("package.view")}
           active={mode}
-          onChange={switchTo}
+          onChange={(next) => void switchTo(next)}
           tabs={[
             { key: "visual", label: text("package.visual") },
             { key: "yaml", label: text("package.advanced"), mark: !readable },

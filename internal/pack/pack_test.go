@@ -170,3 +170,17 @@ func TestExpandFillsEveryValueOnce(t *testing.T) {
 		t.Fatalf("%+v", services[0].Files)
 	}
 }
+
+func TestNothingWaitsForAServiceWithoutPort(t *testing.T) {
+	p, _ := Parse([]byte(sample))
+	p.Services[1].NoPort = true
+	p.Services[1].Port = 0
+	problems := Check(p)
+	if len(problems) != 1 || problems[0].Path != "services[0].dependsOn[0]" {
+		t.Fatal(problems)
+	}
+	p.Services[0].NoPort = true
+	if len(Check(p)) < 2 {
+		t.Fatal("a public service without port is accepted")
+	}
+}

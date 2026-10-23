@@ -324,9 +324,21 @@ func (a *API) installPackage(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			// A port left out is the one the image exposes.
 			a.fillFromImages(r.Context(), out, false)
+			quietServices(out)
 		}
 		return out, env, err
 	})
+}
+
+// quietServices marks the services that announce no port once their image
+// was read: a worker listens on nothing, and nothing waits for it.
+func quietServices(services []store.Service) {
+	for i := range services {
+		svc := &services[i]
+		if !svc.Published && svc.Listen < 1 && len(svc.Spec.Ports) == 0 && (svc.Spec.Health == nil || svc.Spec.Health.Port > 0) {
+			svc.Spec.NoPort = true
+		}
+	}
 }
 
 // packServices turns the services of a package into those a store keeps:

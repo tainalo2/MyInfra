@@ -126,8 +126,10 @@ func Check(p Package) []Problem {
 	}
 	public := 0
 	names := map[string]bool{}
+	quiet := map[string]bool{}
 	for _, svc := range p.Services {
 		names[svc.Name] = true
+		quiet[svc.Name] = svc.NoPort
 	}
 	seen := map[string]bool{}
 	for i, svc := range p.Services {
@@ -146,6 +148,9 @@ func Check(p Package) []Problem {
 		}
 		if svc.Port < 0 || svc.Port > 65535 {
 			add(at+".port", "Un port va de 1 à 65535.")
+		}
+		if svc.NoPort && (svc.Public || svc.Port > 0 || len(svc.Ports) > 0) {
+			add(at+".noPort", "Un service sans port n'est ni public, ni joint sur un port.")
 		}
 		if svc.Replicas < 0 || svc.Replicas > 10 {
 			add(at+".replicas", "Un service tourne en 1 à 10 copies.")
@@ -166,6 +171,8 @@ func Check(p Package) []Problem {
 		for j, name := range svc.DependsOn {
 			if name == svc.Name || !names[name] {
 				add(fmt.Sprintf("%s.dependsOn[%d]", at, j), "Le service %s n'existe pas dans ce paquet.", name)
+			} else if quiet[name] {
+				add(fmt.Sprintf("%s.dependsOn[%d]", at, j), "Le service %s n'écoute aucun port : rien ne peut l'attendre.", name)
 			}
 		}
 		for _, key := range sortedKeys(svc.Env) {

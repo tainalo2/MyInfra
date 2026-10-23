@@ -25,6 +25,9 @@ type Service struct {
 	Health    *Health           `json:"health,omitempty"`
 	// DependsOn names the services that must answer before this one starts.
 	DependsOn []string `json:"dependsOn,omitempty"`
+	// NoPort is a service that listens on nothing, a worker: no copy waits
+	// for a port to send it visitors, and no other service can wait for it.
+	NoPort bool `json:"noPort,omitempty"`
 }
 
 type Port struct {
@@ -86,7 +89,7 @@ var (
 // Empty is true when the service needs nothing besides its first fields.
 func (s Service) Empty() bool {
 	return len(s.Command) == 0 && len(s.Ports) == 0 && len(s.Volumes) == 0 && len(s.Files) == 0 &&
-		len(s.Env) == 0 && s.Resources == nil && s.Health == nil && len(s.DependsOn) == 0
+		len(s.Env) == 0 && s.Resources == nil && s.Health == nil && len(s.DependsOn) == 0 && !s.NoPort
 }
 
 // Check lists what is wrong in a service, on its own: the names it depends
@@ -186,6 +189,9 @@ func Check(s Service) []Problem {
 		}
 		if h.Port < 0 || h.Port > 65535 {
 			add("health.port", "Un port va de 1 à 65535.")
+		}
+		if s.NoPort && h.Port == 0 {
+			add("health.port", "Un service sans port se contrôle sur un port à indiquer.")
 		}
 	}
 	seen := map[string]bool{}

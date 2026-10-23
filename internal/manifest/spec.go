@@ -42,11 +42,14 @@ func specOK(app App, svc Service) bool {
 	return true
 }
 
-// servicePorts maps each service to the port the others reach it on.
+// servicePorts maps each service to the port the others reach it on. A
+// service without port is left out: nothing waits for it.
 func servicePorts(app App) map[string]int {
 	out := make(map[string]int, len(app.Services))
 	for _, svc := range app.Services {
-		out[svc.Name] = listenOf(svc)
+		if !svc.Spec.NoPort {
+			out[svc.Name] = listenOf(svc)
+		}
 	}
 	return out
 }
@@ -146,9 +149,11 @@ func containerHead(svc Service, probe bool) string {
 			fmt.Fprintf(&b, "            - %q\n", word)
 		}
 	}
-	fmt.Fprintf(&b, "          ports:\n            - containerPort: %d\n", listenOf(svc))
-	for _, port := range svc.Spec.Ports {
-		fmt.Fprintf(&b, "            - containerPort: %d\n              name: %s\n", port.Port, portLabel(port))
+	if !svc.Spec.NoPort {
+		fmt.Fprintf(&b, "          ports:\n            - containerPort: %d\n", listenOf(svc))
+		for _, port := range svc.Spec.Ports {
+			fmt.Fprintf(&b, "            - containerPort: %d\n              name: %s\n", port.Port, portLabel(port))
+		}
 	}
 	if probe || svc.Spec.Health != nil {
 		b.WriteString(readiness(svc))

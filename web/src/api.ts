@@ -551,6 +551,8 @@ export type PackageService = {
   resources?: { cpu?: string; memory?: string };
   health?: { http?: string; port?: number };
   dependsOn?: string[];
+  // noPort is a service that listens on nothing, such as a worker.
+  noPort?: boolean;
 };
 
 export type Package = {

@@ -905,6 +905,9 @@ func (a *API) createRunApp(ctx context.Context, owner string, run *blueprint.Run
 		return err
 	}
 	a.fillFromImages(ctx, stored, len(services) == 0 && fromPackage == nil)
+	if fromPackage != nil {
+		quietServices(stored)
+	}
 	if err := a.shapeRedundancy(ctx, owner, clusterID, stored, app.Replicas); err != nil {
 		return err
 	}

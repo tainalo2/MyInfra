@@ -1283,6 +1283,7 @@ const fr = {
   "appServices.lossConfirm": "Effacer et appliquer",
   "template.fromPackage": "Ajouter depuis un paquet",
   "template.packageNamed": "Paquet {name}, emporté avec le template",
+  "package.noPort": "Tâche de fond : n'écoute aucun port (personne ne l'attend)",
 } as const;
 
 export type MsgKey = keyof typeof fr;
@@ -2497,6 +2498,7 @@ const en: Record<MsgKey, string> = {
   "appServices.lossConfirm": "Erase and apply",
   "template.fromPackage": "Add from a package",
   "template.packageNamed": "Package {name}, carried with the template",
+  "package.noPort": "Background task: listens on no port (nothing waits for it)",
 };
 
 const pt: Record<MsgKey, string> = {
@@ -3687,6 +3689,7 @@ const pt: Record<MsgKey, string> = {
   "appServices.lossConfirm": "Apagar e aplicar",
   "template.fromPackage": "Adicionar a partir de um pacote",
   "template.packageNamed": "Pacote {name}, levado com o modelo",
+  "package.noPort": "Tarefa de fundo: não escuta nenhuma porta (ninguém espera por ela)",
 };
 
 const it: Record<MsgKey, string> = {
@@ -4876,6 +4879,7 @@ const it: Record<MsgKey, string> = {
   "appServices.lossConfirm": "Cancella e applica",
   "template.fromPackage": "Aggiungi da un pacchetto",
   "template.packageNamed": "Pacchetto {name}, portato con il template",
+  "package.noPort": "Attività in background: non ascolta nessuna porta (nessuno la attende)",
 };
 
 const de: Record<MsgKey, string> = {
@@ -6067,6 +6071,7 @@ const de: Record<MsgKey, string> = {
   "appServices.lossConfirm": "Löschen und anwenden",
   "template.fromPackage": "Aus einem Paket hinzufügen",
   "template.packageNamed": "Paket {name}, im Template enthalten",
+  "package.noPort": "Hintergrundaufgabe: hört auf keinem Port (niemand wartet darauf)",
 };
 
 const tables: Record<Lang, Record<MsgKey, string>> = { fr, en, pt, it, de };

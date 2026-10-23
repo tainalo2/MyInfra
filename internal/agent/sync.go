@@ -335,7 +335,7 @@ func writeSwap(b *strings.Builder, next, name string, port int) {
 
 // probePort is the port a new container must answer on, 0 when unknown.
 func probePort(app Workload) int {
-	if !app.Published && app.Listen < 1 {
+	if (!app.Published && app.Listen < 1) || app.Spec.NoPort {
 		return 0
 	}
 	return listenOf(app)
