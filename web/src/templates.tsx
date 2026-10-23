@@ -1251,7 +1251,7 @@ function PackagePick({ onClose, onPick }: { onClose: () => void; onPick: (pkg: P
       {rows && rows.length === 0 ? (
         <p className="text-muted">
           {text("package.noneYet")}{" "}
-          <Link to="/paquets" className="text-ink underline">
+          <Link to="/applications/paquets" className="text-ink underline">
             {text("nav.packages")}
           </Link>
         </p>

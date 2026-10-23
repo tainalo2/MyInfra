@@ -11,7 +11,6 @@ import {
   Globe,
   LayoutGrid,
   LayoutTemplate,
-  Package as PackageIcon,
   List,
   Moon,
   MoreHorizontal,
@@ -273,7 +272,6 @@ const nav: NavSpec[] = [
   { to: "/applications", label: "nav.apps", icon: LayoutGrid, match: ["/applications", "/nouveau", "/catalogue"] },
   { to: "/clusters", label: "nav.servers", icon: Network, match: ["/serveurs"] },
   { to: "/templates", label: "nav.templates", icon: LayoutTemplate, match: ["/templates"] },
-  { to: "/paquets", label: "nav.packages", icon: PackageIcon, match: ["/paquets"] },
 ];
 
 const activityNav: NavSpec = { to: "/historique", label: "nav.activity", icon: History, match: ["/deploiements", "/suppressions", "/destructions"] };
@@ -559,7 +557,7 @@ function useCrumbNames(pathname: string) {
 
 async function loadCrumbNames(pathname: string) {
   const app = pathname.match(/^\/applications\/([^/]+)/);
-  if (app) {
+  if (app && app[1] !== "paquets") {
     const id = decodeURIComponent(app[1]);
     const row = await api<{ name: string }>(`/api/applications/${id}`);
     return { [`app:${id}`]: row.name };
@@ -583,7 +581,7 @@ async function loadCrumbNames(pathname: string) {
     const row = await api<{ name: string }>(`/api/templates/${id}`);
     return { [`template:${id}`]: row.name };
   }
-  const pkg = pathname.match(/^\/paquets\/([^/]+)$/);
+  const pkg = pathname.match(/^\/applications\/paquets\/([^/]+)$/);
   if (pkg && pkg[1] !== "nouveau") {
     const id = decodeURIComponent(pkg[1]);
     const row = await api<{ name: string }>(`/api/packages/${id}`);
@@ -603,6 +601,14 @@ function crumbsFor(pathname: string, names: Record<string, string>): Crumb[] {
   if (path === "/") return [];
   if (path === "/applications") return [{ label: text("nav.apps") }];
   if (path === "/nouveau") return [{ label: text("nav.apps"), to: "/applications" }, { label: text("crumb.newApp") }];
+  // Packages live under Applications: they are what applications are made from.
+  if (path === "/applications/paquets") return [{ label: text("nav.apps"), to: "/applications" }, { label: text("nav.packages") }];
+  if (path === "/applications/paquets/nouveau") return [{ label: text("nav.apps"), to: "/applications" }, { label: text("nav.packages"), to: "/applications/paquets" }, { label: text("package.new") }];
+  const pkg = path.match(/^\/applications\/paquets\/([^/]+)$/);
+  if (pkg) {
+    const id = decodeURIComponent(pkg[1]);
+    return current([{ label: text("nav.apps"), to: "/applications" }, { label: text("nav.packages"), to: "/applications/paquets" }, { label: names[`package:${id}`] || text("nav.packages") }]);
+  }
   const app = path.match(/^\/applications\/([^/]+)(\/terminal\/[^/]+|\/services)?$/);
   if (app) {
     const id = decodeURIComponent(app[1]);
@@ -638,13 +644,6 @@ function crumbsFor(pathname: string, names: Record<string, string>): Crumb[] {
     const crumbs: Crumb[] = [{ label: text("nav.templates"), to: "/templates" }, { label: names[`template:${id}`] || text("crumb.template"), to: `/templates/${id}` }];
     if (template[2]) crumbs.push({ label: text("crumb.deploy") });
     return current(crumbs);
-  }
-  if (path === "/paquets") return [{ label: text("nav.packages") }];
-  if (path === "/paquets/nouveau") return [{ label: text("nav.packages"), to: "/paquets" }, { label: text("package.new") }];
-  const pkg = path.match(/^\/paquets\/([^/]+)$/);
-  if (pkg) {
-    const id = decodeURIComponent(pkg[1]);
-    return current([{ label: text("nav.packages"), to: "/paquets" }, { label: names[`package:${id}`] || text("nav.packages") }]);
   }
   if (path === "/deploiements") return [{ label: text("crumb.deployments") }];
   if (path === "/suppressions") return [{ label: text("crumb.destructions") }];

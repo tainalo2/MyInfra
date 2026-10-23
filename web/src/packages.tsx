@@ -1,11 +1,11 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowRight, Package as PackageIcon, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, BookOpen, Copy, LayoutGrid, Package as PackageIcon, Plus, Ship, Trash2, Upload } from "lucide-react";
 import { ApiError, api, peek, type Package, type PackageFile, type PackageProblem, type PackageRow, type PackageService } from "./api";
 import { Code, languageOf } from "./code-lazy";
-import { knownMessage, text } from "./i18n";
+import { knownMessage, text, type MsgKey } from "./i18n";
 import { useI18n } from "./lang";
-import { ConfirmDialog, Sheet, Tabs, useToast } from "./kit";
+import { AppsTabs, ConfirmDialog, Sheet, Tabs, useToast } from "./kit";
 import { useSession } from "./session";
 import { ToolInstall } from "./tools";
 import {
@@ -56,13 +56,83 @@ async function download(row: { id: string; name: string }, format: "yaml" | "jso
   URL.revokeObjectURL(url);
 }
 
+// examples are packages to start from and learn by: each shows a part of
+// what a package holds, and installs as it is.
+const examples: { key: string; title: () => string; summary: () => string; pkg: () => Package }[] = [
+  {
+    key: "umami",
+    title: () => text("package.exampleUmami"),
+    summary: () => text("package.exampleUmamiHint"),
+    pkg: (): Package => ({
+      type: "myinfra-package",
+      version: 1,
+      name: "Umami",
+      summary: text("package.exampleUmamiHint"),
+      env: {
+        APP_SECRET: "{{secret:app-secret}}",
+        DATABASE_URL: "postgresql://umami:{{secret:db-password}}@db:5432/umami",
+        POSTGRES_PASSWORD: "{{secret:db-password}}",
+      },
+      services: [
+        {
+          name: "web",
+          image: "ghcr.io/umami-software/umami:postgresql-latest",
+          public: true,
+          port: 3000,
+          env: { DATABASE_TYPE: "postgresql" },
+          health: { http: "/api/heartbeat" },
+          dependsOn: ["db"],
+        },
+        {
+          name: "db",
+          image: "postgres:16-alpine",
+          port: 5432,
+          volumes: [{ path: "/var/lib/postgresql/data", sizeGi: 5 }],
+          env: { POSTGRES_DB: "umami", POSTGRES_USER: "umami" },
+          resources: { memory: "256Mi" },
+        },
+      ],
+    }),
+  },
+  {
+    key: "site",
+    title: () => text("package.exampleSite"),
+    summary: () => text("package.exampleSiteHint"),
+    pkg: (): Package => ({
+      type: "myinfra-package",
+      version: 1,
+      name: text("package.exampleSite"),
+      summary: text("package.exampleSiteHint"),
+      services: [
+        {
+          name: "web",
+          image: "nginx:1.27-alpine",
+          public: true,
+          port: 80,
+          files: [
+            { path: "/usr/share/nginx/html/index.html", content: "<!doctype html>\n<h1>{{host}}</h1>\n<p>Hello!</p>\n" },
+            {
+              path: "/etc/nginx/conf.d/default.conf",
+              content: 'server {\n  listen 80;\n  root /usr/share/nginx/html;\n  location = /healthz { return 200 "ok\\n"; }\n}\n',
+            },
+          ],
+          health: { http: "/healthz" },
+          resources: { cpu: "100m", memory: "64Mi" },
+        },
+      ],
+    }),
+  },
+];
+
 export function Packages() {
   useI18n();
   const navigate = useNavigate();
   const { canDeploy } = useSession();
   const [rows, setRows] = useState<PackageRow[] | null>(() => peek<PackageRow[]>("/api/packages"));
   const [error, setError] = useState("");
-  const [importing, setImporting] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [importing, setImporting] = useState<"file" | "helm" | null>(null);
+  const [copying, setCopying] = useState(false);
   const [removing, setRemoving] = useState<PackageRow | null>(null);
   const toast = useToast();
 
@@ -85,26 +155,30 @@ export function Packages() {
     void download(row, format).catch((err) => toast(err instanceof Error ? err.message : text("common.error"), "bad"));
   }
 
+  function start(choice: StartChoice) {
+    setStarting(false);
+    if (choice === "blank") navigate("/applications/paquets/nouveau");
+    else if (choice === "file" || choice === "helm") setImporting(choice);
+    else if (choice === "catalogue") setCopying(true);
+    else navigate("/applications/paquets/nouveau", { state: { example: choice } });
+  }
+
   return (
     <>
       <PageTitle
-        title={text("nav.packages")}
-        icon={PackageIcon}
+        title={text("nav.apps")}
+        icon={LayoutGrid}
         action={
-          canDeploy ? (
-            <span className="flex items-center gap-4">
-              <TextButton type="button" onClick={() => setImporting(true)}>
-                {text("cluster.import")}
-              </TextButton>
-              <Button type="button" onClick={() => navigate("/paquets/nouveau")}>
-                <Icon icon={Plus} />
-                {text("package.new")}
-              </Button>
-            </span>
+          canDeploy && rows && rows.length > 0 ? (
+            <Button type="button" onClick={() => setStarting(true)}>
+              <Icon icon={Plus} />
+              {text("package.new")}
+            </Button>
           ) : null
         }
       />
-      <p className="mb-8 max-w-[720px] text-muted">{text("package.intro")}</p>
+      <AppsTabs active="packages" />
+      <PackagesIntro open={rows !== null && rows.length === 0} />
       {error ? (
         <div className="mb-8">
           <ErrorText>{error}</ErrorText>
@@ -113,25 +187,24 @@ export function Packages() {
       {rows === null ? (
         <LoadingLines lines={4} />
       ) : rows.length === 0 ? (
-        <p className="text-muted">{text("package.empty")}</p>
+        canDeploy ? (
+          <section className="flex flex-col gap-4">
+            <h2 className="text-base">{text("package.startTitle")}</h2>
+            <StartChoices onChoose={start} />
+          </section>
+        ) : (
+          <p className="text-muted">{text("package.empty")}</p>
+        )
       ) : (
-        <ul className="flex flex-col gap-4">
+        <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {rows.map((row) => (
-            <li key={row.id} className="relative rounded-md border border-line hover:bg-status">
-              <Link to={`/paquets/${row.id}`} className="block p-4 pr-14 text-ink">
-                <span>{row.name}</span>
-                {row.summary ? <p className="mt-1 text-muted">{row.summary}</p> : null}
-                <p className="mt-2 flex flex-wrap gap-2">
-                  {row.services.map((service) => (
-                    <span key={service} className="rounded border border-line px-1.5 font-mono text-[13px] text-muted">
-                      {service}
-                    </span>
-                  ))}
-                </p>
-              </Link>
-              <div className="absolute right-3 top-3">
+            <li key={row.id} className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4">
+              <div className="flex items-start justify-between gap-3">
+                <Link to={`/applications/paquets/${row.id}`} className="min-w-0 text-ink">
+                  <span className="font-medium">{row.name}</span>
+                  {row.summary ? <p className="mt-1 text-muted">{row.summary}</p> : null}
+                </Link>
                 <ActionsMenu label={text("apps.more")}>
-                  {canDeploy ? <MenuItem onClick={() => navigate(`/nouveau?package=${row.id}`)}>{text("catalogue.install")}</MenuItem> : null}
                   <MenuItem onClick={() => exported(row, "yaml")}>{text("package.exportYaml")}</MenuItem>
                   <MenuItem onClick={() => exported(row, "json")}>{text("package.exportJson")}</MenuItem>
                   {canDeploy ? (
@@ -141,17 +214,41 @@ export function Packages() {
                   ) : null}
                 </ActionsMenu>
               </div>
+              <p className="flex flex-wrap gap-2" aria-label={text("field.services")}>
+                {row.services.map((service) => (
+                  <span key={service} className="rounded border border-line px-1.5 font-mono text-[13px] text-muted">
+                    {service}
+                  </span>
+                ))}
+              </p>
+              <div className="mt-auto flex flex-wrap items-center gap-4">
+                {canDeploy ? (
+                  <Button type="button" variant="secondary" onClick={() => navigate(`/nouveau?package=${row.id}`)}>
+                    {text("package.installCta")}
+                  </Button>
+                ) : null}
+                <Link to={`/applications/paquets/${row.id}`} className="text-ink underline">
+                  {canDeploy ? text("package.edit") : text("package.open")}
+                </Link>
+              </div>
             </li>
           ))}
         </ul>
       )}
+      {starting ? (
+        <Sheet title={text("package.startTitle")} onClose={() => setStarting(false)} wide>
+          <StartChoices onChoose={start} />
+        </Sheet>
+      ) : null}
       {importing ? (
         <ImportSheet
-          onClose={() => setImporting(false)}
-          onDone={(row) => navigate(`/paquets/${row.id}`)}
-          onDraft={(draft) => navigate("/paquets/nouveau", { state: { draft } })}
+          initial={importing}
+          onClose={() => setImporting(null)}
+          onDone={(row) => navigate(`/applications/paquets/${row.id}`, { state: { saved: true } })}
+          onDraft={(draft) => navigate("/applications/paquets/nouveau", { state: { draft } })}
         />
       ) : null}
+      {copying ? <CopyArticleSheet onClose={() => setCopying(false)} onDone={(row) => navigate(`/applications/paquets/${row.id}`, { state: { saved: true } })} /> : null}
       {removing ? (
         <ConfirmDialog
           title={text("server.removeNamed", { name: removing.name })}
@@ -167,10 +264,112 @@ export function Packages() {
   );
 }
 
+// PackagesIntro tells in three steps what a package is for: it stays open
+// until the first package is kept.
+function PackagesIntro({ open }: { open: boolean }) {
+  const steps = [
+    { title: text("package.step1"), body: text("package.step1Hint") },
+    { title: text("package.step2"), body: text("package.step2Hint") },
+    { title: text("package.step3"), body: text("package.step3Hint") },
+  ];
+  return (
+    <details className="mb-8 max-w-[960px] rounded-md border border-line bg-surface p-4" open={open}>
+      <summary className="cursor-pointer font-medium">{text("package.whatTitle")}</summary>
+      <p className="mt-3 text-muted">{text("package.whatHint")}</p>
+      <ol className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+        {steps.map((step, index) => (
+          <li key={index} className="flex gap-3">
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-full border border-line font-mono text-[13px]" aria-hidden>
+              {index + 1}
+            </span>
+            <span>
+              <span className="block">{step.title}</span>
+              <span className="block text-muted">{step.body}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+    </details>
+  );
+}
+
+type StartChoice = "blank" | "file" | "helm" | "catalogue" | string;
+
+// StartChoices are the ways to begin a package, the simplest first.
+function StartChoices({ onChoose }: { onChoose: (choice: StartChoice) => void }) {
+  const choices: { key: StartChoice; title: string; body: string; icon: typeof Plus }[] = [
+    ...examples.map((example) => ({ key: example.key, title: example.title(), body: example.summary(), icon: BookOpen })),
+    { key: "catalogue", title: text("package.fromCatalogue"), body: text("package.fromCatalogueHint"), icon: Copy },
+    { key: "file", title: text("package.fromCompose"), body: text("package.fromComposeHint"), icon: Upload },
+    { key: "helm", title: text("package.fromHelm"), body: text("package.fromHelmChoice"), icon: Ship },
+    { key: "blank", title: text("package.fromBlank"), body: text("package.fromBlankHint"), icon: Plus },
+  ];
+  return (
+    <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
+      {choices.map((choice) => (
+        <li key={choice.key}>
+          <button
+            type="button"
+            onClick={() => onChoose(choice.key)}
+            className="flex h-full w-full items-start gap-3 rounded-md border border-line bg-surface p-4 text-left hover:bg-status focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
+          >
+            <Icon icon={choice.icon} className="mt-1 shrink-0" />
+            <span>
+              <span className="block font-medium">{choice.title}</span>
+              <span className="block text-muted">{choice.body}</span>
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// CopyArticleSheet copies an application of the catalogue into a package,
+// to change what the catalogue does not let change.
+function CopyArticleSheet({ onClose, onDone }: { onClose: () => void; onDone: (row: PackageRow) => void }) {
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <Sheet title={text("package.fromCatalogue")} onClose={onClose} busy={busy} wide>
+      <div className="flex flex-col gap-4">
+        <p className="text-muted">{text("package.fromCatalogueHint")}</p>
+        {error ? <ErrorText>{error}</ErrorText> : null}
+        <Suspense fallback={<LoadingLines lines={3} />}>
+          <CatalogueBrowser
+            selected=""
+            onSelect={(card) => {
+              setBusy(true);
+              api<PackageRow>(`/api/catalogue/${card.id}/copy`, { method: "POST" })
+                .then(onDone)
+                .catch((err) => {
+                  setError(err instanceof Error ? err.message : text("common.error"));
+                  setBusy(false);
+                });
+            }}
+          />
+        </Suspense>
+      </div>
+    </Sheet>
+  );
+}
+
+const CatalogueBrowser = lazy(() => import("./catalogue").then((module) => ({ default: module.CatalogueBrowser })));
+
 // ImportSheet brings a package from a file, a pasted text or a link. What is
 // wrong in it shows with its line, in the text itself.
-function ImportSheet({ onClose, onDone, onDraft }: { onClose: () => void; onDone: (row: PackageRow) => void; onDraft: (draft: Draft) => void }) {
-  const [how, setHow] = useState<"file" | "paste" | "url" | "helm">("file");
+function ImportSheet({
+  initial = "file",
+  onClose,
+  onDone,
+  onDraft,
+}: {
+  initial?: "file" | "helm";
+  onClose: () => void;
+  onDone: (row: PackageRow) => void;
+  onDraft: (draft: Draft) => void;
+}) {
+  const [how, setHow] = useState<"file" | "paste" | "url" | "helm">(initial);
   const [chart, setChart] = useState({ repo: "", chart: "", version: "", values: "" });
   const [needsHelm, setNeedsHelm] = useState(false);
   const [pasted, setPasted] = useState("");
@@ -391,14 +590,29 @@ export function PackageEditor() {
   const yamlTimer = useRef(0);
   const location = useLocation();
   const [warnings, setWarnings] = useState<Warning[]>([]);
+  const [guide, setGuide] = useState(false);
+  const [saved, setSaved] = useState(false);
+  // revision rebuilds the form when a whole package replaces the one shown:
+  // its fields keep what is typed, and would keep the old text otherwise.
+  const [revision, setRevision] = useState(0);
 
-  // An import opens here in the YAML view, with what it could not keep.
+  // An import opens here in the YAML view, with what it could not keep; an
+  // example opens in the form, to learn by changing it.
   useEffect(() => {
-    const draft = (location.state as { draft?: Draft } | null)?.draft;
-    if (id || !draft) return;
-    setWarnings(draft.warnings);
+    const state = location.state as { draft?: Draft; example?: string; saved?: boolean } | null;
+    if (id) {
+      setSaved(Boolean(state?.saved));
+      return;
+    }
+    const example = examples.find((item) => item.key === state?.example);
+    if (example) {
+      setPkg(example.pkg());
+      setRevision((current) => current + 1);
+    }
+    if (!state?.draft) return;
+    setWarnings(state.draft.warnings);
     setMode("yaml");
-    onYaml(draft.yaml);
+    onYaml(state.draft.yaml);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, location.state]);
 
@@ -478,7 +692,8 @@ export function PackageEditor() {
       if (row.package) setPkg(row.package);
       if (mode === "visual") setYamlText(row.yaml ?? "");
       toast(text("package.saved", { name: row.name }));
-      if (!id) navigate(`/paquets/${row.id}`, { replace: true });
+      setWarnings([]);
+      if (!id) navigate(`/applications/paquets/${row.id}`, { replace: true, state: { saved: true } });
     } catch (err) {
       setError(err instanceof Error ? err.message : text("common.error"));
     } finally {
@@ -496,18 +711,44 @@ export function PackageEditor() {
         title={id ? pkg.name || text("nav.packages") : text("package.new")}
         icon={PackageIcon}
         action={
-          id && canDeploy ? (
-            <span className="flex items-center gap-4">
+          <span className="flex items-center gap-4">
+            <TextButton type="button" onClick={() => setGuide(true)}>
+              <span className="inline-flex items-center gap-2">
+                <Icon icon={BookOpen} />
+                {text("package.guide")}
+              </span>
+            </TextButton>
+            {id ? (
               <TextButton type="button" onClick={() => void download({ id, name: pkg.name }, "yaml").catch((err) => toast(err.message, "bad"))}>
                 {text("package.exportYaml")}
               </TextButton>
+            ) : null}
+            {id && canDeploy ? (
               <Button type="button" variant="secondary" onClick={() => navigate(`/nouveau?package=${id}`)}>
-                {text("catalogue.install")}
+                {text("package.installCta")}
               </Button>
-            </span>
-          ) : null
+            ) : null}
+          </span>
         }
       />
+      {saved && id && canDeploy ? (
+        <section className="mb-8 flex max-w-[960px] flex-wrap items-center justify-between gap-4 rounded-md border border-line bg-surface p-4" role="status">
+          <span>
+            <span className="block font-medium">{text("package.readyTitle")}</span>
+            <span className="block text-muted">{text("package.readyHint")}</span>
+          </span>
+          <span className="flex items-center gap-4">
+            <Button type="button" onClick={() => navigate(`/nouveau?package=${id}`)}>
+              {text("package.installNow")}
+            </Button>
+            <TextButton type="button" onClick={() => setSaved(false)}>
+              {text("package.later")}
+            </TextButton>
+          </span>
+        </section>
+      ) : null}
+      {!id ? <p className="-mt-4 mb-8 max-w-[720px] text-muted md:-mt-8">{text("package.newHint")}</p> : null}
+      {guide ? <PackageGuide onClose={() => setGuide(false)} /> : null}
       <form onSubmit={save} className="flex flex-col gap-8">
         {warnings.length > 0 ? <WarningList warnings={warnings} /> : null}
         <Tabs
@@ -526,7 +767,7 @@ export function PackageEditor() {
             {problems.length > 0 ? <ProblemList problems={problems} /> : <p className="text-ok">{text("package.valid")}</p>}
           </div>
         ) : (
-          <VisualEditor pkg={pkg} onChange={setPkg} problems={problems} general={general} />
+          <VisualEditor key={revision} pkg={pkg} onChange={setPkg} problems={problems} general={general} />
         )}
         {error ? <ErrorText>{error}</ErrorText> : null}
         {canDeploy ? (
@@ -571,7 +812,7 @@ function VisualEditor({
         </Field>
         <Inputs pkg={pkg} onChange={onChange} />
         <Field label={text("package.sharedEnv")} hint={text("package.sharedEnvHint")}>
-          <EnvEditor value={pkg.env} onChange={(env) => set("env", env)} label={text("package.sharedEnv")} />
+          <EnvEditor value={pkg.env} onChange={(env) => set("env", env)} label={text("package.sharedEnv")} snippets={sharedSnippets()} />
         </Field>
         {general.length > 0 ? <ProblemList problems={general} /> : null}
       </section>
@@ -698,6 +939,17 @@ function Inputs({ pkg, onChange }: { pkg: Package; onChange: (pkg: Package) => v
 
 type ServiceTab = "general" | "network" | "storage" | "files" | "env" | "health" | "resources";
 
+// tabTip gives each tab a concrete example, for a first package.
+const tabTip: Record<ServiceTab, MsgKey> = {
+  general: "package.tipGeneral",
+  network: "package.tipNetwork",
+  storage: "package.tipStorage",
+  files: "package.tipFiles",
+  env: "package.tipEnv",
+  health: "package.tipHealth",
+  resources: "package.tipResources",
+};
+
 const tabOf: Record<string, ServiceTab> = {
   name: "general",
   image: "general",
@@ -760,13 +1012,14 @@ function ServiceCard({
         {onRemove ? <IconButton type="button" icon={Trash2} label={text("package.removeService", { name: service.name })} onClick={onRemove} /> : null}
       </header>
       <Tabs label={service.name} active={tab} onChange={setTab} tabs={tabs.map((item) => ({ ...item, mark: marked.has(item.key) }))} />
+      <p className="text-faint">{text(tabTip[tab])}</p>
       {tab === "general" ? <GeneralTab service={service} others={others} set={set} onChange={onChange} /> : null}
       {tab === "network" ? <NetworkTab service={service} set={set} /> : null}
       {tab === "storage" ? <StorageTab service={service} set={set} /> : null}
       {tab === "files" ? <FilesTab service={service} set={set} /> : null}
       {tab === "env" ? (
         <Field label={text("package.tabEnv")} hint={text("package.serviceEnvHint")}>
-          <EnvEditor value={service.env} onChange={(env) => set("env", env)} label={text("package.tabEnv")} />
+          <EnvEditor value={service.env} onChange={(env) => set("env", env)} label={text("package.tabEnv")} snippets={serviceSnippets()} />
         </Field>
       ) : null}
       {tab === "health" ? <HealthTab service={service} set={set} /> : null}
@@ -1044,7 +1297,17 @@ function ResourcesTab({ service, set }: { service: PackageService; set: Setter }
 
 // EnvEditor writes variables as KEY=value lines, coloured, and gives them
 // back as a map once each line reads.
-function EnvEditor({ value, onChange, label }: { value?: Record<string, string>; onChange: (value: Record<string, string> | undefined) => void; label: string }) {
+function EnvEditor({
+  value,
+  onChange,
+  label,
+  snippets = [],
+}: {
+  value?: Record<string, string>;
+  onChange: (value: Record<string, string> | undefined) => void;
+  label: string;
+  snippets?: { label: string; line: string }[];
+}) {
   const [lines, setLines] = useState(() =>
     Object.entries(value ?? {})
       .map(([key, item]) => `${key}=${item}`)
@@ -1071,15 +1334,51 @@ function EnvEditor({ value, onChange, label }: { value?: Record<string, string>;
   }
 
   return (
-    <Code
-      value={lines}
-      onChange={onText}
-      language="env"
-      label={label}
-      minHeight="5rem"
-      problems={bad.map((line) => ({ line, message: text("ui.uneVariableSEcritCleValeur") }))}
-    />
+    <span className="flex flex-col gap-2">
+      <Code
+        value={lines}
+        onChange={onText}
+        language="env"
+        label={label}
+        placeholder="NOM=valeur"
+        minHeight="5rem"
+        problems={bad.map((line) => ({ line, message: text("ui.uneVariableSEcritCleValeur") }))}
+      />
+      {snippets.length > 0 ? (
+        <span className="flex flex-wrap items-center gap-2">
+          <span className="text-faint">{text("package.insert")}</span>
+          {snippets.map((snippet) => (
+            <button
+              key={snippet.line}
+              type="button"
+              title={snippet.line}
+              onClick={() => onText(lines.trim() ? `${lines.replace(/\n*$/, "")}\n${snippet.line}` : snippet.line)}
+              className="rounded border border-line px-2 py-0.5 text-[13px] text-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
+            >
+              + {snippet.label}
+            </button>
+          ))}
+        </span>
+      ) : null}
+    </span>
   );
+}
+
+// sharedSnippets and serviceSnippets start the lines a first package needs.
+// A secret belongs to the common variables: they are sealed.
+function sharedSnippets() {
+  return [
+    { label: text("package.snippetSecret"), line: "PASSWORD={{secret:password}}" },
+    { label: text("package.snippetUrl"), line: "PUBLIC_URL={{url}}" },
+    { label: text("package.snippetHost"), line: "PUBLIC_HOST={{host}}" },
+  ];
+}
+
+function serviceSnippets() {
+  return [
+    { label: text("package.snippetUrl"), line: "PUBLIC_URL={{url}}" },
+    { label: text("package.snippetHost"), line: "PUBLIC_HOST={{host}}" },
+  ];
 }
 
 type AppPackage = { package: Package; yaml: string; problems: PackageProblem[]; address?: string };
@@ -1104,6 +1403,7 @@ export function AppServices() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [loss, setLoss] = useState("");
+  const [guide, setGuide] = useState(false);
   const asked = useRef(0);
   const yamlTimer = useRef(0);
 
@@ -1189,7 +1489,7 @@ export function AppServices() {
   async function keep() {
     try {
       const row = await api<PackageRow>(`/api/applications/${id}/package`, { method: "POST" });
-      navigate(`/paquets/${row.id}`);
+      navigate(`/applications/paquets/${row.id}`);
     } catch (err) {
       toast(err instanceof Error ? err.message : text("common.error"), "bad");
     }
@@ -1203,13 +1503,22 @@ export function AppServices() {
         title={text("appServices.title", { name })}
         icon={PackageIcon}
         action={
-          canDeploy ? (
-            <TextButton type="button" onClick={() => void keep()}>
-              {text("appServices.keep")}
+          <span className="flex items-center gap-4">
+            <TextButton type="button" onClick={() => setGuide(true)}>
+              <span className="inline-flex items-center gap-2">
+                <Icon icon={BookOpen} />
+                {text("package.guide")}
+              </span>
             </TextButton>
-          ) : null
+            {canDeploy ? (
+              <TextButton type="button" onClick={() => void keep()}>
+                {text("appServices.keep")}
+              </TextButton>
+            ) : null}
+          </span>
         }
       />
+      {guide ? <PackageGuide onClose={() => setGuide(false)} /> : null}
       <form
         className="flex flex-col gap-8"
         onSubmit={(event) => {
@@ -1265,5 +1574,97 @@ export function AppServices() {
         </ConfirmDialog>
       ) : null}
     </>
+  );
+}
+
+// guideSections teach a package one notion at a time, in the order a first
+// package is written.
+const guideSections: { title: MsgKey; body: MsgKey }[] = [
+  { title: "guide.servicesTitle", body: "guide.servicesBody" },
+  { title: "guide.publicTitle", body: "guide.publicBody" },
+  { title: "guide.disksTitle", body: "guide.disksBody" },
+  { title: "guide.filesTitle", body: "guide.filesBody" },
+  { title: "guide.variablesTitle", body: "guide.variablesBody" },
+  { title: "guide.orderTitle", body: "guide.orderBody" },
+  { title: "guide.healthTitle", body: "guide.healthBody" },
+  { title: "guide.installTitle", body: "guide.installBody" },
+];
+
+const guideTokens: { token: string; body: MsgKey }[] = [
+  { token: "{{url}}", body: "guide.tokenUrl" },
+  { token: "{{host}}", body: "guide.tokenHost" },
+  { token: "{{secret:nom}}", body: "guide.tokenSecret" },
+  { token: "{{encoded:nom}}", body: "guide.tokenEncoded" },
+  { token: "{{input:clé}}", body: "guide.tokenInput" },
+];
+
+const guideFields: { field: string; body: MsgKey }[] = [
+  { field: "name · summary · category", body: "guide.refName" },
+  { field: "inputs[].key · label", body: "guide.refInputs" },
+  { field: "env", body: "guide.refEnv" },
+  { field: "services[].name · image", body: "guide.refService" },
+  { field: "public · port", body: "guide.refPublic" },
+  { field: "noPort", body: "guide.refNoPort" },
+  { field: "replicas", body: "guide.refReplicas" },
+  { field: "command · args", body: "guide.refCommand" },
+  { field: "ports[].name · port", body: "guide.refPorts" },
+  { field: "volumes[].path · sizeGi", body: "guide.refVolumes" },
+  { field: "files[].path · content", body: "guide.refFiles" },
+  { field: "services[].env", body: "guide.refServiceEnv" },
+  { field: "health.http · port", body: "guide.refHealth" },
+  { field: "resources.cpu · memory", body: "guide.refResources" },
+  { field: "dependsOn", body: "guide.refDependsOn" },
+];
+
+// PackageGuide is the tutorial of packages: what each notion is for, the
+// {{…}} MyInfra fills in, a whole example and every field of the format.
+export function PackageGuide({ onClose }: { onClose: () => void }) {
+  const [example, setExample] = useState("");
+  useEffect(() => {
+    void toYaml(examples[0].pkg()).then((text) => setExample(text ?? ""));
+  }, []);
+  return (
+    <Sheet title={text("package.guide")} onClose={onClose} wide>
+      <div className="flex flex-col gap-6">
+        <p className="text-muted">{text("package.whatHint")}</p>
+        {guideSections.map((section, index) => (
+          <section key={section.title} className="flex flex-col gap-1">
+            <h3 className="font-medium">
+              {index + 1}. {text(section.title)}
+            </h3>
+            <p className="text-muted">{text(section.body)}</p>
+          </section>
+        ))}
+        <section className="flex flex-col gap-2">
+          <h3 className="font-medium">{text("guide.tokensTitle")}</h3>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2">
+            {guideTokens.map((item) => (
+              <div key={item.token} className="contents">
+                <dt className="font-mono text-[13px]" style={{ color: "var(--color-code-token)" }}>
+                  {item.token}
+                </dt>
+                <dd className="text-muted">{text(item.body)}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+        <section className="flex flex-col gap-2">
+          <h3 className="font-medium">{text("guide.exampleTitle")}</h3>
+          <p className="text-muted">{text("guide.exampleBody")}</p>
+          {example ? <Code value={example} language="yaml" readOnly label={text("guide.exampleTitle")} minHeight="10rem" maxHeight="24rem" /> : <LoadingLines lines={3} />}
+        </section>
+        <section className="flex flex-col gap-2">
+          <h3 className="font-medium">{text("guide.referenceTitle")}</h3>
+          <dl className="flex flex-col gap-2">
+            {guideFields.map((item) => (
+              <div key={item.field}>
+                <dt className="font-mono text-[13px]">{item.field}</dt>
+                <dd className="text-muted">{text(item.body)}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      </div>
+    </Sheet>
   );
 }

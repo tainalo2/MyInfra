@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { text } from "./i18n";
 import { Button, ErrorText, Field, Input, TextButton, podFailed, statusLabel } from "./ui";
 
@@ -347,5 +348,39 @@ export function Tabs<K extends string>({
         </button>
       ))}
     </div>
+  );
+}
+
+// SectionTabs move between the pages of one section, as links: each page
+// keeps its own address, to share or come back to.
+export function SectionTabs({ items, label }: { items: { to: string; label: string; active: boolean }[]; label: string }) {
+  return (
+    <nav aria-label={label} className="-mx-1 mb-8 flex gap-1 overflow-x-auto border-b border-line md:-mt-6">
+      {items.map((item) => (
+        <Link
+          key={item.to}
+          to={item.to}
+          aria-current={item.active ? "page" : undefined}
+          className={`-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2 ${
+            item.active ? "border-ink text-ink" : "border-transparent text-muted hover:text-ink"
+          } focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus`}
+        >
+          {item.label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+// AppsTabs separate what runs from what it is made from.
+export function AppsTabs({ active }: { active: "apps" | "packages" }) {
+  return (
+    <SectionTabs
+      label={text("nav.apps")}
+      items={[
+        { to: "/applications", label: text("apps.tabRunning"), active: active === "apps" },
+        { to: "/applications/paquets", label: text("nav.packages"), active: active === "packages" },
+      ]}
+    />
   );
 }

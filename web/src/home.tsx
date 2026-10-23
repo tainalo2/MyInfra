@@ -2,7 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { LayoutGrid } from "lucide-react";
 import { api, type Application } from "./api";
-import { ConfirmDialog, StatusBadge, appHealth, useToast } from "./kit";
+import { AppsTabs, ConfirmDialog, StatusBadge, appHealth, useToast } from "./kit";
 import { UpdateBadge, useUpdate } from "./updates";
 import { usePoll } from "./poll";
 import { text } from "./i18n";
@@ -49,6 +49,7 @@ export function Home() {
           ) : null
         }
       />
+      <AppsTabs active="apps" />
       {error && !apps ? <ErrorText>{error}</ErrorText> : null}
       {apps === null && !error ? <LoadingCards /> : null}
       {apps && apps.length === 0 ? (

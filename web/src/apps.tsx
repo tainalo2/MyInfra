@@ -360,7 +360,7 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
                             {chosenPackage.summary ? <p className="mt-1 text-muted">{chosenPackage.summary}</p> : null}
                             <p className="mt-1 font-mono text-[13px] text-muted">{chosenPackage.services.join(" · ")}</p>
                           </span>
-                          <Link to={`/paquets/${chosenPackage.id}`} className="shrink-0 text-ink underline">
+                          <Link to={`/applications/paquets/${chosenPackage.id}`} className="shrink-0 text-ink underline">
                             {text("package.open")}
                           </Link>
                         </div>
@@ -645,7 +645,7 @@ function PackageChoice({ onSelect }: { onSelect: (row: PackageRow) => void }) {
     return (
       <p className="text-muted">
         {text("package.noneYet")}{" "}
-        <Link to="/paquets" className="text-ink underline">
+        <Link to="/applications/paquets" className="text-ink underline">
           {text("nav.packages")}
         </Link>
       </p>
@@ -725,7 +725,7 @@ export function ApplicationPage() {
   async function keepAsPackage() {
     try {
       const row = await api<{ id: string }>(`/api/applications/${app!.id}/package`, { method: "POST" });
-      navigate(`/paquets/${row.id}`);
+      navigate(`/applications/paquets/${row.id}`);
     } catch (err) {
       toast(err instanceof Error ? err.message : text("common.error"), "bad");
     }

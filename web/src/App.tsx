@@ -291,9 +291,10 @@ export function App() {
         <Route path="/templates/suivis/:id" element={<TemplateRunPage />} />
         <Route path="/templates/:id" element={<TemplateEditor />} />
         <Route path="/templates/:id/deploy" element={<RequireDeploy><TemplateLaunch /></RequireDeploy>} />
-        <Route path="/paquets" element={<Packages />} />
-        <Route path="/paquets/nouveau" element={<RequireDeploy><PackageEditor /></RequireDeploy>} />
-        <Route path="/paquets/:id" element={<PackageEditor />} />
+        <Route path="/applications/paquets" element={<Packages />} />
+        <Route path="/applications/paquets/nouveau" element={<RequireDeploy><PackageEditor /></RequireDeploy>} />
+        <Route path="/applications/paquets/:id" element={<PackageEditor />} />
+        <Route path="/paquets/*" element={<Navigate to="/applications/paquets" replace />} />
         <Route path="/compte" element={<Account />} />
         <Route path="/utilisateurs" element={<RequireAdmin><UsersPage /></RequireAdmin>} />
         <Route path="/transfert" element={<RequireAdmin><Transfer /></RequireAdmin>} />

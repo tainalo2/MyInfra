@@ -121,7 +121,7 @@ export function CatalogueArticle() {
     setCopying(true);
     try {
       const row = await api<PackageRow>(`/api/catalogue/${id}/copy`, { method: "POST" });
-      navigate(`/paquets/${row.id}`);
+      navigate(`/applications/paquets/${row.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : text("common.error"));
       setCopying(false);

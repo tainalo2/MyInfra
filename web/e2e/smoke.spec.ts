@@ -37,7 +37,7 @@ test.describe.serial("MyInfra", () => {
   test("every main screen opens", async ({ page }) => {
     const problems = watch(page);
     await signIn(page);
-    for (const path of ["/", "/applications", "/nouveau", "/clusters", "/templates", "/templates/nouveau", "/paquets", "/paquets/nouveau", "/deploiements", "/cles", "/providers", "/dns", "/git", "/secrets", "/compte", "/copies", "/historique", "/monde", "/suppressions", "/transfert"]) {
+    for (const path of ["/", "/applications", "/nouveau", "/clusters", "/templates", "/templates/nouveau", "/applications/paquets", "/applications/paquets/nouveau", "/deploiements", "/cles", "/providers", "/dns", "/git", "/secrets", "/compte", "/copies", "/historique", "/monde", "/suppressions", "/transfert"]) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       await expect(page.locator("main")).toBeVisible();

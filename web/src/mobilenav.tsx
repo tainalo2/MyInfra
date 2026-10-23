@@ -6,7 +6,6 @@ import {
   History,
   LayoutGrid,
   LayoutTemplate,
-  Package as PackageIcon,
   Menu,
   Moon,
   Network,
@@ -37,7 +36,6 @@ type MoreTab = Tab & { deployOnly?: boolean; adminOnly?: boolean };
 
 const more: MoreTab[] = [
   { to: "/templates", label: "nav.templates", icon: LayoutTemplate },
-  { to: "/paquets", label: "nav.packages", icon: PackageIcon },
   { to: "/mises-a-jour", label: "nav.updates", icon: ArrowUpCircle },
   { to: "/reglages", label: "nav.settings", icon: Settings, match: settingsMatch },
 ];
