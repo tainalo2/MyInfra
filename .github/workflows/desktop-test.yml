@@ -25,6 +25,7 @@ jobs:
       - name: Exécutables
         run: |
           ./build windows-app amd64
+          ./build windows amd64
           ./build linux amd64
           file dist/myinfra_linux_amd64 | grep -q "statically linked"
           # Comme dans l'image, et sur Alpine.
@@ -34,7 +35,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: app
-          path: dist/myinfra_windows_amd64_app.exe
+          path: |
+            dist/myinfra_windows_amd64_app.exe
+            dist/myinfra_windows_amd64.exe
 
   windows:
     needs: build
@@ -54,6 +57,35 @@ jobs:
             choco install innosetup -y --no-progress
           }
           deploy/windows/package.ps1 $env:VERSION amd64 dist/myinfra_windows_amd64_app.exe out
+      # Ce qui distingue l'app de l'exécutable console, une chose à la fois.
+      - name: Diagnostic
+        timeout-minutes: 10
+        shell: pwsh
+        run: |
+          function Try($name, $exe, [hashtable] $extra) {
+            $data = Join-Path $env:RUNNER_TEMP "diag-$name"
+            $env:MYINFRA_HOME = $data
+            $env:MYINFRA_ADDR = "127.0.0.1:8090"
+            foreach ($k in $extra.Keys) { Set-Item "env:$k" $extra[$k] }
+            $p = Start-Process $exe -PassThru
+            $result = "rien"
+            foreach ($i in 1..60) {
+              try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 http://127.0.0.1:8090/api/health | Out-Null; $result = "OK"; break } catch {}
+              $log = Join-Path $data "myinfra.log"
+              if ((Test-Path $log) -and (Select-String -Quiet -Path $log -Pattern "level=ERROR")) { $result = (Select-String -Path $log -Pattern "level=ERROR" | Select-Object -First 1).Line; break }
+              Start-Sleep 1
+            }
+            Write-Host "=== $name : $($result.Substring(0, [Math]::Min(300, $result.Length)))"
+            Get-Process MyInfra, myinfra_windows_amd64, postgres -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            foreach ($k in $extra.Keys) { Remove-Item "env:$k" -ErrorAction SilentlyContinue }
+            Start-Sleep 3
+          }
+          Try "console" "dist/myinfra_windows_amd64.exe" @{ MYINFRA_NO_BROWSER = "1" }
+          Try "app-sans-fenetre" "dist/myinfra_windows_amd64_app.exe" @{ MYINFRA_NO_BROWSER = "1" }
+          Try "app-fenetre" "dist/myinfra_windows_amd64_app.exe" @{}
+          Try "app-sans-masquage" "dist/myinfra_windows_amd64_app.exe" @{ MYINFRA_NO_BROWSER = "1"; MYINFRA_SHOW_CONSOLES = "1" }
+          icacls $env:RUNNER_TEMP
+          whoami /groups | Select-String -Pattern "Administrators|Mandatory"
       - name: Démarrage
         timeout-minutes: 8
         shell: pwsh

@@ -44,8 +44,11 @@ if (-not (Test-Path $link)) { Fail "Le raccourci du menu Démarrer manque." }
 Step "Ouverture depuis le menu Démarrer"
 Start-Process $link
 $up = $false
+$log = Join-Path $data "myinfra.log"
 foreach ($i in 1..120) {
   if (Health) { $up = $true; break }
+  # Stopped on an error, MyInfra shows it and waits: no need to wait more.
+  if ((Test-Path $log) -and (Select-String -Quiet -Path $log -Pattern "level=ERROR")) { break }
   Start-Sleep 1
 }
 if (-not $up) { Fail "MyInfra ne démarre pas depuis son raccourci." }
