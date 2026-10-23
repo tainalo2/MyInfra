@@ -3,7 +3,6 @@
 package proc
 
 import (
-	"os"
 	"os/exec"
 	"sync"
 	"syscall"
@@ -21,7 +20,7 @@ var noConsole = sync.OnceValue(func() bool {
 })
 
 func hide(cmd *exec.Cmd) {
-	if !noConsole() || os.Getenv("MYINFRA_SHOW_CONSOLES") == "1" {
+	if !noConsole() {
 		return
 	}
 	if cmd.SysProcAttr == nil {
