@@ -95,11 +95,15 @@ On a phone, the same application, laid out for the thumb:
 Download the file for your system from the [latest release](https://github.com/tainalo2/MyInfra/releases/latest), then run it:
 
 ```sh
-chmod +x myinfra_*_linux_amd64        # macOS: also xattr -d com.apple.quarantine <file>
+chmod +x myinfra_*_linux_amd64
 ./myinfra_*_linux_amd64
 ```
 
-It prints its address, for example `http://127.0.0.1:8080`, and opens it. On the first start it creates `~/.myinfra`, writes a master key there, and starts the PostgreSQL it carries. Choose a password, then follow the guided start: an SSH key, a provider token, a DNS account. Each step can be skipped. Further accounts, each with a role and an optional TOTP code, share the same servers and applications.
+On macOS, download `MyInfra_*_macos.zip`, move MyInfra to Applications and double-click it. It runs in the background and opens in the browser; double-click it again to get back to it, and stop it from Settings. Its log is `~/.myinfra/myinfra.log`. The app is not signed by Apple: on the first start, allow it in System Settings → Privacy & Security → Open Anyway.
+
+On Windows, double-click the `.exe`. A window shows the log; closing it stops MyInfra.
+
+The executable prints its address, for example `http://127.0.0.1:8080`, and opens it. On the first start it creates `~/.myinfra`, writes a master key there, and starts the PostgreSQL it carries. Choose a password, then follow the guided start: an SSH key, a provider token, a DNS account. Each step can be skipped. Further accounts, each with a role and an optional TOTP code, share the same servers and applications.
 
 ### Docker Compose
 

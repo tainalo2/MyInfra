@@ -290,6 +290,7 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("GET /api/updates", a.auth(a.listUpdates))
 	mux.HandleFunc("POST /api/updates/check", a.auth(a.checkUpdatesNow))
 	mux.HandleFunc("POST /api/updates/myinfra", a.deployAuth(a.steady(a.updateMyInfra)))
+	mux.HandleFunc("POST /api/myinfra/stop", a.adminAuth(a.stopMyInfra))
 	mux.HandleFunc("GET /api/applications/{id}/update/impact", a.auth(a.applicationUpdateImpact))
 	mux.HandleFunc("POST /api/applications/{id}/update", a.deployAuth(a.appSteady(a.updateApplication)))
 

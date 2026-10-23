@@ -1,0 +1,115 @@
+name: Test app macOS (temporaire)
+
+# Temporary: the macos job of the release, on a test branch. To be removed
+# with the branch.
+on:
+  push:
+    branches: [feat/macos-app]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Interface
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+      - name: Go
+        run: |
+          rm -rf internal/ui/dist
+          cp -a web/dist internal/ui/dist
+          test -z "$(gofmt -l cmd internal/boot internal/api/selfupdate.go internal/api/stop_test.go)"
+          for os in darwin linux windows; do GOOS=$os go vet ./cmd/... ./internal/api/... ./internal/boot/...; done
+          go test ./internal/api/ ./internal/boot/ ./internal/selfupdate/
+
+  binaries:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goarch: [amd64, arm64]
+    env:
+      VERSION: 0.0.0-mac
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: |
+          ./build darwin ${{ matrix.goarch }}
+          mv dist/myinfra_darwin_${{ matrix.goarch }} dist/myinfra_${VERSION}_darwin_${{ matrix.goarch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: myinfra-darwin-${{ matrix.goarch }}
+          path: dist/myinfra_*
+          if-no-files-found: error
+
+  macos:
+    needs: binaries
+    runs-on: macos-latest
+    env:
+      VERSION: 0.0.0-mac
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: myinfra-darwin-*
+          path: dist
+          merge-multiple: true
+      - name: Application
+        run: |
+          out="dist/MyInfra_${VERSION}_macos.zip"
+          deploy/macos/package.sh "$VERSION" "$out" "dist/myinfra_${VERSION}_darwin_arm64" "dist/myinfra_${VERSION}_darwin_amd64"
+          mkdir app && ditto -x -k "$out" app
+          lipo -archs app/MyInfra.app/Contents/MacOS/myinfra | grep -q arm64
+          lipo -archs app/MyInfra.app/Contents/MacOS/myinfra | grep -q x86_64
+          test "$(app/MyInfra.app/Contents/MacOS/myinfra --version)" = "$VERSION"
+          ls -lh "$out"
+      - name: Démarrage
+        timeout-minutes: 5
+        run: |
+          home="$RUNNER_TEMP/myinfra"
+          launch() {
+            open --env MYINFRA_HOME="$home" --env MYINFRA_NO_BROWSER=1 --env MYINFRA_ADDR=127.0.0.1:8080 app/MyInfra.app
+          }
+          fail() {
+            cat "$home/myinfra.log" "$home/pg.log" 2>/dev/null || true
+            echo "::error::$1"
+            exit 1
+          }
+          launch
+          for i in $(seq 1 120); do
+            curl -sf http://127.0.0.1:8080/api/health > /dev/null && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8080/api/health > /dev/null || fail "MyInfra.app ne démarre pas."
+          echo "Démarré en ${i}s, en arrière-plan."
+          launch
+          sleep 5
+          test "$(pgrep -f 'MyInfra.app/Contents/MacOS/myinfra' | wc -l | tr -d ' ')" = 1 || fail "Un second lancement a démarré une autre copie."
+          curl -sf http://127.0.0.1:8080/api/health > /dev/null || fail "Un second lancement a arrêté MyInfra."
+          pkill -TERM -f 'MyInfra.app/Contents/MacOS/myinfra'
+          for i in $(seq 1 30); do
+            [ -f "$home/pgdata/postmaster.pid" ] || break
+            sleep 1
+          done
+          [ ! -f "$home/pgdata/postmaster.pid" ] || fail "PostgreSQL tourne encore après l'arrêt."
+          cat "$home/myinfra.log"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: myinfra-macos-app
+          path: dist/MyInfra_*_macos.zip

@@ -1,10 +1,13 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRightLeft, Cloud, Container, Globe, HardDrive, KeyRound, ListTree, Settings, Shield, Users, Waypoints, type LucideIcon } from "lucide-react";
+import { ArrowRightLeft, Cloud, Container, Globe, HardDrive, KeyRound, ListTree, Power, Settings, Shield, Users, Waypoints, type LucideIcon } from "lucide-react";
+import { api } from "./api";
 import { text, type MsgKey } from "./i18n";
+import { Spinner } from "./kit";
 import { useI18n } from "./lang";
 import { useSession } from "./session";
-import { Icon, PageTitle, focus } from "./ui";
-import { VersionNote } from "./updates";
+import { Button, ErrorText, Icon, PageTitle, TextButton, focus } from "./ui";
+import { VersionNote, useUpdates } from "./updates";
 
 type Entry = { to: string; label: MsgKey; hint: MsgKey; icon: LucideIcon; adminOnly?: boolean; deployOnly?: boolean };
 
@@ -71,8 +74,56 @@ export function SettingsPage() {
             </section>
           );
         })}
+        {canAdmin ? <StopMyInfra /> : null}
         <VersionNote />
       </div>
     </>
+  );
+}
+
+// MyInfra.app on macOS runs without a window: this is how it stops.
+function StopMyInfra() {
+  const { view } = useUpdates();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [stopped, setStopped] = useState(false);
+  const [error, setError] = useState("");
+  if (!view?.version.stoppable) return null;
+
+  async function stop() {
+    setBusy(true);
+    setError("");
+    try {
+      await api("/api/myinfra/stop", { method: "POST" });
+      setStopped(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : text("common.error"));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="flex flex-col gap-3">
+      <p className="text-muted">{text(stopped ? "settings.stopped" : "settings.stopHint")}</p>
+      {error ? <ErrorText>{error}</ErrorText> : null}
+      {stopped ? null : confirming ? (
+        <div className="flex flex-wrap items-center gap-4">
+          <Button type="button" variant="danger" onClick={stop} disabled={busy}>
+            {busy ? <Spinner /> : <Icon icon={Power} />}
+            {text("settings.stopConfirm")}
+          </Button>
+          <TextButton type="button" onClick={() => setConfirming(false)} disabled={busy}>
+            {text("common.cancel")}
+          </TextButton>
+        </div>
+      ) : (
+        <div>
+          <Button type="button" variant="secondary" onClick={() => setConfirming(true)}>
+            <Icon icon={Power} />
+            {text("settings.stop")}
+          </Button>
+        </div>
+      )}
+    </section>
   );
 }

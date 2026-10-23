@@ -35,6 +35,9 @@ func main() {
 		return
 	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	if appStart() {
+		return
+	}
 	tools.PreparePath()
 	// Read before an update renames the running file: the new one takes this path.
 	exe, exeErr := os.Executable()
@@ -91,10 +94,7 @@ func serve() bool {
 	if inst, err := db.Installation(ctx); err == nil && inst.PublicURL != "" {
 		publicURL = inst.PublicURL
 	}
-	addr := os.Getenv("MYINFRA_ADDR")
-	if addr == "" {
-		addr = ":8080"
-	}
+	addr := listenAddr()
 	app := &api.API{
 		Store: db,
 		Box:   seal,
@@ -145,6 +145,10 @@ func serve() bool {
 		restarting.Store(true)
 		stop()
 	}
+	if backgroundApp() {
+		// No terminal to stop it from: the interface offers to.
+		app.Stop = stop
+	}
 	go func() {
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -188,6 +192,13 @@ func imageOf() string {
 	return strings.TrimSpace(os.Getenv("MYINFRA_IMAGE"))
 }
 
+func listenAddr() string {
+	if addr := os.Getenv("MYINFRA_ADDR"); addr != "" {
+		return addr
+	}
+	return ":8080"
+}
+
 func localURL(addr string) string {
 	if strings.HasPrefix(addr, ":") {
 		return "http://127.0.0.1" + addr
@@ -212,11 +223,17 @@ func masterKey() ([]byte, error) {
 	return key, nil
 }
 
-// fatal logs the error and ends the process. A window opened by a double
-// click stays until Enter, else it would close before the error is read.
+// fatal logs the error and ends the process. Opened by a double click, it
+// shows the error before going: the window would close, or there is none.
 func fatal(msg string, args ...any) {
 	slog.Error(msg, args...)
-	holdConsole()
+	text := msg
+	for _, arg := range args {
+		if err, ok := arg.(error); ok {
+			text += " : " + err.Error()
+		}
+	}
+	reportFatal(text)
 	os.Exit(1)
 }
 

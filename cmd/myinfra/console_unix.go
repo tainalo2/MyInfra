@@ -1,6 +1,6 @@
-//go:build !windows
+//go:build !windows && !darwin
 
 package main
 
-// holdConsole does nothing: a terminal outlives the process it started.
-func holdConsole() {}
+// reportFatal does nothing: a terminal outlives the process it started.
+func reportFatal(string) {}

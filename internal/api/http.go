@@ -31,7 +31,9 @@ type API struct {
 	// Local is true for the executable with its own PostgreSQL.
 	Local bool
 	// Restart stops the server and starts the executable again, after an update.
-	Restart   func()
+	Restart func()
+	// Stop ends MyInfra.app on macOS, which runs without a window to close.
+	Stop      func()
 	Master    []byte
 	Bootstrap string
 	Replica   bool
