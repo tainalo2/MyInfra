@@ -7,7 +7,7 @@ import { api, type Catalog, type Cost, type DeployStep, type Destruction, type P
 import { CancelDeployment } from "./deployments";
 import { UsageMeters } from "./meters";
 import { hourlyRate, money, podCpu, size, usageText } from "./measure";
-import { ProviderLogo } from "./logos";
+import { HostingFields, HostingMark, ServerHosting, emptyHosting, hostingLabel } from "./hosting";
 import { OfferFields, OfferStorage, cheapestOffer, chosenStorage, formatPrice, memory } from "./offers";
 import { knownPlaces, placeLabel, placeOf } from "./places";
 import { ProviderSelect } from "./provider-select";
@@ -69,6 +69,7 @@ export function ServerForm({ clusterId }: { clusterId: string }) {
   const [planes, setPlanes] = useState(0);
   const alone = clusterId === "";
   const [keyIds, setKeyIds] = useState<string[]>([""]);
+  const [hosting, setHosting] = useState(emptyHosting);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [keySheet, setKeySheet] = useState(false);
@@ -194,6 +195,7 @@ export function ServerForm({ clusterId }: { clusterId: string }) {
           period,
           storageId: storage.id,
           storageGb: storage.gb,
+          hosting: providerId === "manual" ? hosting : undefined,
         }),
       });
       navigate(`/serveurs/${created.id}`);
@@ -278,7 +280,13 @@ export function ServerForm({ clusterId }: { clusterId: string }) {
               ),
             },
             ...(providerId === "manual"
-              ? []
+              ? [
+                  {
+                    title: text("steps.machine"),
+                    ready: hosting.provider !== "other" || Boolean(hosting.name?.trim()),
+                    content: <HostingFields value={hosting} onChange={setHosting} />,
+                  },
+                ]
               : [
                   {
                     title: text("steps.machine"),
@@ -534,8 +542,8 @@ export function ServerCard({
       </div>
       {update ? <p className="-mt-1 mb-3"><UpdateBadge item={update} /></p> : null}
       <p className="mb-3 flex items-center gap-2 text-muted">
-        {server.provider ? <ProviderLogo id={server.provider} /> : <Icon icon={ServerIcon} />}
-        {server.providerName || text("server.manual")}
+        <HostingMark server={server} />
+        {hostingLabel(server)}
       </p>
       {server.address ? <p className="mb-3 text-muted">{server.address}</p> : null}
       {usageLoading ? (
@@ -625,8 +633,8 @@ export function ServerPage() {
     [text("server.status"), <StatusBadge status={serverState(server)} />],
     [text("server.provider"), (
       <span className="inline-flex items-center gap-2">
-        {server.provider ? <ProviderLogo id={server.provider} /> : <Icon icon={ServerIcon} />}
-        {server.providerName || text("server.manual")}
+        <HostingMark server={server} />
+        {hostingLabel(server)}
       </span>
     )],
     ...(server.clusterName ? [[text("server.cluster"), `${server.clusterName}${server.controlPlane ? ` · ${text("server.controlPlaneShort")}` : ""}`] as [string, ReactNode]] : []),
@@ -674,6 +682,7 @@ export function ServerPage() {
               ))}
             </Select>
           </Field>
+          <ServerHosting server={server} onSaved={setServer} />
         </div>
       ) : null}
       <ReachNotice server={server} onChecked={setServer} onRemove={() => setConfirm(true)} />
@@ -863,7 +872,7 @@ function ReachNotice({ server, onChecked, onRemove }: { server: Server; onChecke
   const [error, setError] = useState("");
   if (!server.reach) return null;
   const gone = server.reach === "gone";
-  const provider = server.providerName || text("server.manual");
+  const provider = hostingLabel(server);
 
   async function check() {
     setChecking(true);

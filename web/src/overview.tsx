@@ -5,7 +5,8 @@ import { api, peek, type Application, type Overview as OverviewData, type Overvi
 import { AppLogo } from "./app-logo";
 import { text } from "./i18n";
 import { useI18n } from "./lang";
-import { hourlyRate, money } from "./measure";
+import { hourlyRate, money, rateCurrency } from "./measure";
+import { hostingLabel } from "./hosting";
 import { UsageMeters } from "./meters";
 import { placeOf } from "./places";
 import { Button, ErrorText, Field, HealthDot, Icon, IconButton, LoadingLines, Select, TextButton, focus, liveServer, podFailed, podHealth, serverState, statusLabel, useDeployments, useDestructions } from "./ui";
@@ -598,7 +599,7 @@ function unit(currency?: string) {
 function rate(server: OverviewServer) {
   const hourly = hourlyRate(server);
   if (!hourly) return "";
-  return text("overview.perHour", { amount: `${money(hourly)} ${unit(server.plan?.currency)}` });
+  return text("overview.perHour", { amount: `${money(hourly)} ${unit(rateCurrency(server))}` });
 }
 
 function Figures({ model, loading }: { model: Model; loading: boolean }) {
@@ -611,9 +612,9 @@ function Figures({ model, loading }: { model: Model; loading: boolean }) {
   for (const server of model.servers) {
     const hourly = hourlyRate(server);
     if (!hourly) continue;
-    const currency = unit(server.plan?.currency);
+    const currency = unit(rateCurrency(server));
     totals.set(currency, (totals.get(currency) ?? 0) + hourly);
-    const name = `${server.providerName || server.provider || "?"} (${currency})`;
+    const name = `${hostingLabel(server)} (${currency})`;
     providers.set(name, (providers.get(name) ?? 0) + hourly);
   }
   const cost = [...totals.entries()];
@@ -966,7 +967,7 @@ function ServerCard({ server, model, select, onOpen }: { server: OverviewServer;
   const status = statusLabel(serverState(server));
   const apps = model.apps.filter((app) => model.hostsOf(app).has(server.id));
   const pods = model.podsOfServer.get(server.id) ?? [];
-  const facts = [server.providerName || server.provider, siteOf(server) || server.plan?.location, server.plan?.name, server.clusterName || text("server.alone"), rate(server)].filter(Boolean);
+  const facts = [hostingLabel(server), siteOf(server) || server.plan?.location, server.plan?.name, server.clusterName || text("server.alone"), rate(server)].filter(Boolean);
   return (
     <>
       <CardTitle title={server.name} note={status.text} tone={status.tone} />

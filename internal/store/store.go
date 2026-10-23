@@ -1060,6 +1060,21 @@ func (s *Store) SetServerPlace(ctx context.Context, ownerID, id, place string) e
 	return nil
 }
 
+// SetServerHosting records who rents a machine added by hand and its price.
+func (s *Store) SetServerHosting(ctx context.Context, ownerID, id string, hosting []byte) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE servers
+		SET plan = jsonb_set(CASE WHEN jsonb_typeof(plan) = 'object' THEN plan ELSE '{}'::jsonb END, '{hosting}', $3::jsonb, true)
+		WHERE id = $1 AND owner_id = $2 AND provider_id = ''`, id, ownerID, string(hosting))
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // SetJoinAddress replaces the address announced by the machine itself.
 func (s *Store) SetJoinAddress(ctx context.Context, token, address string) error {
 	tag, err := s.pool.Exec(ctx, `UPDATE servers SET address = $2 WHERE join_token = $1`, token, address)

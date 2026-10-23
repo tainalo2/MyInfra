@@ -181,6 +181,17 @@ export type Server = {
   providerCheckedAt?: string;
   providerError?: string;
   place?: string;
+  // hosting is who rents a machine added by hand, and its price.
+  hosting?: Hosting;
+};
+
+export type Hosting = {
+  // provider is a known provider ("hetzner", "ovh"...) or "other", then named by name.
+  provider?: string;
+  name?: string;
+  price?: string;
+  period?: string;
+  currency?: string;
 };
 
 export type Cost = {
