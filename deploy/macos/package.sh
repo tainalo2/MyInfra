@@ -47,7 +47,6 @@ mv "$app" "$stage/MyInfra.app"
 ln -s /Applications "$stage/Applications"
 # One picture for each kind of screen, as the Finder wants it.
 tiffutil -cathidpicheck "$here/dmg/background.png" "$here/dmg/background@2x.png" -out "$stage/.background/background.tiff" > /dev/null
-cp "$stage/MyInfra.app/Contents/Resources/MyInfra.icns" "$stage/.VolumeIcon.icns"
 
 # The Finder writes the layout of the window into the mounted image. Another
 # volume of the same name would take it.
@@ -59,14 +58,16 @@ rw="$work/rw.dmg"
 size=$(( $(du -sm "$stage" | cut -f1) + 20 ))
 hdiutil create -quiet -srcfolder "$stage" -volname "$name" -fs HFS+ -format UDRW -size "${size}m" "$rw"
 dev=$(hdiutil attach -readwrite -noverify -noautoopen "$rw" | awk '/Apple_HFS/ {print $1}')
-if command -v SetFile > /dev/null; then
-  SetFile -a C "/Volumes/$name"
-fi
 osascript "$here/dmg/layout.applescript" "$name"
 for i in $(seq 1 20); do
   [ -f "/Volumes/$name/.DS_Store" ] && break
   sleep 1
 done
+# The icon of the volume, once the Finder is done: it drops the file.
+cp "/Volumes/$name/MyInfra.app/Contents/Resources/MyInfra.icns" "/Volumes/$name/.VolumeIcon.icns"
+if command -v SetFile > /dev/null; then
+  SetFile -a C "/Volumes/$name"
+fi
 sync
 hdiutil detach -quiet "$dev" || { sleep 3; hdiutil detach -force -quiet "$dev"; }
 

@@ -23,7 +23,7 @@ import (
 )
 
 // Opened from the Finder, MyInfra.app sits in the Dock while it runs: a click
-// on its icon opens the browser, Quit stops it with its PostgreSQL. AppKit
+// on its icon opens its window, Quit stops it with its PostgreSQL. AppKit
 // wants the main thread, MyInfra serves from another one.
 
 func init() {
@@ -57,11 +57,9 @@ func appRun(run func()) bool {
 	if !inApp() {
 		return false
 	}
-	for _, arg := range os.Args[1:] {
-		if arg == "--no-browser" {
-			os.Setenv("MYINFRA_NO_BROWSER", "1")
-		}
-	}
+	// The window takes the place of the browser.
+	show := os.Getenv("MYINFRA_NO_BROWSER") != "1"
+	os.Setenv("MYINFRA_NO_BROWSER", "1")
 	home, err := boot.Home()
 	if err != nil {
 		alert("MyInfra ne démarre pas", err.Error())
@@ -72,16 +70,20 @@ func appRun(run func()) bool {
 		alert("MyInfra ne démarre pas", err.Error())
 		return true
 	}
+	if err := loadWebKit(); err != nil {
+		alert("MyInfra ne démarre pas", err.Error())
+		return true
+	}
 	nsApp := objc.ID(objc.GetClass("NSApplication")).Send(objc.RegisterName("sharedApplication"))
 	nsApp.Send(objc.RegisterName("setActivationPolicy:"), 0) // NSApplicationActivationPolicyRegular
-	delegate, err := appDelegate()
+	delegate, err = appDelegate()
 	if err != nil {
 		alert("MyInfra ne démarre pas", err.Error())
 		return true
 	}
 	nsApp.Send(objc.RegisterName("setDelegate:"), delegate)
 	nsApp.Send(objc.RegisterName("setMainMenu:"), mainMenu(delegate))
-	dockMenu = newMenu(menuItem("Ouvrir MyInfra", "openMyInfra:", "", delegate))
+	dockMenu = newMenu("", menuItem("Ouvrir dans le navigateur", "openInBrowser:", "", delegate))
 
 	if offerMove(nsApp, home) {
 		return true
@@ -96,17 +98,20 @@ func appRun(run func()) bool {
 		run()
 		os.Exit(0)
 	}()
+	if show {
+		showWindow()
+	}
 	nsApp.Send(objc.RegisterName("run"))
 	return true
 }
 
 func appDelegate() (objc.ID, error) {
-	class, err := objc.RegisterClass("MyInfraDelegate", objc.GetClass("NSObject"), nil, nil, []objc.MethodDef{
+	class, err := objc.RegisterClass("MyInfraDelegate", objc.GetClass("NSObject"), nil, nil, append([]objc.MethodDef{
 		{
 			// A click on the Dock icon, or a new double click.
 			Cmd: objc.RegisterName("applicationShouldHandleReopen:hasVisibleWindows:"),
 			Fn: func(_ objc.ID, _ objc.SEL, _ objc.ID, _ bool) bool {
-				go openMyInfra()
+				showWindow()
 				return false
 			},
 		},
@@ -124,32 +129,58 @@ func appDelegate() (objc.ID, error) {
 			},
 		},
 		{
-			Cmd: objc.RegisterName("openMyInfra:"),
+			Cmd: objc.RegisterName("openInBrowser:"),
 			Fn: func(_ objc.ID, _ objc.SEL, _ objc.ID) {
 				go openMyInfra()
 			},
 		},
-	})
+	}, windowMethods()...))
 	if err != nil {
 		return 0, err
 	}
 	return objc.ID(class).Send(objc.RegisterName("new")), nil
 }
 
-// mainMenu is the menu of the app once it is in front, for ⌘Q.
+// mainMenu is the menu bar of the app: ⌘Q, and ⌘C or ⌘V in the window.
 func mainMenu(delegate objc.ID) objc.ID {
-	appMenu := newMenu(
-		menuItem("Ouvrir MyInfra", "openMyInfra:", "o", delegate),
-		objc.ID(objc.GetClass("NSMenuItem")).Send(objc.RegisterName("separatorItem")),
-		menuItem("Quitter MyInfra", "terminate:", "q", 0),
+	separator := func() objc.ID {
+		return objc.ID(objc.GetClass("NSMenuItem")).Send(objc.RegisterName("separatorItem"))
+	}
+	return newMenu("",
+		submenu("MyInfra",
+			menuItem("Ouvrir dans le navigateur", "openInBrowser:", "", delegate),
+			separator(),
+			menuItem("Masquer MyInfra", "hide:", "h", 0),
+			menuItem("Quitter MyInfra", "terminate:", "q", 0),
+		),
+		submenu("Édition",
+			menuItem("Annuler", "undo:", "z", 0),
+			menuItem("Rétablir", "redo:", "Z", 0),
+			separator(),
+			menuItem("Couper", "cut:", "x", 0),
+			menuItem("Copier", "copy:", "c", 0),
+			menuItem("Coller", "paste:", "v", 0),
+			menuItem("Tout sélectionner", "selectAll:", "a", 0),
+		),
+		submenu("Présentation",
+			menuItem("Recharger", "reload:", "r", 0),
+		),
+		submenu("Fenêtre",
+			menuItem("Réduire", "performMiniaturize:", "m", 0),
+			menuItem("Fermer", "performClose:", "w", 0),
+		),
 	)
-	root := objc.ID(objc.GetClass("NSMenuItem")).Send(objc.RegisterName("new"))
-	root.Send(objc.RegisterName("setSubmenu:"), appMenu)
-	return newMenu(root)
 }
 
-func newMenu(items ...objc.ID) objc.ID {
-	menu := objc.ID(objc.GetClass("NSMenu")).Send(objc.RegisterName("new"))
+func submenu(title string, items ...objc.ID) objc.ID {
+	root := objc.ID(objc.GetClass("NSMenuItem")).Send(objc.RegisterName("new"))
+	root.Send(objc.RegisterName("setSubmenu:"), newMenu(title, items...))
+	return root
+}
+
+func newMenu(title string, items ...objc.ID) objc.ID {
+	menu := objc.ID(objc.GetClass("NSMenu")).Send(objc.RegisterName("alloc")).
+		Send(objc.RegisterName("initWithTitle:"), nsString(title))
 	for _, item := range items {
 		menu.Send(objc.RegisterName("addItem:"), item)
 	}
@@ -167,7 +198,6 @@ func menuItem(title, action, key string, target objc.ID) objc.ID {
 }
 
 // openMyInfra opens the browser if MyInfra answers, and says whether it did.
-// Still starting, MyInfra opens the browser itself.
 func openMyInfra() bool {
 	url := localURL(listenAddr())
 	client := http.Client{Timeout: 2 * time.Second}
@@ -286,7 +316,7 @@ func restartApp() error {
 	if !ok {
 		return os.ErrNotExist
 	}
-	return relaunchApp(bundle, "--args", "--no-browser")
+	return relaunchApp(bundle)
 }
 
 func bundlePath() (string, bool) {
