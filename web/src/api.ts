@@ -484,6 +484,7 @@ export type VersionView = {
   reason?: string;
   updating?: string;
   image?: string;
+  stoppable: boolean;
 };
 
 export type UpdatesView = {

@@ -290,6 +290,7 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("GET /api/updates", a.auth(a.listUpdates))
 	mux.HandleFunc("POST /api/updates/check", a.auth(a.checkUpdatesNow))
 	mux.HandleFunc("POST /api/updates/myinfra", a.deployAuth(a.steady(a.updateMyInfra)))
+	mux.HandleFunc("POST /api/myinfra/stop", a.adminAuth(a.stopMyInfra))
 	mux.HandleFunc("GET /api/applications/{id}/update/impact", a.auth(a.applicationUpdateImpact))
 	mux.HandleFunc("POST /api/applications/{id}/update", a.deployAuth(a.appSteady(a.updateApplication)))
 
@@ -332,6 +333,14 @@ func (a *API) routes() http.Handler {
 		func(address, key string) error { return a.Store.SaveSSHHostKey(context.Background(), address, key) },
 	)
 	dist, err := fs.Sub(ui.Dist, "dist")
+	if err == nil {
+		if _, err = fs.Stat(dist, "index.html"); err != nil {
+			// Built by go build alone: ./build puts the interface in.
+			mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+				http.Error(w, "Interface absente de cet exécutable : construisez-le avec ./build.", http.StatusServiceUnavailable)
+			})
+		}
+	}
 	if err == nil {
 		files := http.FileServer(http.FS(dist))
 		mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {

@@ -218,6 +218,72 @@ jobs:
           echo "::error::L'exécutable Windows ne démarre pas avec son PostgreSQL."
           exit 1
 
+  # MyInfra.app : un double-clic dans le Finder démarre MyInfra en arrière-plan.
+  # Elle s'assemble et se signe sur un Mac, puis s'ouvre comme depuis le Finder.
+  macos:
+    needs: [version, binaries]
+    runs-on: macos-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: myinfra-darwin-*
+          path: dist
+          merge-multiple: true
+      - name: Application
+        run: |
+          out="dist/MyInfra_${VERSION}_macos.dmg"
+          deploy/macos/package.sh "$VERSION" "$out" "dist/myinfra_${VERSION}_darwin_arm64" "dist/myinfra_${VERSION}_darwin_amd64"
+          # The app is tested as it is installed: dragged out of the image.
+          hdiutil attach -nobrowse -readonly -mountpoint "$RUNNER_TEMP/dmg" "$out"
+          test -L "$RUNNER_TEMP/dmg/Applications"
+          mkdir app && ditto "$RUNNER_TEMP/dmg/MyInfra.app" app/MyInfra.app
+          hdiutil detach "$RUNNER_TEMP/dmg"
+          lipo -archs app/MyInfra.app/Contents/MacOS/myinfra | grep -q arm64
+          lipo -archs app/MyInfra.app/Contents/MacOS/myinfra | grep -q x86_64
+          test "$(app/MyInfra.app/Contents/MacOS/myinfra --version)" = "$VERSION"
+          ls -lh "$out"
+      - name: Démarrage
+        timeout-minutes: 5
+        run: |
+          home="$RUNNER_TEMP/myinfra"
+          # Sans quoi l'app propose d'abord de passer dans Applications.
+          mkdir -p "$home" && touch "$home/no-move"
+          launch() {
+            open --env MYINFRA_HOME="$home" --env MYINFRA_NO_BROWSER=1 --env MYINFRA_ADDR=127.0.0.1:8080 app/MyInfra.app
+          }
+          fail() {
+            cat "$home/myinfra.log" "$home/pg.log" 2>/dev/null || true
+            echo "::error::$1"
+            exit 1
+          }
+          launch
+          for i in $(seq 1 120); do
+            curl -sf http://127.0.0.1:8080/api/health > /dev/null && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8080/api/health > /dev/null || fail "MyInfra.app ne démarre pas."
+          echo "Démarré en ${i}s, en arrière-plan."
+          # Un second double-clic rouvre le navigateur sans seconde copie.
+          launch
+          sleep 5
+          test "$(pgrep -f 'MyInfra.app/Contents/MacOS/myinfra' | wc -l | tr -d ' ')" = 1 || fail "Un second lancement a démarré une autre copie."
+          curl -sf http://127.0.0.1:8080/api/health > /dev/null || fail "Un second lancement a arrêté MyInfra."
+          # Quitter, comme depuis le Dock, emporte PostgreSQL.
+          osascript -e 'tell application id "io.github.tainalo2.myinfra" to quit'
+          for i in $(seq 1 30); do
+            [ -f "$home/pgdata/postmaster.pid" ] || break
+            sleep 1
+          done
+          [ ! -f "$home/pgdata/postmaster.pid" ] || fail "PostgreSQL tourne encore après l'arrêt."
+      - uses: actions/upload-artifact@v4
+        with:
+          name: myinfra-macos-app
+          path: dist/MyInfra_${{ needs.version.outputs.version }}_macos.dmg
+          if-no-files-found: error
+
   image:
     needs: [version, check]
     runs-on: ubuntu-latest
@@ -256,7 +322,7 @@ jobs:
           test "$(docker run --rm "${{ needs.version.outputs.image }}" --version)" = "${{ needs.version.outputs.version }}"
 
   release:
-    needs: [version, binaries, windows, image]
+    needs: [version, binaries, windows, macos, image]
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -280,7 +346,7 @@ jobs:
           pg=$(sed -n 's/^PG_VERSION=\([0-9]*\)\..*/\1/p' build)
           test -n "$pg"
           printf '{"version":"%s","postgres":"%s"}\n' "$VERSION" "$pg" > dist/release.json
-          cd dist && sha256sum myinfra_* compose.yaml release.json > SHA256SUMS && cat SHA256SUMS
+          cd dist && sha256sum myinfra_* MyInfra_* compose.yaml release.json > SHA256SUMS && cat SHA256SUMS
       - name: Notes
         run: |
           cat > notes.md <<EOF
@@ -292,12 +358,12 @@ jobs:
           | --- | --- |
           | Linux x86-64 | \`myinfra_${VERSION}_linux_amd64\` |
           | Linux ARM64 | \`myinfra_${VERSION}_linux_arm64\` |
-          | macOS Intel | \`myinfra_${VERSION}_darwin_amd64\` |
-          | macOS Apple Silicon | \`myinfra_${VERSION}_darwin_arm64\` |
+          | macOS, Intel et Apple Silicon | \`MyInfra_${VERSION}_macos.dmg\` : l'app MyInfra |
           | Windows x86-64 | \`myinfra_${VERSION}_windows_amd64.exe\` |
           | Windows ARM64 | \`myinfra_${VERSION}_windows_arm64.exe\` (sans PostgreSQL embarqué : indiquez \`DATABASE_URL\`) |
 
-          Sur Linux et macOS : \`chmod +x\` sur le fichier. Sur macOS, l'exécutable n'est pas signé : \`xattr -d com.apple.quarantine\` sur le fichier avant le premier lancement.
+          Sur Linux : \`chmod +x\` sur le fichier.
+          Sur macOS : ouvrez le .dmg et glissez MyInfra dans Applications, puis ouvrez-le : il s'ouvre dans le navigateur. Son icône reste dans le Dock tant qu'il tourne : un clic le rouvre, Quitter l'arrête. L'app n'est pas signée par Apple : au premier lancement, Réglages Système → Confidentialité et sécurité → « Ouvrir quand même ». Les exécutables \`myinfra_${VERSION}_darwin_*\` restent publiés pour le terminal et les mises à jour.
           Sur Windows, l'exécutable n'est pas signé non plus : si SmartScreen l'arrête, « Informations complémentaires » puis « Exécuter quand même ». Le premier démarrage prépare PostgreSQL et prend quelques secondes.
           \`SHA256SUMS\` permet de vérifier les téléchargements : \`sha256sum -c SHA256SUMS --ignore-missing\`.
 

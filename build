@@ -20,6 +20,8 @@ fi
 (cd web && npm run build)
 rm -rf internal/ui/dist
 cp -a web/dist internal/ui/dist
+# The only file of the folder git keeps, for a go build without the interface.
+: > internal/ui/dist/.keep
 mkdir -p dist
 
 # The PostgreSQL packed into the executable. An update refuses another major

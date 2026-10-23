@@ -80,6 +80,7 @@ type versionView struct {
 	Reason    string `json:"reason,omitempty"`
 	Updating  string `json:"updating,omitempty"`
 	Image     string `json:"image,omitempty"`
+	Stoppable bool   `json:"stoppable"`
 }
 
 func (a *API) versionView() versionView {
@@ -88,7 +89,7 @@ func (a *API) versionView() versionView {
 	releaseMu.Lock()
 	rel, busy := latest, updating
 	releaseMu.Unlock()
-	view := versionView{Current: a.Version, Method: a.updateMethod(ctx), Updating: busy}
+	view := versionView{Current: a.Version, Method: a.updateMethod(ctx), Updating: busy, Stoppable: a.Stop != nil}
 	if rel.Version != "" {
 		view.Latest, view.URL = rel.Version, rel.URL
 	}
@@ -113,8 +114,31 @@ func (a *API) canUpdate(view versionView, rel selfupdate.Release) (bool, string)
 		return false, "MyInfra a été lancé à la main : mettez à jour l'image de son fichier compose."
 	case view.Method != "local" && a.Image == "":
 		return false, "L'image de cette copie est inconnue."
+	case view.Method == "local" && translocated():
+		return false, "Déplacez MyInfra dans le dossier Applications pour le mettre à jour."
 	}
 	return true, ""
+}
+
+// translocated says whether macOS runs MyInfra.app from a read-only copy:
+// it does so for an app opened where it was downloaded.
+func translocated() bool {
+	exe, err := os.Executable()
+	return err == nil && strings.Contains(exe, "/AppTranslocation/")
+}
+
+// stopMyInfra ends this copy and its PostgreSQL.
+func (a *API) stopMyInfra(w http.ResponseWriter, r *http.Request) {
+	if a.Stop == nil {
+		writeError(w, http.StatusConflict, "Cette copie de MyInfra s'arrête depuis son terminal.")
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "stopping"})
+	// The answer leaves before the server closes.
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		a.Stop()
+	}()
 }
 
 func (a *API) getVersion(w http.ResponseWriter, r *http.Request) {
