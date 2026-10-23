@@ -62,7 +62,7 @@ jobs:
         timeout-minutes: 10
         shell: pwsh
         run: |
-          function Try($name, $exe, [hashtable] $extra) {
+          function Attempt($name, $exe, [hashtable] $extra) {
             $data = Join-Path $env:RUNNER_TEMP "diag-$name"
             $env:MYINFRA_HOME = $data
             $env:MYINFRA_ADDR = "127.0.0.1:8090"
@@ -80,10 +80,10 @@ jobs:
             foreach ($k in $extra.Keys) { Remove-Item "env:$k" -ErrorAction SilentlyContinue }
             Start-Sleep 3
           }
-          Try "console" "dist/myinfra_windows_amd64.exe" @{ MYINFRA_NO_BROWSER = "1" }
-          Try "app-sans-fenetre" "dist/myinfra_windows_amd64_app.exe" @{ MYINFRA_NO_BROWSER = "1" }
-          Try "app-fenetre" "dist/myinfra_windows_amd64_app.exe" @{}
-          Try "app-sans-masquage" "dist/myinfra_windows_amd64_app.exe" @{ MYINFRA_NO_BROWSER = "1"; MYINFRA_SHOW_CONSOLES = "1" }
+          Attempt "console" "dist/myinfra_windows_amd64.exe" @{ MYINFRA_NO_BROWSER = "1" }
+          Attempt "app-sans-fenetre" "dist/myinfra_windows_amd64_app.exe" @{ MYINFRA_NO_BROWSER = "1" }
+          Attempt "app-fenetre" "dist/myinfra_windows_amd64_app.exe" @{}
+          Attempt "app-sans-masquage" "dist/myinfra_windows_amd64_app.exe" @{ MYINFRA_NO_BROWSER = "1"; MYINFRA_SHOW_CONSOLES = "1" }
           icacls $env:RUNNER_TEMP
           whoami /groups | Select-String -Pattern "Administrators|Mandatory"
       - name: Démarrage
