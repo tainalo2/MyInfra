@@ -129,6 +129,10 @@ jobs:
           # L'app Windows, sans console, que pose l'installeur.
           - { goos: windows, goarch: amd64, ext: .exe, target: windows-app, suffix: _app }
           - { goos: windows, goarch: arm64, ext: .exe, target: windows-app, suffix: _app, external: true }
+          # L'app Linux des paquets : sa fenêtre la lie à la bibliothèque C,
+          # l'exécutable seul reste statique.
+          - { goos: linux, goarch: amd64, target: linux-app, suffix: _app }
+          - { goos: linux, goarch: arm64, target: linux-app, suffix: _app }
     env:
       VERSION: ${{ needs.version.outputs.version }}
       IMAGE: ${{ needs.version.outputs.image }}
@@ -158,9 +162,13 @@ jobs:
             # L'archive embarquée doit contenir PostgreSQL, pas seulement exister.
             tar -tzf internal/boot/postgres.tar.gz | grep -Eq '(^|/)bin/postgres(\.exe)?$' || { echo "::error::Archive PostgreSQL vide pour $out"; exit 1; }
           fi
+          # L'exécutable Linux seul tourne sur toute distribution, Alpine comprise.
+          if [ "${{ matrix.goos }}" = linux ] && [ -z "${{ matrix.suffix }}" ]; then
+            file "$out" | grep -q "statically linked" || { echo "::error::$out n'est pas statique"; exit 1; }
+          fi
           ls -lh "$out"
       - name: Démarrage
-        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64' && !matrix.suffix
         run: |
           out="dist/myinfra_${VERSION}_linux_amd64"
           test "$("./$out" --version)" = "$VERSION"
@@ -312,47 +320,9 @@ jobs:
           }
           Get-ChildItem out
       - name: Démarrage
-        timeout-minutes: 5
+        timeout-minutes: 8
         shell: pwsh
-        run: |
-          $home_ = Join-Path $env:RUNNER_TEMP "myinfra"
-          $env:MYINFRA_HOME = $home_
-          $env:MYINFRA_ADDR = "127.0.0.1:8080"
-          $setup = "out/MyInfra_${env:VERSION}_windows_amd64_setup.exe"
-          Start-Process -Wait $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"
-          $exe = Join-Path $env:LOCALAPPDATA "Programs\MyInfra\MyInfra.exe"
-          if (-not (Test-Path $exe)) { throw "MyInfra.exe n'est pas installé." }
-          $link = Join-Path ([Environment]::GetFolderPath("Programs")) "MyInfra.lnk"
-          if (-not (Test-Path $link)) { throw "Le raccourci du menu Démarrer manque." }
-          function Fail($text) {
-            Get-Content (Join-Path $home_ "myinfra.log"), (Join-Path $home_ "pg.log") -ErrorAction SilentlyContinue
-            throw $text
-          }
-          Start-Process $link
-          $up = $false
-          foreach ($i in 1..120) {
-            try { Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8080/api/health | Out-Null; $up = $true; break } catch { Start-Sleep 1 }
-          }
-          if (-not $up) { Fail "MyInfra ne démarre pas depuis son raccourci." }
-          # La fenêtre est celle de l'app : pas de console, un titre MyInfra.
-          $app = $null
-          foreach ($i in 1..30) {
-            $app = Get-Process MyInfra -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -eq "MyInfra" } | Select-Object -First 1
-            if ($app) { break }
-            Start-Sleep 1
-          }
-          if (-not $app) { Fail "La fenêtre MyInfra n'apparaît pas." }
-          # Fermer la fenêtre arrête MyInfra et son PostgreSQL.
-          $app.CloseMainWindow() | Out-Null
-          foreach ($i in 1..30) {
-            if (-not (Test-Path (Join-Path $home_ "pgdata/postmaster.pid")) -and -not (Get-Process MyInfra -ErrorAction SilentlyContinue)) { break }
-            Start-Sleep 1
-          }
-          if (Test-Path (Join-Path $home_ "pgdata/postmaster.pid")) { Fail "PostgreSQL tourne encore après la fermeture de la fenêtre." }
-          if (Get-Process MyInfra -ErrorAction SilentlyContinue) { Fail "MyInfra tourne encore après la fermeture de la fenêtre." }
-          $uninstall = Join-Path $env:LOCALAPPDATA "Programs\MyInfra\unins000.exe"
-          Start-Process -Wait $uninstall -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"
-          if (Test-Path $exe) { throw "La désinstallation laisse MyInfra.exe." }
+        run: deploy/windows/check.ps1 "out/MyInfra_${env:VERSION}_windows_amd64_setup.exe"
       - uses: actions/upload-artifact@v4
         with:
           name: myinfra-windows-setup
@@ -373,7 +343,7 @@ jobs:
           go-version-file: go.mod
       - uses: actions/download-artifact@v4
         with:
-          pattern: myinfra-linux-*
+          pattern: myinfra-linux-*_app
           path: dist
           merge-multiple: true
       - name: Paquets
@@ -381,7 +351,7 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y -q imagemagick
           for arch in amd64 arm64; do
-            deploy/linux/package.sh "$VERSION" "$arch" "dist/myinfra_${VERSION}_linux_${arch}" out
+            deploy/linux/package.sh "$VERSION" "$arch" "dist/myinfra_${VERSION}_linux_${arch}_app" out
           done
           test "$(./out/myinfra_${VERSION}_linux_amd64.AppImage --appimage-extract-and-run --version)" = "$VERSION"
       - name: Démarrage

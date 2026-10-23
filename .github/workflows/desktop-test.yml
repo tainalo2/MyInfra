@@ -1,0 +1,60 @@
+name: Test temporaire des apps Windows et Linux
+
+# À retirer avant la fusion : essaie l'installeur Windows et l'exécutable
+# Linux statique à chaque push de la branche, sans publier de préversion.
+
+on:
+  push:
+    branches: [feat/desktop-app]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      VERSION: 0.0.1-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Exécutables
+        run: |
+          ./build windows-app amd64
+          ./build linux amd64
+          file dist/myinfra_linux_amd64 | grep -q "statically linked"
+          # Comme dans l'image, et sur Alpine.
+          for img in alpine:3.20 debian:12-slim; do
+            test "$(docker run --rm -v "$PWD/dist:/d" "$img" /d/myinfra_linux_amd64 --version)" = "$VERSION"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app
+          path: dist/myinfra_windows_amd64_app.exe
+
+  windows:
+    needs: build
+    runs-on: windows-latest
+    env:
+      VERSION: 0.0.1-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: app
+          path: dist
+      - name: Installeur
+        shell: pwsh
+        run: |
+          if (-not (Get-Command iscc.exe -ErrorAction SilentlyContinue) -and -not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup -y --no-progress
+          }
+          deploy/windows/package.ps1 $env:VERSION amd64 dist/myinfra_windows_amd64_app.exe out
+      - name: Démarrage
+        timeout-minutes: 8
+        shell: pwsh
+        run: deploy/windows/check.ps1 "out/MyInfra_${env:VERSION}_windows_amd64_setup.exe"

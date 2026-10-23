@@ -61,18 +61,21 @@ function Write-WinRes($goarch) {
 }
 
 # $app builds the Windows app: no console, and it shows its own window.
-function Build-One($goos, $goarch, $out, $app = "") {
+# $appTags builds the Linux app: its window links it to the C library.
+function Build-One($goos, $goarch, $out, $app = "", $appTags = @()) {
   $env:CGO_ENABLED = "0"
   $env:GOOS = $goos
   $env:GOARCH = $goarch
   $tags = @()
   if (Get-Postgres $goos $goarch) {
-    $tags = @("-tags", "postgresembed")
+    $tags = @("postgresembed")
   } elseif ("$goos-$goarch" -ne "windows-arm64") {
     Write-Error "PostgreSQL embarqué introuvable pour $goos/$goarch."
   }
   $version = if ($env:VERSION) { $env:VERSION } else { "dev" }
   if ($goos -eq "windows") { Write-WinRes $goarch }
+  $tags = @($tags) + @($appTags)
+  $tags = if ($tags.Count -gt 0) { @("-tags", ($tags -join ",")) } else { @() }
   go build -trimpath @tags -ldflags "-s -w -X main.version=$version -X main.image=$env:IMAGE $app" -o $out ./cmd/myinfra
   Write-Output $out
 }
@@ -96,14 +99,19 @@ switch ($target) {
     Build-One windows arm64 dist/myinfra_windows_arm64.exe
     Build-One windows amd64 dist/myinfra_windows_amd64_app.exe "-H windowsgui -X main.gui=1"
     Build-One windows arm64 dist/myinfra_windows_arm64_app.exe "-H windowsgui -X main.gui=1"
+    Build-One linux amd64 dist/myinfra_linux_amd64_app "" @("desktop")
+    Build-One linux arm64 dist/myinfra_linux_arm64_app "" @("desktop")
   }
   "windows-app" {
     Build-One windows $arch "dist/myinfra_windows_${arch}_app.exe" "-H windowsgui -X main.gui=1"
+  }
+  "linux-app" {
+    Build-One linux $arch "dist/myinfra_linux_${arch}_app" "" @("desktop")
   }
   { $_ -in "linux", "darwin", "windows" } {
     $ext = ""
     if ($target -eq "windows") { $ext = ".exe" }
     Build-One $target $arch "dist/myinfra_${target}_${arch}${ext}"
   }
-  default { Write-Error "Usage: .\build.ps1 [all|linux|darwin|windows|windows-app] [amd64|arm64]" }
+  default { Write-Error "Usage: .\build.ps1 [all|linux|darwin|windows|windows-app|linux-app] [amd64|arm64]" }
 }

@@ -4,6 +4,7 @@
 #   ./build windows         Windows amd64
 #   ./build darwin arm64    macOS Apple Silicon
 #   ./build windows-app     l'app Windows, sans console, que l'installeur pose
+#   ./build linux-app       l'app Linux, avec sa fenêtre, que portent les paquets
 #   ./build all             linux, macOS et Windows, amd64 et arm64
 # VERSION et IMAGE, si définis, sont gravés dans l'exécutable (la publication
 # les donne) ; sinon il se présente comme une version de développement.
@@ -35,10 +36,12 @@ build_one() {
   out="$3"
   # The Windows app: no console, and it shows its own window.
   appflag="${4:-}"
+  # The Linux app: its window links it to the C library.
+  apptags="${5:-}"
   tagflag=""
   pgflag=""
   if fetch_postgres "$os" "$arch"; then
-    tagflag="-tags postgresembed"
+    tagflag="postgresembed"
     pgflag="-X main.postgres=${PG_VERSION%%.*}"
   elif [ "$os-$arch" != "windows-arm64" ]; then
     echo "PostgreSQL embarqué introuvable pour $os/$arch." >&2
@@ -46,6 +49,10 @@ build_one() {
   fi
   if [ "$os" = "windows" ]; then
     winres "$arch"
+  fi
+  tags=$(echo "$tagflag $apptags" | xargs | tr ' ' ',')
+  if [ -n "$tags" ]; then
+    tagflag="-tags $tags"
   fi
   # shellcheck disable=SC2086
   CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath $tagflag -ldflags "-s -w -X main.version=${VERSION:-dev} -X main.image=${IMAGE:-} $pgflag $appflag" -o "$out" ./cmd/myinfra
@@ -121,9 +128,14 @@ case "$target" in
     build_one windows arm64 dist/myinfra_windows_arm64.exe
     build_one windows amd64 dist/myinfra_windows_amd64_app.exe "-H windowsgui -X main.gui=1"
     build_one windows arm64 dist/myinfra_windows_arm64_app.exe "-H windowsgui -X main.gui=1"
+    build_one linux amd64 dist/myinfra_linux_amd64_app "" desktop
+    build_one linux arm64 dist/myinfra_linux_arm64_app "" desktop
     ;;
   windows-app)
     build_one windows "$arch" "dist/myinfra_windows_${arch}_app.exe" "-H windowsgui -X main.gui=1"
+    ;;
+  linux-app)
+    build_one linux "$arch" "dist/myinfra_linux_${arch}_app" "" desktop
     ;;
   linux | darwin | windows)
     ext=""
@@ -133,7 +145,7 @@ case "$target" in
     build_one "$target" "$arch" "dist/myinfra_${target}_${arch}${ext}"
     ;;
   *)
-    echo "Usage: ./build [all|linux|darwin|windows|windows-app] [amd64|arm64]" >&2
+    echo "Usage: ./build [all|linux|darwin|windows|windows-app|linux-app] [amd64|arm64]" >&2
     exit 1
     ;;
 esac

@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux && desktop
 
 package main
 
@@ -14,8 +14,9 @@ import (
 )
 
 // The window of the app is WebKitGTK, loaded when the app starts: the
-// executable stays the same on every distribution, and without WebKitGTK
-// the app opens the browser. Links to other sites open in the browser,
+// package works on every distribution, and without WebKitGTK the app opens
+// the browser. Loading it links the executable to the C library, so only
+// the packages carry it (-tags desktop): the executable alone stays static. Links to other sites open in the browser,
 // downloads ask where to save; GTK opens the file picker by itself.
 
 const (

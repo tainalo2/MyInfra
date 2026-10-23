@@ -55,6 +55,7 @@ jobs:
           for target in darwin/arm64 windows/amd64 windows/arm64 linux/arm64 freebsd/amd64; do
             CGO_ENABLED=0 GOOS="${target%/*}" GOARCH="${target#*/}" go vet ./cmd/...
           done
+          CGO_ENABLED=0 GOOS=linux go vet -tags desktop ./cmd/...
       - name: Démarrage
         run: |
           export MYINFRA_MASTER_KEY=$(head -c 32 /dev/urandom | base64)
