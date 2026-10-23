@@ -15,9 +15,10 @@ type Spec struct {
 }
 
 // Parse reads a source string:
-//   https://github.com/org/repo
-//   https://github.com/org/repo@main
-//   https://github.com/org/repo@main:docker/Dockerfile
+//
+//	https://github.com/org/repo
+//	https://github.com/org/repo@main
+//	https://github.com/org/repo@main:docker/Dockerfile
 func Parse(raw string) (Spec, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
