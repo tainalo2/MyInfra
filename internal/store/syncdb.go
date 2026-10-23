@@ -402,7 +402,7 @@ func loadApps(ctx context.Context, q querier, doc *SyncDoc) error {
 
 func loadServices(ctx context.Context, q querier, doc *SyncDoc) error {
 	rows, err := q.Query(ctx, `
-		SELECT id, application_id, name, image, published, disk, replicas, listen, disk_path, disk_gi, args, sync_seq, sync_origin
+		SELECT id, application_id, name, image, published, disk, replicas, listen, disk_path, disk_gi, args, spec, sync_seq, sync_origin
 		FROM application_services`)
 	if err != nil {
 		return err
@@ -410,9 +410,11 @@ func loadServices(ctx context.Context, q querier, doc *SyncDoc) error {
 	defer rows.Close()
 	for rows.Next() {
 		var row syncService
-		if err := rows.Scan(&row.ID, &row.ApplicationID, &row.Name, &row.Image, &row.Published, &row.Disk, &row.Replicas, &row.Listen, &row.DiskPath, &row.DiskGi, &row.Args, &row.Seq, &row.Origin); err != nil {
+		var specRaw []byte
+		if err := rows.Scan(&row.ID, &row.ApplicationID, &row.Name, &row.Image, &row.Published, &row.Disk, &row.Replicas, &row.Listen, &row.DiskPath, &row.DiskGi, &row.Args, &specRaw, &row.Seq, &row.Origin); err != nil {
 			return err
 		}
+		row.Spec = canonSpec(specRaw)
 		doc.Services = append(doc.Services, row)
 	}
 	return rows.Err()
@@ -687,13 +689,13 @@ func replaceSync(ctx context.Context, q querier, doc SyncDoc) error {
 	for _, row := range doc.Services {
 		if _, err := q.Exec(ctx, `
 			INSERT INTO application_services (
-				id, application_id, name, image, published, disk, replicas, listen, disk_path, disk_gi, args, sync_seq, sync_origin
-			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+				id, application_id, name, image, published, disk, replicas, listen, disk_path, disk_gi, args, sync_seq, sync_origin, spec
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
 			ON CONFLICT (id) DO UPDATE SET
 				application_id = EXCLUDED.application_id, name = EXCLUDED.name, image = EXCLUDED.image, published = EXCLUDED.published,
 				disk = EXCLUDED.disk, replicas = EXCLUDED.replicas, listen = EXCLUDED.listen, disk_path = EXCLUDED.disk_path,
-				disk_gi = EXCLUDED.disk_gi, args = EXCLUDED.args, sync_seq = EXCLUDED.sync_seq, sync_origin = EXCLUDED.sync_origin`,
-			row.ID, row.ApplicationID, row.Name, row.Image, row.Published, row.Disk, row.Replicas, row.Listen, row.DiskPath, row.DiskGi, row.Args, row.Seq, row.Origin); err != nil {
+				disk_gi = EXCLUDED.disk_gi, args = EXCLUDED.args, sync_seq = EXCLUDED.sync_seq, sync_origin = EXCLUDED.sync_origin, spec = EXCLUDED.spec`,
+			row.ID, row.ApplicationID, row.Name, row.Image, row.Published, row.Disk, row.Replicas, row.Listen, row.DiskPath, row.DiskGi, row.Args, row.Seq, row.Origin, specJSON(readSpec(row.Spec))); err != nil {
 			return err
 		}
 	}

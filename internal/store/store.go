@@ -11,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"myinfra/internal/spec"
 )
 
 var (
@@ -737,6 +739,7 @@ type DesiredApp struct {
 	Published bool
 	Replicas  int
 	Paused    bool
+	Spec      spec.Service
 }
 
 func (s *Store) DesiredApps(ctx context.Context, token string) ([]DesiredApp, error) {
@@ -753,7 +756,7 @@ func (s *Store) DesiredApps(ctx context.Context, token string) ([]DesiredApp, er
 		return []DesiredApp{}, nil
 	}
 	return s.desired(ctx, `
-		SELECT a.id, s.name, s.image, s.published, s.disk, s.replicas, s.listen, s.disk_path, s.disk_gi, s.args, a.variables, a.paused
+		SELECT a.id, s.name, s.image, s.published, s.disk, s.replicas, s.listen, s.disk_path, s.disk_gi, s.args, a.variables, a.paused, s.spec
 		FROM applications a
 		JOIN application_services s ON s.application_id = a.id
 		WHERE a.server_id = $1 AND a.destination_kind = 'server' AND a.source_kind = 'image'
@@ -773,10 +776,12 @@ func (s *Store) desired(ctx context.Context, query, id string) ([]DesiredApp, er
 		var app DesiredApp
 		var raw []byte
 		var args string
-		if err := rows.Scan(&app.ID, &app.Service, &app.Image, &app.Published, &app.Disk, &app.Replicas, &app.Listen, &app.DiskPath, &app.DiskGi, &args, &raw, &app.Paused); err != nil {
+		var specRaw []byte
+		if err := rows.Scan(&app.ID, &app.Service, &app.Image, &app.Published, &app.Disk, &app.Replicas, &app.Listen, &app.DiskPath, &app.DiskGi, &args, &raw, &app.Paused, &specRaw); err != nil {
 			return nil, err
 		}
 		app.Args = splitArgs(args)
+		app.Spec = readSpec(specRaw)
 		app.Env = map[string]string{}
 		if len(raw) > 0 {
 			_ = json.Unmarshal(raw, &app.Env)
@@ -1294,7 +1299,7 @@ type ClusterApp struct {
 
 func (s *Store) ClusterApps(ctx context.Context, clusterID string) ([]ClusterApp, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT a.id, a.paused, s.id, s.name, s.image, s.published, s.disk, s.replicas, s.listen, s.disk_path, s.disk_gi, s.args, a.variables, a.run_status, a.preparing_since, s.backup, s.database
+		SELECT a.id, a.paused, s.id, s.name, s.image, s.published, s.disk, s.replicas, s.listen, s.disk_path, s.disk_gi, s.args, a.variables, a.run_status, a.preparing_since, s.backup, s.database, s.spec
 		FROM applications a
 		JOIN application_services s ON s.application_id = a.id
 		WHERE a.cluster_id = $1 AND a.destination_kind = 'cluster' AND a.source_kind = 'image'
@@ -1312,10 +1317,12 @@ func (s *Store) ClusterApps(ctx context.Context, clusterID string) ([]ClusterApp
 		var raw []byte
 		var args, runStatus string
 		var preparingSince *time.Time
-		if err := rows.Scan(&appID, &paused, &svc.ID, &svc.Name, &svc.Image, &svc.Published, &svc.Disk, &svc.Replicas, &svc.Listen, &svc.DiskPath, &svc.DiskGi, &args, &raw, &runStatus, &preparingSince, &svc.Backup, &svc.Database); err != nil {
+		var specRaw []byte
+		if err := rows.Scan(&appID, &paused, &svc.ID, &svc.Name, &svc.Image, &svc.Published, &svc.Disk, &svc.Replicas, &svc.Listen, &svc.DiskPath, &svc.DiskGi, &args, &raw, &runStatus, &preparingSince, &svc.Backup, &svc.Database, &specRaw); err != nil {
 			return nil, err
 		}
 		svc.Args = splitArgs(args)
+		svc.Spec = readSpec(specRaw)
 		app := byID[appID]
 		if app == nil {
 			env := map[string]string{}
@@ -1401,6 +1408,28 @@ type Service struct {
 	Backup string
 	// Database is '', 'migrating' or 'ready': see application_services.database.
 	Database string
+	Spec     spec.Service
+}
+
+// readSpec reads a service's spec column; a row from before it reads empty.
+func readSpec(raw []byte) spec.Service {
+	var out spec.Service
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &out)
+	}
+	return out
+}
+
+// specJSON is what the spec column keeps.
+func specJSON(s spec.Service) string {
+	if s.Empty() {
+		return "{}"
+	}
+	raw, err := json.Marshal(s)
+	if err != nil {
+		return "{}"
+	}
+	return string(raw)
 }
 
 func servicePlace(svc Service) (listen int, path string, gi int) {
@@ -1574,9 +1603,9 @@ func (s *Store) CreateApplication(ctx context.Context, in NewApplication) error 
 		}
 		listen, path, gi := servicePlace(svc)
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO application_services (id, application_id, name, image, published, disk, replicas, listen, disk_path, disk_gi, args, backup, database)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-			svc.ID, in.ID, svc.Name, svc.Image, svc.Published, svc.Disk, replicas, listen, path, gi, joinArgs(svc.Args), svc.Backup, svc.Database); err != nil {
+			INSERT INTO application_services (id, application_id, name, image, published, disk, replicas, listen, disk_path, disk_gi, args, backup, database, spec)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+			svc.ID, in.ID, svc.Name, svc.Image, svc.Published, svc.Disk, replicas, listen, path, gi, joinArgs(svc.Args), svc.Backup, svc.Database, specJSON(svc.Spec)); err != nil {
 			return err
 		}
 	}
@@ -1679,7 +1708,7 @@ func (s *Store) ApplicationByID(ctx context.Context, id string) (Application, er
 
 func (s *Store) services(ctx context.Context, applicationID string) ([]Service, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, name, image, published, disk, replicas, listen, disk_path, disk_gi, args, backup, database
+		SELECT id, name, image, published, disk, replicas, listen, disk_path, disk_gi, args, backup, database, spec
 		FROM application_services WHERE application_id = $1 ORDER BY published DESC, name`, applicationID)
 	if err != nil {
 		return nil, err
@@ -1689,10 +1718,12 @@ func (s *Store) services(ctx context.Context, applicationID string) ([]Service, 
 	for rows.Next() {
 		var svc Service
 		var args string
-		if err := rows.Scan(&svc.ID, &svc.Name, &svc.Image, &svc.Published, &svc.Disk, &svc.Replicas, &svc.Listen, &svc.DiskPath, &svc.DiskGi, &args, &svc.Backup, &svc.Database); err != nil {
+		var specRaw []byte
+		if err := rows.Scan(&svc.ID, &svc.Name, &svc.Image, &svc.Published, &svc.Disk, &svc.Replicas, &svc.Listen, &svc.DiskPath, &svc.DiskGi, &args, &svc.Backup, &svc.Database, &specRaw); err != nil {
 			return nil, err
 		}
 		svc.Args = splitArgs(args)
+		svc.Spec = readSpec(specRaw)
 		out = append(out, svc)
 	}
 	return out, rows.Err()

@@ -29,7 +29,7 @@ func (a *API) workloads(ctx context.Context, token string) ([]agent.Workload, er
 		work = append(work, agent.Workload{
 			ID: app.ID, Service: app.Service, Image: app.Image, Hosts: app.Hosts, Zones: app.Zones, Env: mergeSecretEnv(env, []map[string]string{shared}),
 			Disk: app.Disk, DiskPath: app.DiskPath, DiskGi: app.DiskGi, Listen: app.Listen, Args: app.Args,
-			Published: app.Published, Replicas: app.Replicas, Paused: app.Paused,
+			Published: app.Published, Replicas: app.Replicas, Paused: app.Paused, Spec: app.Spec,
 			Login: a.agentLogin(ctx, app.Image),
 		})
 	}

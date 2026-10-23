@@ -237,7 +237,7 @@ spec:
 	refs := envRefs(app)
 	dump := svc
 	dump.Env, dump.SecretEnv, dump.Args = m.ToolEnv, nil, nil
-	writeContainerTail(&b, refs, withoutVolumes(dump))
+	writeContainerEnv(&b, refs, withoutVolumes(dump), nil)
 	b.WriteString(mount)
 	fmt.Fprintf(&b, "        - name: check-dump\n          image: %s\n          command: [\"sh\", \"-c\", %q]\n%s", toolImage, check, mount)
 	restoreCmd := run(m.Restore)
@@ -254,7 +254,7 @@ spec:
 	for key, value := range m.Env {
 		restore.Env[key] = value
 	}
-	writeContainerTail(&b, refs, withoutVolumes(restore))
+	writeContainerEnv(&b, refs, withoutVolumes(restore), nil)
 	b.WriteString(mount)
 	fmt.Fprintf(&b, "      containers:\n        - name: verify\n          image: %s\n          command: [\"sh\", \"-c\", %q]\n          env:\n            - name: PGURI\n              valueFrom:\n                secretKeyRef:\n                  name: %s-app\n                  key: uri\n%s",
 		checkImage, verify, m.Database, mount)

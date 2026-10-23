@@ -17,7 +17,7 @@ const failover = 30
 // the cluster's object store. Its one copy keeps no node disk: it restores the
 // files at start, so it can start on any node. While Copying, it still runs on
 // its node disk and only sends the files, for the first copy.
-func writeBackedUp(b *strings.Builder, ns, appID string, svc Service, replicas int, refs []string) {
+func writeBackedUp(b *strings.Builder, ns, appID string, svc Service, replicas int, refs []string, ports map[string]int) {
 	if replicas > 1 {
 		replicas = 1
 	}
@@ -93,8 +93,11 @@ spec:
           tolerationSeconds: %d
 `, svc.Name, ns, appID, replicas, svc.Name, svc.Name, state, configAnnotation(svc, false), failover, failover)
 	mounts := fmt.Sprintf("          volumeMounts:\n            - name: data\n              mountPath: %s\n            - name: backup\n              mountPath: /etc/litestream.yml\n              subPath: litestream.yml\n", diskPathOf(svc))
+	waits := waitItems(svc, ports)
+	if !svc.Backup.Copying || waits != "" {
+		b.WriteString("      initContainers:\n" + waits)
+	}
 	if !svc.Backup.Copying {
-		b.WriteString("      initContainers:\n")
 		for i, db := range svc.Backup.Databases {
 			// Restores only when the disk is empty and a copy exists: a
 			// first start begins with no data, as it would without backup.
@@ -102,17 +105,11 @@ spec:
 				i, BackupImage, db, name, mounts)
 		}
 	}
-	fmt.Fprintf(b, "      containers:\n        - name: %s\n          image: %s\n          ports:\n            - containerPort: %d\n", svc.Name, svc.Image, listenOf(svc))
+	b.WriteString("      containers:\n" + containerHead(svc, false))
 	plain := svc
 	plain.Disk = false
-	writeContainerTail(b, refs, plain)
-	if len(svc.Backup.Env) > 0 {
-		b.WriteString("          env:\n")
-		for _, key := range sortedKeys(svc.Backup.Env) {
-			fmt.Fprintf(b, "            - name: %s\n              value: %q\n", key, svc.Backup.Env[key])
-		}
-	}
-	fmt.Fprintf(b, "          volumeMounts:\n            - name: data\n              mountPath: %s\n", diskPathOf(svc))
+	writeContainerEnv(b, refs, plain, svc.Backup.Env)
+	fmt.Fprintf(b, "          volumeMounts:\n            - name: data\n              mountPath: %s\n%s", diskPathOf(svc), extraMounts(svc))
 	fmt.Fprintf(b, "        - name: backup\n          image: %s\n          args: [replicate, -config, /etc/litestream.yml]\n          envFrom:\n            - secretRef:\n                name: %s\n%s", BackupImage, name, mounts)
 	b.WriteString("      volumes:\n")
 	if svc.Backup.Copying {
@@ -120,5 +117,5 @@ spec:
 	} else {
 		b.WriteString("        - name: data\n          emptyDir: {}\n")
 	}
-	fmt.Fprintf(b, "        - name: backup\n          configMap:\n            name: %s\n", name)
+	fmt.Fprintf(b, "        - name: backup\n          configMap:\n            name: %s\n%s", name, extraVolumes(svc, false))
 }

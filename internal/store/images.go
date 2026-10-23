@@ -167,7 +167,7 @@ func (s *Store) RolloutApp(ctx context.Context, id string) (RolloutApp, error) {
 		return RolloutApp{}, err
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, name, image, published, disk, replicas, listen, disk_path, disk_gi, args, backup
+		SELECT id, name, image, published, disk, replicas, listen, disk_path, disk_gi, args, backup, spec
 		FROM application_services WHERE application_id = $1 ORDER BY published DESC, name`, id)
 	if err != nil {
 		return RolloutApp{}, err
@@ -176,10 +176,12 @@ func (s *Store) RolloutApp(ctx context.Context, id string) (RolloutApp, error) {
 	for rows.Next() {
 		var svc Service
 		var args string
-		if err := rows.Scan(&svc.ID, &svc.Name, &svc.Image, &svc.Published, &svc.Disk, &svc.Replicas, &svc.Listen, &svc.DiskPath, &svc.DiskGi, &args, &svc.Backup); err != nil {
+		var specRaw []byte
+		if err := rows.Scan(&svc.ID, &svc.Name, &svc.Image, &svc.Published, &svc.Disk, &svc.Replicas, &svc.Listen, &svc.DiskPath, &svc.DiskGi, &args, &svc.Backup, &specRaw); err != nil {
 			return RolloutApp{}, err
 		}
 		svc.Args = splitArgs(args)
+		svc.Spec = readSpec(specRaw)
 		app.Services = append(app.Services, svc)
 	}
 	return app, rows.Err()

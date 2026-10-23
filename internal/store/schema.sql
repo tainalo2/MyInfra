@@ -314,6 +314,10 @@ ALTER TABLE application_services ADD COLUMN IF NOT EXISTS backup text NOT NULL D
 -- is being built and the data moved into it. ready: the service runs from it.
 ALTER TABLE application_services ADD COLUMN IF NOT EXISTS database text NOT NULL DEFAULT '';
 
+-- What a service runs with besides its image, port and first disk: command,
+-- ports, disks, files, variables, reservations, health and order (spec.Service).
+ALTER TABLE application_services ADD COLUMN IF NOT EXISTS spec jsonb NOT NULL DEFAULT '{}';
+
 -- Images a person brought: an archive from docker save, sent or fetched from a
 -- URL. MyInfra loads them on the servers itself, under myinfra.local/<name>:<tag>:
 -- the servers need not reach MyInfra, which often runs behind a home router.

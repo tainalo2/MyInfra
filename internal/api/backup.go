@@ -30,7 +30,7 @@ func (a *API) clusterServices(ctx context.Context, host deploy.Host, owner, clus
 	for _, svc := range app.Services {
 		out := manifest.Service{
 			Name: svc.Name, Image: svc.Image, Published: svc.Published, Disk: svc.Disk, Replicas: svc.Replicas,
-			DiskPath: svc.DiskPath, DiskGi: svc.DiskGi, Listen: svc.Listen, Args: svc.Args,
+			DiskPath: svc.DiskPath, DiskGi: svc.DiskGi, Listen: svc.Listen, Args: svc.Args, Spec: svc.Spec,
 		}
 		switch {
 		case svc.Database != "":

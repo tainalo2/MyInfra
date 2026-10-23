@@ -137,8 +137,10 @@ type syncService struct {
 	DiskPath      string `json:"diskPath"`
 	DiskGi        int    `json:"diskGi"`
 	Args          string `json:"args"`
-	Seq           int64  `json:"seq"`
-	Origin        string `json:"origin"`
+	// Spec is left out when empty: a row reads the same as before it existed.
+	Spec   json.RawMessage `json:"spec,omitempty"`
+	Seq    int64           `json:"seq"`
+	Origin string          `json:"origin"`
 }
 
 type syncDomain struct {
@@ -1030,6 +1032,15 @@ func utc(t time.Time) time.Time {
 		return time.Time{}
 	}
 	return t.UTC()
+}
+
+// canonSpec writes a service's spec the one way, and an empty one as nothing.
+func canonSpec(raw json.RawMessage) json.RawMessage {
+	s := readSpec(raw)
+	if s.Empty() {
+		return nil
+	}
+	return json.RawMessage(specJSON(s))
 }
 
 func canonJSON(raw json.RawMessage, fallback string) json.RawMessage {

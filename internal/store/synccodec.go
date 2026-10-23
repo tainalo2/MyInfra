@@ -135,11 +135,14 @@ func serviceFromPayload(raw json.RawMessage) (syncService, error) {
 		return syncService{
 			ID: b.str("id"), ApplicationID: b.str("application_id"), Name: b.str("name"), Image: b.str("image"),
 			Published: b.boolean("published"), Disk: b.boolean("disk"), Replicas: b.num("replicas"), Listen: b.num("listen"),
-			DiskPath: b.str("disk_path"), DiskGi: b.num("disk_gi"), Args: b.str("args"), Seq: b.i64("sync_seq"), Origin: b.str("sync_origin"),
+			DiskPath: b.str("disk_path"), DiskGi: b.num("disk_gi"), Args: b.str("args"), Spec: canonSpec(b.raw("spec", "{}")),
+			Seq: b.i64("sync_seq"), Origin: b.str("sync_origin"),
 		}, nil
 	}
 	var row syncService
-	return row, json.Unmarshal(raw, &row)
+	err := json.Unmarshal(raw, &row)
+	row.Spec = canonSpec(row.Spec)
+	return row, err
 }
 
 func domainFromPayload(raw json.RawMessage) (syncDomain, error) {
@@ -342,6 +345,7 @@ func canonServices(rows []syncService) []syncService {
 		if rows[i].DiskGi < 1 {
 			rows[i].DiskGi = 1
 		}
+		rows[i].Spec = canonSpec(rows[i].Spec)
 		if rows[i].DiskPath == "" {
 			rows[i].DiskPath = "/data"
 		}

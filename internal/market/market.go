@@ -386,3 +386,37 @@ func checkTokens(value string, inputs map[string]bool) error {
 	}
 	return nil
 }
+
+// CheckTokens checks the {{…}} of a value against the questions asked.
+func CheckTokens(value string, inputs map[string]bool) error {
+	return checkTokens(value, inputs)
+}
+
+// HasSecret tells whether a value asks for a secret made at installation.
+func HasSecret(value string) bool {
+	for _, parts := range tokenPattern.FindAllStringSubmatch(value, -1) {
+		if parts[1] == "secret" || parts[1] == "encoded" {
+			return true
+		}
+	}
+	return false
+}
+
+// InputKey is how a question is named.
+func InputKey(key string) bool {
+	return idPattern.MatchString(key)
+}
+
+// ArticleOf finds an article as it is described, before any value is filled in.
+func ArticleOf(id string) (Article, bool) {
+	return find(id)
+}
+
+// IDs lists the articles of the catalogue.
+func IDs() []string {
+	out := make([]string, len(articles))
+	for i, article := range articles {
+		out[i] = article.ID
+	}
+	return out
+}
