@@ -35,9 +35,14 @@ func main() {
 		return
 	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
-	if appStart() {
+	if appRun(run) {
 		return
 	}
+	run()
+}
+
+// run serves until MyInfra stops, then starts the new executable after an update.
+func run() {
 	tools.PreparePath()
 	// Read before an update renames the running file: the new one takes this path.
 	exe, exeErr := os.Executable()
@@ -145,9 +150,10 @@ func serve() bool {
 		restarting.Store(true)
 		stop()
 	}
-	if backgroundApp() {
-		// No terminal to stop it from: the interface offers to.
+	if inApp() {
+		// No terminal to stop it from: the Dock and the interface offer to.
 		app.Stop = stop
+		onQuit(stop)
 	}
 	go func() {
 		<-ctx.Done()

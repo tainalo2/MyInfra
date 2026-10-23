@@ -234,9 +234,13 @@ jobs:
           merge-multiple: true
       - name: Application
         run: |
-          out="dist/MyInfra_${VERSION}_macos.zip"
+          out="dist/MyInfra_${VERSION}_macos.dmg"
           deploy/macos/package.sh "$VERSION" "$out" "dist/myinfra_${VERSION}_darwin_arm64" "dist/myinfra_${VERSION}_darwin_amd64"
-          mkdir app && ditto -x -k "$out" app
+          # The app is tested as it is installed: dragged out of the image.
+          hdiutil attach -nobrowse -readonly -mountpoint "$RUNNER_TEMP/dmg" "$out"
+          test -L "$RUNNER_TEMP/dmg/Applications"
+          mkdir app && ditto "$RUNNER_TEMP/dmg/MyInfra.app" app/MyInfra.app
+          hdiutil detach "$RUNNER_TEMP/dmg"
           lipo -archs app/MyInfra.app/Contents/MacOS/myinfra | grep -q arm64
           lipo -archs app/MyInfra.app/Contents/MacOS/myinfra | grep -q x86_64
           test "$(app/MyInfra.app/Contents/MacOS/myinfra --version)" = "$VERSION"
@@ -245,6 +249,8 @@ jobs:
         timeout-minutes: 5
         run: |
           home="$RUNNER_TEMP/myinfra"
+          # Sans quoi l'app propose d'abord de passer dans Applications.
+          mkdir -p "$home" && touch "$home/no-move"
           launch() {
             open --env MYINFRA_HOME="$home" --env MYINFRA_NO_BROWSER=1 --env MYINFRA_ADDR=127.0.0.1:8080 app/MyInfra.app
           }
@@ -265,8 +271,8 @@ jobs:
           sleep 5
           test "$(pgrep -f 'MyInfra.app/Contents/MacOS/myinfra' | wc -l | tr -d ' ')" = 1 || fail "Un second lancement a démarré une autre copie."
           curl -sf http://127.0.0.1:8080/api/health > /dev/null || fail "Un second lancement a arrêté MyInfra."
-          # L'arrêt emporte PostgreSQL.
-          pkill -TERM -f 'MyInfra.app/Contents/MacOS/myinfra'
+          # Quitter, comme depuis le Dock, emporte PostgreSQL.
+          osascript -e 'tell application id "io.github.tainalo2.myinfra" to quit'
           for i in $(seq 1 30); do
             [ -f "$home/pgdata/postmaster.pid" ] || break
             sleep 1
@@ -275,7 +281,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: myinfra-macos-app
-          path: dist/MyInfra_${{ needs.version.outputs.version }}_macos.zip
+          path: dist/MyInfra_${{ needs.version.outputs.version }}_macos.dmg
           if-no-files-found: error
 
   image:
@@ -352,12 +358,12 @@ jobs:
           | --- | --- |
           | Linux x86-64 | \`myinfra_${VERSION}_linux_amd64\` |
           | Linux ARM64 | \`myinfra_${VERSION}_linux_arm64\` |
-          | macOS, Intel et Apple Silicon | \`MyInfra_${VERSION}_macos.zip\` : l'app MyInfra |
+          | macOS, Intel et Apple Silicon | \`MyInfra_${VERSION}_macos.dmg\` : l'app MyInfra |
           | Windows x86-64 | \`myinfra_${VERSION}_windows_amd64.exe\` |
           | Windows ARM64 | \`myinfra_${VERSION}_windows_arm64.exe\` (sans PostgreSQL embarqué : indiquez \`DATABASE_URL\`) |
 
           Sur Linux : \`chmod +x\` sur le fichier.
-          Sur macOS : déplacez MyInfra dans Applications puis double-cliquez dessus. MyInfra tourne en arrière-plan et s'ouvre dans le navigateur ; un nouveau double-clic le rouvre, et il s'arrête depuis Réglages. L'app n'est pas signée par Apple : au premier lancement, Réglages Système → Confidentialité et sécurité → « Ouvrir quand même ». Les exécutables \`myinfra_${VERSION}_darwin_*\` restent publiés pour le terminal et les mises à jour.
+          Sur macOS : ouvrez le .dmg et glissez MyInfra dans Applications, puis ouvrez-le : il s'ouvre dans le navigateur. Son icône reste dans le Dock tant qu'il tourne : un clic le rouvre, Quitter l'arrête. L'app n'est pas signée par Apple : au premier lancement, Réglages Système → Confidentialité et sécurité → « Ouvrir quand même ». Les exécutables \`myinfra_${VERSION}_darwin_*\` restent publiés pour le terminal et les mises à jour.
           Sur Windows, l'exécutable n'est pas signé non plus : si SmartScreen l'arrête, « Informations complémentaires » puis « Exécuter quand même ». Le premier démarrage prépare PostgreSQL et prend quelques secondes.
           \`SHA256SUMS\` permet de vérifier les téléchargements : \`sha256sum -c SHA256SUMS --ignore-missing\`.
 

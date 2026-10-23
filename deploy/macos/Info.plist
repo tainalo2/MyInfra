@@ -20,8 +20,7 @@
 	<string>@VERSION@</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>11.0</string>
-	<!-- No Dock icon: MyInfra runs in the background, its window is the browser. -->
-	<key>LSUIElement</key>
-	<true/>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.developer-tools</string>
 </dict>
 </plist>

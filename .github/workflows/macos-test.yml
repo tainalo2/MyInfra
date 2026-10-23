@@ -72,9 +72,13 @@ jobs:
           merge-multiple: true
       - name: Application
         run: |
-          out="dist/MyInfra_${VERSION}_macos.zip"
+          out="dist/MyInfra_${VERSION}_macos.dmg"
           deploy/macos/package.sh "$VERSION" "$out" "dist/myinfra_${VERSION}_darwin_arm64" "dist/myinfra_${VERSION}_darwin_amd64"
-          mkdir app && ditto -x -k "$out" app
+          # The app is tested as it is installed: dragged out of the image.
+          hdiutil attach -nobrowse -readonly -mountpoint "$RUNNER_TEMP/dmg" "$out"
+          test -L "$RUNNER_TEMP/dmg/Applications"
+          mkdir app && ditto "$RUNNER_TEMP/dmg/MyInfra.app" app/MyInfra.app
+          hdiutil detach "$RUNNER_TEMP/dmg"
           lipo -archs app/MyInfra.app/Contents/MacOS/myinfra | grep -q arm64
           lipo -archs app/MyInfra.app/Contents/MacOS/myinfra | grep -q x86_64
           test "$(app/MyInfra.app/Contents/MacOS/myinfra --version)" = "$VERSION"
@@ -83,6 +87,8 @@ jobs:
         timeout-minutes: 5
         run: |
           home="$RUNNER_TEMP/myinfra"
+          # Sans quoi l'app propose d'abord de passer dans Applications.
+          mkdir -p "$home" && touch "$home/no-move"
           launch() {
             open --env MYINFRA_HOME="$home" --env MYINFRA_NO_BROWSER=1 --env MYINFRA_ADDR=127.0.0.1:8080 app/MyInfra.app
           }
@@ -102,7 +108,8 @@ jobs:
           sleep 5
           test "$(pgrep -f 'MyInfra.app/Contents/MacOS/myinfra' | wc -l | tr -d ' ')" = 1 || fail "Un second lancement a démarré une autre copie."
           curl -sf http://127.0.0.1:8080/api/health > /dev/null || fail "Un second lancement a arrêté MyInfra."
-          pkill -TERM -f 'MyInfra.app/Contents/MacOS/myinfra'
+          # Quitter, comme depuis le Dock, emporte PostgreSQL.
+          osascript -e 'tell application id "io.github.tainalo2.myinfra" to quit'
           for i in $(seq 1 30); do
             [ -f "$home/pgdata/postmaster.pid" ] || break
             sleep 1
@@ -112,4 +119,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: myinfra-macos-app
-          path: dist/MyInfra_*_macos.zip
+          path: dist/MyInfra_*_macos.dmg

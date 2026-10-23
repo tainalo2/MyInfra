@@ -1,10 +1,12 @@
 #!/bin/sh
-# Makes MyInfra.app from the macOS executables of ./build, on a Mac: a double
-# click starts MyInfra in the background and opens the browser.
-#   deploy/macos/package.sh 1.4.0 MyInfra.zip dist/myinfra_darwin_arm64 dist/myinfra_darwin_amd64
+# Makes MyInfra.app from the macOS executables of ./build, on a Mac, and the
+# MyInfra.dmg it is installed from: its window asks to drag the app into
+# Applications. The Finder lays the window out, so it runs in a session with
+# a screen, where the terminal may drive the Finder.
+#   deploy/macos/package.sh 1.4.0 MyInfra.dmg dist/myinfra_darwin_arm64 dist/myinfra_darwin_amd64
 set -eu
 if [ $# -lt 3 ]; then
-  echo "Usage: deploy/macos/package.sh VERSION OUT.zip EXECUTABLE..." >&2
+  echo "Usage: deploy/macos/package.sh VERSION OUT.dmg EXECUTABLE..." >&2
   exit 1
 fi
 version="$1"
@@ -37,7 +39,37 @@ iconutil -c icns "$iconset" -o "$app/Contents/Resources/MyInfra.icns"
 codesign --force --deep --sign - "$app"
 codesign --verify --deep --strict "$app"
 
-# ditto keeps the rights and the signature, which a plain zip may lose.
+# The content of the image, with its window behind hidden files.
+name=MyInfra
+stage="$work/stage"
+mkdir -p "$stage/.background"
+mv "$app" "$stage/MyInfra.app"
+ln -s /Applications "$stage/Applications"
+# One picture for each kind of screen, as the Finder wants it.
+tiffutil -cathidpicheck "$here/dmg/background.png" "$here/dmg/background@2x.png" -out "$stage/.background/background.tiff" > /dev/null
+cp "$stage/MyInfra.app/Contents/Resources/MyInfra.icns" "$stage/.VolumeIcon.icns"
+
+# The Finder writes the layout of the window into the mounted image. Another
+# volume of the same name would take it.
+if [ -e "/Volumes/$name" ]; then
+  echo "Éjectez d'abord /Volumes/$name." >&2
+  exit 1
+fi
+rw="$work/rw.dmg"
+size=$(( $(du -sm "$stage" | cut -f1) + 20 ))
+hdiutil create -quiet -srcfolder "$stage" -volname "$name" -fs HFS+ -format UDRW -size "${size}m" "$rw"
+dev=$(hdiutil attach -readwrite -noverify -noautoopen "$rw" | awk '/Apple_HFS/ {print $1}')
+if command -v SetFile > /dev/null; then
+  SetFile -a C "/Volumes/$name"
+fi
+osascript "$here/dmg/layout.applescript" "$name"
+for i in $(seq 1 20); do
+  [ -f "/Volumes/$name/.DS_Store" ] && break
+  sleep 1
+done
+sync
+hdiutil detach -quiet "$dev" || { sleep 3; hdiutil detach -force -quiet "$dev"; }
+
 rm -f "$out"
-ditto -c -k --keepParent "$app" "$out"
+hdiutil convert -quiet "$rw" -format UDZO -imagekey zlib-level=9 -o "$out"
 echo "$out"

@@ -2,7 +2,12 @@
 
 package main
 
-// appStart has nothing to hand over: only macOS opens MyInfra as an app.
-func appStart() bool { return false }
+// Only macOS opens MyInfra as an app.
 
-func backgroundApp() bool { return false }
+func inApp() bool { return false }
+
+func appRun(func()) bool { return false }
+
+func onQuit(func()) {}
+
+func restartApp() error { return nil }

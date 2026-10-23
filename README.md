@@ -99,7 +99,7 @@ chmod +x myinfra_*_linux_amd64
 ./myinfra_*_linux_amd64
 ```
 
-On macOS, download `MyInfra_*_macos.zip`, move MyInfra to Applications and double-click it. It runs in the background and opens in the browser; double-click it again to get back to it, and stop it from Settings. Its log is `~/.myinfra/myinfra.log`. The app is not signed by Apple: on the first start, allow it in System Settings → Privacy & Security → Open Anyway.
+On macOS, download `MyInfra_*_macos.dmg`, open it and drag MyInfra into Applications, then open it: it opens in the browser. Its icon stays in the Dock while it runs: click it to get back to MyInfra, Quit stops it. Its log is `~/.myinfra/myinfra.log`. The app is not signed by Apple: on the first start, allow it in System Settings → Privacy & Security → Open Anyway.
 
 On Windows, double-click the `.exe`. A window shows the log; closing it stops MyInfra.
 

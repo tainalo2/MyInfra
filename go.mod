@@ -4,6 +4,7 @@ go 1.24
 
 require (
 	github.com/coder/websocket v1.8.13
+	github.com/ebitengine/purego v0.10.0
 	github.com/jackc/pgx/v5 v5.7.4
 	golang.org/x/crypto v0.37.0
 	golang.org/x/sys v0.32.0
