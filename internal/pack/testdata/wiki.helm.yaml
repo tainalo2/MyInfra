@@ -1,0 +1,272 @@
+---
+# Source: wiki/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: wiki
+  labels:
+    helm.sh/chart: wiki-3.0.0
+    app.kubernetes.io/name: wiki
+    app.kubernetes.io/instance: wiki
+    app.kubernetes.io/version: "2"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: wiki/templates/postgresql-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: wiki-postgresql
+  labels:
+    helm.sh/chart: wiki-3.0.0
+    app.kubernetes.io/name: wiki
+    app.kubernetes.io/instance: wiki
+    app.kubernetes.io/version: "2"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  postgresql-password: "cG9zdGdyZXM="
+  postgresql-username: "cG9zdGdyZXM="
+---
+# Source: wiki/templates/postgresql-pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wiki-postgresql
+  labels:
+    helm.sh/chart: wiki-3.0.0
+    app.kubernetes.io/name: wiki
+    app.kubernetes.io/instance: wiki
+    app.kubernetes.io/version: "2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "8Gi"
+---
+# Source: wiki/templates/postgresql-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: wiki-postgresql
+  labels:
+    helm.sh/chart: wiki-3.0.0
+    app.kubernetes.io/name: wiki
+    app.kubernetes.io/instance: wiki
+    app.kubernetes.io/version: "2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+      name: postgresql
+  selector:
+    app.kubernetes.io/name: wiki-postgresql
+    app.kubernetes.io/instance: wiki
+---
+# Source: wiki/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: wiki
+  labels:
+    helm.sh/chart: wiki-3.0.0
+    app.kubernetes.io/name: wiki
+    app.kubernetes.io/instance: wiki
+    app.kubernetes.io/version: "2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: wiki
+    app.kubernetes.io/instance: wiki
+---
+# Source: wiki/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wiki
+  labels:
+    helm.sh/chart: wiki-3.0.0
+    app.kubernetes.io/name: wiki
+    app.kubernetes.io/instance: wiki
+    app.kubernetes.io/version: "2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: wiki
+      app.kubernetes.io/instance: wiki
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: wiki
+        app.kubernetes.io/instance: wiki
+      annotations:
+        {}
+    spec:
+      serviceAccountName: wiki
+      securityContext:
+        {}
+      containers:
+        - name: wiki
+          securityContext:
+            {}
+          image: "requarks/wiki:2"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DB_TYPE
+              value: postgres
+            - name: DB_HOST
+              value: wiki-postgresql
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: "wiki"
+            - name: DB_USER
+              value: postgres
+            - name: DB_SSL
+              value: "false"
+            - name: DB_SSL_CA
+              value: ""
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: wiki-postgresql
+                  key: "postgresql-password"
+            - name: HA_ACTIVE
+              value: "false"
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          startupProbe:
+            failureThreshold: 60
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 5
+          resources:
+            {}
+---
+# Source: wiki/templates/postgresql-statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: wiki-postgresql
+  labels:
+    helm.sh/chart: wiki-3.0.0
+    app.kubernetes.io/name: wiki
+    app.kubernetes.io/instance: wiki
+    app.kubernetes.io/version: "2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  serviceName: wiki-postgresql
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: wiki-postgresql
+      app.kubernetes.io/instance: wiki
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: wiki-postgresql
+        app.kubernetes.io/instance: wiki
+    spec:
+      containers:
+        - name: postgresql
+          image: postgres:18
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+              name: postgresql
+          env:
+            - name: POSTGRES_DB
+              value: "wiki"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: wiki-postgresql
+                  key: postgresql-username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: wiki-postgresql
+                  key: postgresql-password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - exec pg_isready -U postgres -d wiki
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - exec pg_isready -U postgres -d wiki
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 6
+          resources:
+            {}
+          volumeMounts:
+            - name: postgresql-data
+              mountPath: /var/lib/postgresql/data
+              subPath: postgresql
+      volumes:
+        - name: postgresql-data
+          persistentVolumeClaim:
+            claimName: wiki-postgresql
+---
+# Source: wiki/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wiki
+  labels:
+    helm.sh/chart: wiki-3.0.0
+    app.kubernetes.io/name: wiki
+    app.kubernetes.io/instance: wiki
+    app.kubernetes.io/version: "2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  rules:
+    - host: "wiki.minikube.local"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: wiki
+                port:
+                  number: 80

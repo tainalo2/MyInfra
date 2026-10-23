@@ -1287,6 +1287,15 @@ const fr = {
   "address.follows": "suit le domaine",
   "address.hint": "{{url}} vaut https://{address} et {{host}} vaut {address} : ils suivent le domaine de l'application, et un nouveau nom redémarre ses copies avec la nouvelle adresse.",
   "package.importWarnings": "À vérifier avant d'enregistrer",
+  "package.fromHelm": "Chart Helm",
+  "package.helmHint": "MyInfra rend le chart avec ses valeurs (helm template), puis en tire un paquet : un service par conteneur, les disques des volumes, les fichiers des ConfigMaps, le domaine sur ce que l'Ingress expose. Rien n'est installé avant que vous l'ayez relu.",
+  "package.helmRepo": "Dépôt du chart",
+  "package.helmChart": "Chart",
+  "package.helmChartHint": "Son nom dans le dépôt, ou une référence oci:// sans dépôt.",
+  "package.helmVersion": "Version (la dernière si vide)",
+  "package.helmValues": "Valeurs (values.yaml)",
+  "package.helmRender": "Lire le chart",
+  "package.helmRendering": "Lecture du chart…",
 } as const;
 
 export type MsgKey = keyof typeof fr;
@@ -2505,6 +2514,15 @@ const en: Record<MsgKey, string> = {
   "address.follows": "follows the domain",
   "address.hint": "{{url}} is https://{address} and {{host}} is {address}: they follow the application's domain, and a new name restarts its copies with the new address.",
   "package.importWarnings": "Check before saving",
+  "package.fromHelm": "Helm chart",
+  "package.helmHint": "MyInfra renders the chart with its values (helm template), then makes a package of it: a service per container, disks from volumes, files from ConfigMaps, the domain on what the Ingress exposes. Nothing is installed before you read it.",
+  "package.helmRepo": "Chart repository",
+  "package.helmChart": "Chart",
+  "package.helmChartHint": "Its name in the repository, or an oci:// reference without repository.",
+  "package.helmVersion": "Version (latest when empty)",
+  "package.helmValues": "Values (values.yaml)",
+  "package.helmRender": "Read the chart",
+  "package.helmRendering": "Reading the chart…",
 };
 
 const pt: Record<MsgKey, string> = {
@@ -3699,6 +3717,15 @@ const pt: Record<MsgKey, string> = {
   "address.follows": "segue o domínio",
   "address.hint": "{{url}} vale https://{address} e {{host}} vale {address}: seguem o domínio da aplicação, e um novo nome reinicia as cópias com o novo endereço.",
   "package.importWarnings": "A verificar antes de guardar",
+  "package.fromHelm": "Chart Helm",
+  "package.helmHint": "O MyInfra gera o chart com os seus valores (helm template) e faz dele um pacote: um serviço por contentor, discos a partir dos volumes, ficheiros a partir das ConfigMaps, o domínio no que o Ingress expõe. Nada é instalado antes de o reler.",
+  "package.helmRepo": "Repositório do chart",
+  "package.helmChart": "Chart",
+  "package.helmChartHint": "O nome no repositório, ou uma referência oci:// sem repositório.",
+  "package.helmVersion": "Versão (a mais recente se vazio)",
+  "package.helmValues": "Valores (values.yaml)",
+  "package.helmRender": "Ler o chart",
+  "package.helmRendering": "A ler o chart…",
 };
 
 const it: Record<MsgKey, string> = {
@@ -4892,6 +4919,15 @@ const it: Record<MsgKey, string> = {
   "address.follows": "segue il dominio",
   "address.hint": "{{url}} vale https://{address} e {{host}} vale {address}: seguono il dominio dell'applicazione, e un nuovo nome riavvia le copie con il nuovo indirizzo.",
   "package.importWarnings": "Da verificare prima di salvare",
+  "package.fromHelm": "Chart Helm",
+  "package.helmHint": "MyInfra genera il chart con i suoi valori (helm template) e ne ricava un pacchetto: un servizio per container, dischi dai volumi, file dalle ConfigMap, il dominio su ciò che l'Ingress espone. Nulla viene installato prima che tu l'abbia riletto.",
+  "package.helmRepo": "Repository del chart",
+  "package.helmChart": "Chart",
+  "package.helmChartHint": "Il nome nel repository, o un riferimento oci:// senza repository.",
+  "package.helmVersion": "Versione (l'ultima se vuoto)",
+  "package.helmValues": "Valori (values.yaml)",
+  "package.helmRender": "Leggi il chart",
+  "package.helmRendering": "Lettura del chart…",
 };
 
 const de: Record<MsgKey, string> = {
@@ -6087,6 +6123,15 @@ const de: Record<MsgKey, string> = {
   "address.follows": "folgt der Domain",
   "address.hint": "{{url}} ist https://{address} und {{host}} ist {address}: Sie folgen der Domain der Anwendung, und ein neuer Name startet die Kopien mit der neuen Adresse neu.",
   "package.importWarnings": "Vor dem Speichern prüfen",
+  "package.fromHelm": "Helm-Chart",
+  "package.helmHint": "MyInfra rendert das Chart mit seinen Werten (helm template) und macht daraus ein Paket: ein Dienst pro Container, Datenträger aus Volumes, Dateien aus ConfigMaps, die Domain auf das, was der Ingress freigibt. Nichts wird installiert, bevor Sie es geprüft haben.",
+  "package.helmRepo": "Chart-Repository",
+  "package.helmChart": "Chart",
+  "package.helmChartHint": "Sein Name im Repository oder eine oci://-Referenz ohne Repository.",
+  "package.helmVersion": "Version (die neueste, wenn leer)",
+  "package.helmValues": "Werte (values.yaml)",
+  "package.helmRender": "Chart lesen",
+  "package.helmRendering": "Chart wird gelesen…",
 };
 
 const tables: Record<Lang, Record<MsgKey, string>> = { fr, en, pt, it, de };

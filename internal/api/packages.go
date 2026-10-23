@@ -305,16 +305,32 @@ func (a *API) importPackageURL(w http.ResponseWriter, r *http.Request) {
 // fix and keep.
 func (a *API) convertPackage(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Text string `json:"text"`
-		URL  string `json:"url"`
-		Name string `json:"name"`
+		Text string      `json:"text"`
+		URL  string      `json:"url"`
+		Name string      `json:"name"`
+		Helm *helmSource `json:"helm"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
 		return
 	}
 	raw := []byte(body.Text)
-	if strings.TrimSpace(body.URL) != "" {
+	namespace := "default"
+	if body.Helm != nil {
+		rendered, chart, err := renderChart(r.Context(), *body.Helm)
+		if errors.Is(err, errHelmMissing) {
+			writeCoded(w, http.StatusConflict, "helm_missing", err.Error(), nil)
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		raw, namespace = rendered, helmNamespace
+		if strings.TrimSpace(body.Name) == "" {
+			body.Name = chart
+		}
+	} else if strings.TrimSpace(body.URL) != "" {
 		fetched, status, message := fetchText(r.Context(), body.URL)
 		if message != "" {
 			writeError(w, status, message)
@@ -327,9 +343,22 @@ func (a *API) convertPackage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	format := pack.Detect(raw)
+	if body.Helm != nil {
+		format = "helm"
+	}
 	var p pack.Package
 	warnings := []pack.Warning{}
 	switch format {
+	case "helm", "kubernetes":
+		converted, notes, err := pack.Kube(raw, body.Name, namespace)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		p = converted
+		if notes != nil {
+			warnings = notes
+		}
 	case "package":
 		var problems []pack.Problem
 		var readable bool
@@ -349,7 +378,7 @@ func (a *API) convertPackage(w http.ResponseWriter, r *http.Request) {
 			warnings = notes
 		}
 	default:
-		writeError(w, http.StatusBadRequest, "Ce fichier n'est ni un paquet MyInfra, ni un fichier docker-compose.")
+		writeError(w, http.StatusBadRequest, "Ce fichier n'est ni un paquet MyInfra, ni un fichier docker-compose, ni des manifestes Kubernetes.")
 		return
 	}
 	text, err := pack.YAML(p)

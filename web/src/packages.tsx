@@ -7,6 +7,7 @@ import { knownMessage, text } from "./i18n";
 import { useI18n } from "./lang";
 import { ConfirmDialog, Sheet, Tabs, useToast } from "./kit";
 import { useSession } from "./session";
+import { ToolInstall } from "./tools";
 import {
   ActionsMenu,
   Button,
@@ -169,7 +170,9 @@ export function Packages() {
 // ImportSheet brings a package from a file, a pasted text or a link. What is
 // wrong in it shows with its line, in the text itself.
 function ImportSheet({ onClose, onDone, onDraft }: { onClose: () => void; onDone: (row: PackageRow) => void; onDraft: (draft: Draft) => void }) {
-  const [how, setHow] = useState<"file" | "paste" | "url">("file");
+  const [how, setHow] = useState<"file" | "paste" | "url" | "helm">("file");
+  const [chart, setChart] = useState({ repo: "", chart: "", version: "", values: "" });
+  const [needsHelm, setNeedsHelm] = useState(false);
   const [pasted, setPasted] = useState("");
   const [url, setUrl] = useState("");
   const [problems, setProblems] = useState<PackageProblem[]>([]);
@@ -178,10 +181,11 @@ function ImportSheet({ onClose, onDone, onDraft }: { onClose: () => void; onDone
 
   // Each source is converted first: a valid package is kept at once, a
   // docker-compose file or a package with problems opens in the editor.
-  async function send(body: { text?: string; url?: string; name?: string }) {
+  async function send(body: { text?: string; url?: string; name?: string; helm?: typeof chart }) {
     setBusy(true);
     setError("");
     setProblems([]);
+    setNeedsHelm(false);
     try {
       const converted = await api<Converted>("/api/packages/convert", { method: "POST", body: JSON.stringify(body) });
       if (converted.format === "package" && converted.problems.length === 0) {
@@ -190,6 +194,9 @@ function ImportSheet({ onClose, onDone, onDraft }: { onClose: () => void; onDone
         onDraft({ yaml: converted.yaml, warnings: converted.warnings, format: converted.format });
       }
     } catch (err) {
+      if (err instanceof ApiError && err.code === "helm_missing") {
+        setNeedsHelm(true);
+      }
       setError(err instanceof Error ? err.message : text("common.error"));
       // A text that does not read shows its problems at their line.
       if (body.text) {
@@ -219,9 +226,10 @@ function ImportSheet({ onClose, onDone, onDraft }: { onClose: () => void; onDone
             { key: "file", label: text("package.fromFile") },
             { key: "paste", label: text("package.fromText") },
             { key: "url", label: text("package.fromUrl") },
+            { key: "helm", label: text("package.fromHelm") },
           ]}
         />
-        <p className="text-muted">{text("package.importHint")}</p>
+        {how !== "helm" ? <p className="text-muted">{text("package.importHint")}</p> : null}
         {how === "file" ? (
           <Field label={text("package.file")}>
             <input
@@ -266,6 +274,35 @@ function ImportSheet({ onClose, onDone, onDraft }: { onClose: () => void; onDone
             <div>
               <Button type="submit" disabled={busy}>
                 {text("cluster.import")}
+              </Button>
+            </div>
+          </form>
+        ) : null}
+        {how === "helm" ? (
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void send({ helm: chart });
+            }}
+          >
+            <p className="text-muted">{text("package.helmHint")}</p>
+            <Field label={text("package.helmRepo")}>
+              <Input value={chart.repo} onChange={(e) => setChart({ ...chart, repo: e.target.value })} placeholder="https://charts.js.wiki" autoCapitalize="off" spellCheck={false} />
+            </Field>
+            <Field label={text("package.helmChart")} hint={text("package.helmChartHint")}>
+              <Input value={chart.chart} onChange={(e) => setChart({ ...chart, chart: e.target.value })} placeholder="wiki" required autoCapitalize="off" spellCheck={false} />
+            </Field>
+            <Field label={text("package.helmVersion")}>
+              <Input value={chart.version} onChange={(e) => setChart({ ...chart, version: e.target.value })} placeholder="2.3.1" autoCapitalize="off" spellCheck={false} />
+            </Field>
+            <Field label={text("package.helmValues")}>
+              <Code value={chart.values} onChange={(values) => setChart({ ...chart, values })} language="yaml" label={text("package.helmValues")} placeholder={"persistence:\n  size: 4Gi"} minHeight="6rem" maxHeight="40dvh" />
+            </Field>
+            {needsHelm ? <ToolInstall helm onChange={(tools) => tools.helm && void send({ helm: chart })} /> : null}
+            <div>
+              <Button type="submit" disabled={busy || !chart.chart.trim()}>
+                {busy ? text("package.helmRendering") : text("package.helmRender")}
               </Button>
             </div>
           </form>

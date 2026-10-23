@@ -3,15 +3,15 @@ import { api } from "./api";
 import { Button, ErrorText } from "./ui";
 import { text } from "./i18n";
 
-type HostTools = { ansible: boolean; tofu: boolean; tofuEnabled: boolean };
+type HostTools = { ansible: boolean; tofu: boolean; tofuEnabled: boolean; helm?: boolean };
 
-export function ToolInstall({ ansible, tofu, onChange }: { ansible?: boolean; tofu?: boolean; onChange?: (tools: HostTools) => void }) {
+export function ToolInstall({ ansible, tofu, helm, onChange }: { ansible?: boolean; tofu?: boolean; helm?: boolean; onChange?: (tools: HostTools) => void }) {
   const [tools, setTools] = useState<HostTools | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
 
   useEffect(() => {
-    if (!ansible && !tofu) return;
+    if (!ansible && !tofu && !helm) return;
     let cancel = false;
     api<HostTools>("/api/tools")
       .then((next) => {
@@ -24,14 +24,15 @@ export function ToolInstall({ ansible, tofu, onChange }: { ansible?: boolean; to
     return () => {
       cancel = true;
     };
-  }, [ansible, tofu, onChange]);
+  }, [ansible, tofu, helm, onChange]);
 
   if (!tools) return null;
   const showAnsible = Boolean(ansible) && !tools.ansible;
   const showTofu = Boolean(tofu) && tools.tofuEnabled && !tools.tofu;
-  if (!showAnsible && !showTofu) return null;
+  const showHelm = Boolean(helm) && !tools.helm;
+  if (!showAnsible && !showTofu && !showHelm) return null;
 
-  async function install(name: "ansible" | "tofu") {
+  async function install(name: "ansible" | "tofu" | "helm") {
     setBusy(name);
     setError("");
     try {
@@ -56,6 +57,11 @@ export function ToolInstall({ ansible, tofu, onChange }: { ansible?: boolean; to
       {showTofu ? (
         <Button type="button" onClick={() => void install("tofu")} disabled={busy !== ""}>
           {busy === "tofu" ? "Installation…" : "Installer OpenTofu"}
+        </Button>
+      ) : null}
+      {showHelm ? (
+        <Button type="button" onClick={() => void install("helm")} disabled={busy !== ""}>
+          {busy === "helm" ? "Installation…" : "Installer Helm"}
         </Button>
       ) : null}
     </div>
