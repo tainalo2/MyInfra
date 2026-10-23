@@ -108,3 +108,67 @@ func TestPackageIsKeptAndInstalled(t *testing.T) {
 		t.Fatalf("%+v", web.Env)
 	}
 }
+
+func TestApplicationServicesChangeInPlace(t *testing.T) {
+	a, _ := leadAPI(t, false, store.CopyRole{})
+	ctx := t.Context()
+	if err := a.Store.CreateFirstUser(ctx, "u1", "hash"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Store.CreateServer(ctx, "u1", "s1", "solo", "tok-solo-123", "", "", "linked", nil, nil, nil, false); err != nil {
+		t.Fatal(err)
+	}
+	rec := packageCall(t, a, a.createPackage, http.MethodPost, "/api/packages", "", map[string]string{"text": wikiPackage})
+	var view packageView
+	_ = json.Unmarshal(rec.Body.Bytes(), &view)
+	installed := packageCall(t, a, a.installPackage, http.MethodPost, "/x", view.ID, map[string]any{
+		"name": "wiki", "destinationKind": "server", "serverId": "s1", "inputs": map[string]string{"admin": "moi@exemple.fr"},
+	})
+	var app struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(installed.Body.Bytes(), &app)
+
+	exported := packageCall(t, a, a.applicationPackage, http.MethodGet, "/x", app.ID, nil)
+	text := exported.Body.String()
+	for _, want := range []string{`{{secret:DB_PASSWORD}}`, `url = {{url}}`, `"ADMIN":"moi@exemple.fr"`} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %s in %s", want, text)
+		}
+	}
+	kept := packageCall(t, a, a.keepApplicationPackage, http.MethodPost, "/x", app.ID, nil)
+	if kept.Code != http.StatusCreated || !strings.Contains(kept.Body.String(), `"name":"wiki (2)"`) {
+		t.Fatal(kept.Code, kept.Body.String())
+	}
+
+	web := map[string]any{"name": "web", "image": "ghcr.io/acme/wiki:3", "public": true, "port": 3000,
+		"volumes": []map[string]any{{"path": "/data", "sizeGi": 4}, {"path": "/cache"}}}
+	cache := map[string]any{"name": "cache", "image": "redis:7", "port": 6379}
+	changed := packageCall(t, a, a.setServices, http.MethodPut, "/x", app.ID, map[string]any{"services": []any{web, cache}})
+	if changed.Code != http.StatusAccepted {
+		t.Fatal(changed.Code, changed.Body.String())
+	}
+	work, _ := a.workloads(ctx, "tok-solo-123")
+	names := map[string]string{}
+	for _, item := range work {
+		names[item.Service] = item.Image
+	}
+	if len(work) != 2 || names["web"] != "ghcr.io/acme/wiki:3" || names["cache"] != "redis:7" {
+		t.Fatalf("%+v", work)
+	}
+
+	web["volumes"] = []map[string]any{{"path": "/data", "sizeGi": 4}}
+	refused := packageCall(t, a, a.setServices, http.MethodPut, "/x", app.ID, map[string]any{"services": []any{web, cache}})
+	if refused.Code != http.StatusConflict || !strings.Contains(refused.Body.String(), "web (/cache)") {
+		t.Fatal(refused.Code, refused.Body.String())
+	}
+	confirmed := packageCall(t, a, a.setServices, http.MethodPut, "/x", app.ID, map[string]any{"services": []any{web, cache}, "confirm": true})
+	if confirmed.Code != http.StatusAccepted {
+		t.Fatal(confirmed.Code, confirmed.Body.String())
+	}
+	web["volumes"] = []map[string]any{{"path": "/data", "sizeGi": 8}}
+	resized := packageCall(t, a, a.setServices, http.MethodPut, "/x", app.ID, map[string]any{"services": []any{web, cache}})
+	if resized.Code != http.StatusBadRequest || !strings.Contains(resized.Body.String(), "taille") {
+		t.Fatal(resized.Code, resized.Body.String())
+	}
+}

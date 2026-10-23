@@ -3,6 +3,7 @@ import { api } from "./api";
 import { Spinner } from "./kit";
 import { Button, ErrorText, TextButton } from "./ui";
 import { text } from "./i18n";
+import { Code, languageOf } from "./code-lazy";
 
 export function TofuFiles({ path, readOnly = false }: { path: string; readOnly?: boolean }) {
   const [files, setFiles] = useState<Record<string, string> | null>(null);
@@ -57,7 +58,7 @@ export function TofuFiles({ path, readOnly = false }: { path: string; readOnly?:
     return (
       <div className="mb-8 flex flex-col gap-3">
         <a className="text-muted underline" href={`${path}?export=1`}>{text("template.export")}</a>
-        <pre className="min-h-48 overflow-auto border border-line bg-transparent p-3 font-mono text-[13px] whitespace-pre-wrap">{draft}</pre>
+        <Code value={draft} language={languageOf(name)} label={name} readOnly minHeight="12rem" />
       </div>
     );
   }
@@ -74,7 +75,7 @@ export function TofuFiles({ path, readOnly = false }: { path: string; readOnly?:
           }} />
         </label>
       </div>
-      <textarea className="min-h-48 w-full border border-line bg-transparent p-3 font-mono text-[13px]" value={draft} onChange={(e) => setDraft(e.target.value)} spellCheck={false} />
+      <Code value={draft} onChange={setDraft} language={languageOf(name)} label={name} minHeight="12rem" />
       <div className="flex items-center gap-4">
         <Button type="button" onClick={() => void save()} disabled={busy}>{busy ? <Spinner /> : null}
           {text("common.save")}</Button>

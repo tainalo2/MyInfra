@@ -6,6 +6,7 @@ import { ChevronDown, ChevronUp, Copy, ExternalLink, Plus, Trash2 } from "lucide
 import { api, type AppRuntime, type AppService, type Application, type CatalogueCard, type CatalogueVersions, type Cluster, type Destruction, type DnsZone, type PackageRow, type Server } from "./api";
 import { localizeCard } from "./catalogue-copy";
 import { knownMessage, text } from "./i18n";
+import { Code } from "./code-lazy";
 import { AppLogo } from "./app-logo";
 import { CatalogueBrowser } from "./catalogue";
 import { UsageMeters } from "./meters";
@@ -21,7 +22,7 @@ import { NameList, namesOf, type AppName } from "./names";
 import { ImageOrigin } from "./registries";
 import { TofuFiles } from "./tofu";
 import { AppBackups } from "./backups";
-import { ActionsMenu, Button, ErrorText, Field, Fold, Group, Icon, IconButton, Input, LoadingLines, MenuItem, PageTitle, SectionTitle, Select, TextArea, TextButton, focus, podFailed, podHealth, statusLabel, useTrail } from "./ui";
+import { ActionsMenu, Button, ErrorText, Field, Fold, Group, Icon, IconButton, Input, LoadingLines, MenuItem, PageTitle, SectionTitle, Select, TextButton, focus, podFailed, podHealth, statusLabel, useTrail } from "./ui";
 
 type RedundancyPreview = {
   plan: { scaled: string[]; failover: string[]; database: string[]; alone: string[] };
@@ -553,7 +554,7 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
                                 </>
                               ) : null}
                               <Field label={text("app.variables")}>
-                                <TextArea value={variables} onChange={(e) => setVariables(e.target.value)} placeholder={"NOM=valeur"} />
+                                <Code value={variables} onChange={setVariables} language="env" label={text("app.variables")} placeholder="NOM=valeur" minHeight="6rem" />
                               </Field>
                               {sourceKind === "image" ? (
                               <div className="flex flex-col gap-3">
@@ -720,6 +721,16 @@ export function ApplicationPage() {
     }
   }
 
+  // The running application becomes one of the person's packages, to install again.
+  async function keepAsPackage() {
+    try {
+      const row = await api<{ id: string }>(`/api/applications/${app!.id}/package`, { method: "POST" });
+      navigate(`/paquets/${row.id}`);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : text("common.error"), "bad");
+    }
+  }
+
   const where = app.destinationKind === "cluster" ? app.clusterName : app.serverName;
   const address = app.domains?.find((domain) => domain.kind === "custom" && domain.status === "ready")?.hostname ?? app.domains?.find((domain) => domain.kind === "custom")?.hostname ?? "";
   const pods = runtime?.pods ?? [];
@@ -761,6 +772,8 @@ export function ApplicationPage() {
             {app.paused ? text("home.resume") : text("apps.pauseAction")}
           </Button>
           <ActionsMenu label={text("apps.more")}>
+            {app.sourceKind === "image" && !locked ? <MenuItem onClick={() => navigate(`/applications/${app.id}/services`)}>{text("appServices.edit")}</MenuItem> : null}
+            <MenuItem onClick={() => void keepAsPackage()}>{text("appServices.keep")}</MenuItem>
             <MenuItem tone="danger" onClick={() => setConfirm("delete")}>
               {text("common.delete")}
             </MenuItem>
@@ -1010,7 +1023,7 @@ function VariablesSheet({ app, onClose, onSaved }: { app: Application; onClose: 
       <form onSubmit={save} className="flex flex-col gap-4">
         <p className="text-muted">{text("app.variablesRestart")}</p>
         <Field label={text("app.variables")}>
-          <TextArea value={draft} onChange={(e) => setDraft(e.target.value)} rows={8} placeholder={"NOM=valeur"} spellCheck={false} />
+          <Code value={draft} onChange={setDraft} language="env" label={text("app.variables")} placeholder="NOM=valeur" minHeight="10rem" />
         </Field>
         {error ? <ErrorText>{error}</ErrorText> : null}
         <div className="flex flex-wrap items-center gap-4">

@@ -33,6 +33,7 @@ type CodeProps = {
   problems?: CodeProblem[];
   readOnly?: boolean;
   label: string;
+  placeholder?: string;
   minHeight?: string;
   maxHeight?: string;
 };

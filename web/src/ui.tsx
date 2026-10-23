@@ -603,11 +603,12 @@ function crumbsFor(pathname: string, names: Record<string, string>): Crumb[] {
   if (path === "/") return [];
   if (path === "/applications") return [{ label: text("nav.apps") }];
   if (path === "/nouveau") return [{ label: text("nav.apps"), to: "/applications" }, { label: text("crumb.newApp") }];
-  const app = path.match(/^\/applications\/([^/]+)(\/terminal\/[^/]+)?$/);
+  const app = path.match(/^\/applications\/([^/]+)(\/terminal\/[^/]+|\/services)?$/);
   if (app) {
     const id = decodeURIComponent(app[1]);
     const crumbs: Crumb[] = [{ label: text("nav.apps"), to: "/applications" }, { label: names[`app:${id}`] || text("crumb.application"), to: `/applications/${id}` }];
-    if (app[2]) crumbs.push({ label: text("crumb.terminal") });
+    if (app[2] === "/services") crumbs.push({ label: text("appServices.crumb") });
+    else if (app[2]) crumbs.push({ label: text("crumb.terminal") });
     return current(crumbs);
   }
   if (path === "/clusters") return [{ label: text("nav.clusters") }];

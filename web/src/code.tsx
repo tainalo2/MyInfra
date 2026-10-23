@@ -10,6 +10,7 @@ import {
   highlightActiveLineGutter,
   keymap,
   lineNumbers,
+  placeholder as hint,
   type DecorationSet,
   type ViewUpdate,
 } from "@codemirror/view";
@@ -174,6 +175,7 @@ const frame = EditorView.theme({
   ".cm-scroller": { fontFamily: "var(--font-mono)", lineHeight: "1.6" },
   ".cm-content": { caretColor: "var(--color-ink)", padding: "8px 0" },
   ".cm-cursor": { borderLeftColor: "var(--color-ink)" },
+  ".cm-placeholder": { color: "var(--color-faint)" },
   ".cm-gutters": {
     backgroundColor: "var(--color-canvas)",
     color: "var(--color-faint)",
@@ -218,6 +220,7 @@ export default function CodeEditor({
   problems = [],
   readOnly = false,
   label,
+  placeholder,
   minHeight = "8rem",
   maxHeight = "32rem",
 }: {
@@ -227,6 +230,7 @@ export default function CodeEditor({
   problems?: CodeProblem[];
   readOnly?: boolean;
   label: string;
+  placeholder?: string;
   minHeight?: string;
   maxHeight?: string;
 }) {
@@ -259,6 +263,7 @@ export default function CodeEditor({
           frame,
           EditorView.theme({ ".cm-scroller": { minHeight, maxHeight }, "&": { maxHeight } }),
           EditorView.contentAttributes.of({ "aria-label": label }),
+          placeholder ? hint(placeholder) : [],
           lang.current.of(languageExtension(language)),
           editable.current.of([EditorState.readOnly.of(readOnly), EditorView.editable.of(!readOnly)]),
           EditorView.updateListener.of((update) => {

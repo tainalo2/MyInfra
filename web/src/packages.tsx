@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowRight, Package as PackageIcon, Plus, Trash2 } from "lucide-react";
-import { api, peek, type Package, type PackageFile, type PackageProblem, type PackageRow, type PackageService } from "./api";
+import { ApiError, api, peek, type Package, type PackageFile, type PackageProblem, type PackageRow, type PackageService } from "./api";
 import { Code, languageOf } from "./code-lazy";
 import { knownMessage, text } from "./i18n";
 import { useI18n } from "./lang";
@@ -444,40 +444,6 @@ function VisualEditor({
     onChange({ ...pkg, [key]: value });
   }
 
-  function setService(index: number, next: PackageService) {
-    const services = pkg.services.map((service, at) => {
-      if (at === index) return next;
-      // One public service only: choosing one leaves the others.
-      if (next.public && service.public) return { ...service, public: false };
-      return service;
-    });
-    // A renamed service stays the one the others wait for.
-    const before = pkg.services[index]?.name;
-    const renamed = before && before !== next.name;
-    onChange({
-      ...pkg,
-      services: renamed
-        ? services.map((service) => ({ ...service, dependsOn: service.dependsOn?.map((name) => (name === before ? next.name : name)) }))
-        : services,
-    });
-  }
-
-  function addService() {
-    let n = pkg.services.length + 1;
-    while (pkg.services.some((service) => service.name === `service-${n}`)) n++;
-    onChange({ ...pkg, services: [...pkg.services, { name: `service-${n}`, image: "" }] });
-  }
-
-  function removeService(index: number) {
-    const gone = pkg.services[index].name;
-    onChange({
-      ...pkg,
-      services: pkg.services
-        .filter((_, at) => at !== index)
-        .map((service) => ({ ...service, dependsOn: service.dependsOn?.filter((name) => name !== gone) })),
-    });
-  }
-
   return (
     <div className="flex flex-col gap-10">
       <section className="flex max-w-[720px] flex-col gap-4">
@@ -496,26 +462,66 @@ function VisualEditor({
         </Field>
         {general.length > 0 ? <ProblemList problems={general} /> : null}
       </section>
-      <section className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <h2 className="text-base">{text("field.services")}</h2>
-          <TextButton type="button" onClick={addService}>
-            {text("package.addService")}
-          </TextButton>
-        </div>
-        <Dependencies services={pkg.services} />
-        {pkg.services.map((service, index) => (
-          <ServiceCard
-            key={index}
-            service={service}
-            others={pkg.services.filter((_, at) => at !== index).map((other) => other.name)}
-            problems={problemsUnder(problems, `services[${index}]`).map((problem) => ({ ...problem, path: problem.path.slice(`services[${index}]`.length + 1) }))}
-            onChange={(next) => setService(index, next)}
-            onRemove={pkg.services.length > 1 ? () => removeService(index) : undefined}
-          />
-        ))}
-      </section>
+      <ServicesEditor services={pkg.services} onChange={(services) => set("services", services)} problems={problems} />
     </div>
+  );
+}
+
+// ServicesEditor edits the services of a package or of a running
+// application: one card each, who waits for whom above them.
+function ServicesEditor({
+  services,
+  onChange,
+  problems,
+}: {
+  services: PackageService[];
+  onChange: (services: PackageService[]) => void;
+  problems: PackageProblem[];
+}) {
+  function setService(index: number, next: PackageService) {
+    const updated = services.map((service, at) => {
+      if (at === index) return next;
+      // One public service only: choosing one leaves the others.
+      if (next.public && service.public) return { ...service, public: false };
+      return service;
+    });
+    // A renamed service stays the one the others wait for.
+    const before = services[index]?.name;
+    const renamed = before && before !== next.name;
+    onChange(renamed ? updated.map((service) => ({ ...service, dependsOn: service.dependsOn?.map((name) => (name === before ? next.name : name)) })) : updated);
+  }
+
+  function addService() {
+    let n = services.length + 1;
+    while (services.some((service) => service.name === `service-${n}`)) n++;
+    onChange([...services, { name: `service-${n}`, image: "" }]);
+  }
+
+  function removeService(index: number) {
+    const gone = services[index].name;
+    onChange(services.filter((_, at) => at !== index).map((service) => ({ ...service, dependsOn: service.dependsOn?.filter((name) => name !== gone) })));
+  }
+
+  return (
+    <section className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h2 className="text-base">{text("field.services")}</h2>
+        <TextButton type="button" onClick={addService}>
+          {text("package.addService")}
+        </TextButton>
+      </div>
+      <Dependencies services={services} />
+      {services.map((service, index) => (
+        <ServiceCard
+          key={index}
+          service={service}
+          others={services.filter((_, at) => at !== index).map((other) => other.name)}
+          problems={problemsUnder(problems, `services[${index}]`).map((problem) => ({ ...problem, path: problem.path.slice(`services[${index}]`.length + 1) }))}
+          onChange={(next) => setService(index, next)}
+          onRemove={services.length > 1 ? () => removeService(index) : undefined}
+        />
+      ))}
+    </section>
   );
 }
 
@@ -951,5 +957,184 @@ function EnvEditor({ value, onChange, label }: { value?: Record<string, string>;
       minHeight="5rem"
       problems={bad.map((line) => ({ line, message: text("ui.uneVariableSEcritCleValeur") }))}
     />
+  );
+}
+
+type AppPackage = { package: Package; yaml: string; problems: PackageProblem[] };
+
+// AppServices changes the services of a running application, as a package
+// is edited: add one, remove one, give it disks, files or a health check.
+// What would erase data is asked first.
+export function AppServices() {
+  useI18n();
+  const { id = "" } = useParams();
+  const navigate = useNavigate();
+  const toast = useToast();
+  const { canDeploy } = useSession();
+  const [name, setName] = useState("");
+  const [services, setServices] = useState<PackageService[]>([]);
+  const [yamlText, setYamlText] = useState("");
+  const [mode, setMode] = useState<"visual" | "yaml">("visual");
+  const [problems, setProblems] = useState<PackageProblem[]>([]);
+  const [readable, setReadable] = useState(true);
+  const [ready, setReady] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [loss, setLoss] = useState("");
+  const asked = useRef(0);
+  const yamlTimer = useRef(0);
+
+  useEffect(() => {
+    api<AppPackage>(`/api/applications/${id}/package`)
+      .then((answer) => {
+        setName(answer.package.name);
+        setServices(answer.package.services);
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setReady(true));
+  }, [id]);
+
+  // Only the services change here: the variables keep their own screen.
+  const shown: Package = useMemo(() => ({ type: "myinfra-package", version: 1, name, services }), [name, services]);
+
+  useEffect(() => {
+    if (!ready || mode !== "visual") return;
+    const turn = ++asked.current;
+    const timer = setTimeout(() => {
+      api<{ yaml: string; problems: PackageProblem[] }>("/api/packages/format", { method: "POST", body: JSON.stringify({ package: shown }) })
+        .then((answer) => {
+          if (turn !== asked.current) return;
+          setYamlText(answer.yaml);
+          setProblems(answer.problems.filter((problem) => problem.path.startsWith("services")));
+          setReadable(true);
+        })
+        .catch(() => undefined);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [shown, mode, ready]);
+
+  function onYaml(next: string) {
+    setYamlText(next);
+    const turn = ++asked.current;
+    window.clearTimeout(yamlTimer.current);
+    yamlTimer.current = window.setTimeout(() => {
+      api<Check>("/api/packages/check", { method: "POST", body: JSON.stringify({ text: next }) })
+        .then((answer) => {
+          if (turn !== asked.current) return;
+          setProblems(answer.problems);
+          setReadable(answer.readable);
+          if (answer.readable) setServices(answer.package.services ?? []);
+        })
+        .catch(() => undefined);
+    }, 300);
+  }
+
+  function switchTo(next: "visual" | "yaml") {
+    if (next === mode) return;
+    if (next === "visual" && !readable) {
+      setError(text("package.fixYamlFirst"));
+      return;
+    }
+    setError("");
+    if (next === "yaml") onYaml(yamlText);
+    setMode(next);
+  }
+
+  async function save(confirm: boolean) {
+    setSaving(true);
+    setError("");
+    try {
+      await api(`/api/applications/${id}/services`, { method: "PUT", body: JSON.stringify({ services, confirm }) });
+      toast(text("appServices.saved"));
+      navigate(`/applications/${id}`);
+    } catch (err) {
+      if (err instanceof ApiError && err.code === "services_data_loss") {
+        setLoss(err.message);
+      } else {
+        setError(err instanceof Error ? err.message : text("common.error"));
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function keep() {
+    try {
+      const row = await api<PackageRow>(`/api/applications/${id}/package`, { method: "POST" });
+      navigate(`/paquets/${row.id}`);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : text("common.error"), "bad");
+    }
+  }
+
+  if (!ready) return <LoadingLines lines={6} />;
+
+  return (
+    <>
+      <PageTitle
+        title={text("appServices.title", { name })}
+        icon={PackageIcon}
+        action={
+          canDeploy ? (
+            <TextButton type="button" onClick={() => void keep()}>
+              {text("appServices.keep")}
+            </TextButton>
+          ) : null
+        }
+      />
+      <form
+        className="flex flex-col gap-8"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void save(false);
+        }}
+      >
+        <p className="max-w-[720px] text-muted">{text("appServices.intro")}</p>
+        <Tabs
+          label={text("package.view")}
+          active={mode}
+          onChange={switchTo}
+          tabs={[
+            { key: "visual", label: text("package.visual") },
+            { key: "yaml", label: text("package.advanced"), mark: !readable },
+          ]}
+        />
+        {mode === "yaml" ? (
+          <div className="flex flex-col gap-4">
+            <Code value={yamlText} onChange={onYaml} language="yaml" problems={lined(problems)} label={text("package.advanced")} minHeight="24rem" maxHeight="70dvh" readOnly={!canDeploy} />
+            {problems.length > 0 ? <ProblemList problems={problems} /> : null}
+          </div>
+        ) : (
+          <ServicesEditor services={services} onChange={setServices} problems={problems} />
+        )}
+        {error ? <ErrorText>{error}</ErrorText> : null}
+        {canDeploy ? (
+          <div className="flex items-center gap-4">
+            <Button type="submit" disabled={saving || problems.length > 0}>
+              {text("appServices.apply")}
+            </Button>
+            <TextButton type="button" onClick={() => navigate(`/applications/${id}`)}>
+              {text("common.cancel")}
+            </TextButton>
+          </div>
+        ) : null}
+      </form>
+      {loss ? (
+        <ConfirmDialog
+          title={text("appServices.lossTitle")}
+          confirmLabel={text("appServices.lossConfirm")}
+          danger
+          phrase={name}
+          phraseLabel={text("field.name")}
+          onConfirm={async () => {
+            setLoss("");
+            await save(true);
+          }}
+          onClose={() => setLoss("")}
+        >
+          {loss}
+        </ConfirmDialog>
+      ) : null}
+    </>
   );
 }

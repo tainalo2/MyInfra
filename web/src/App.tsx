@@ -44,6 +44,7 @@ const TemplateLaunch = page(() => import("./templates"), "TemplateLaunch");
 const TemplateRunPage = page(() => import("./templates"), "TemplateRunPage");
 const Packages = page(() => import("./packages"), "Packages");
 const PackageEditor = page(() => import("./packages"), "PackageEditor");
+const AppServices = page(() => import("./packages"), "AppServices");
 const DestructionPage = page(() => import("./destructions"), "DestructionPage");
 const DestructionsPage = page(() => import("./destructions"), "DestructionsPage");
 const DeploymentsPage = page(() => import("./deployments"), "DeploymentsPage");
@@ -262,6 +263,7 @@ export function App() {
         <Route path="/applications" element={<Home />} />
         <Route path="/nouveau" element={<RequireDeploy><NewApp /></RequireDeploy>} />
         <Route path="/applications/:id" element={<ApplicationPage />} />
+        <Route path="/applications/:id/services" element={<AppServices />} />
         <Route path="/applications/:id/terminal/:pod" element={<RequireDeploy><PodTerminal /></RequireDeploy>} />
         <Route path="/cles" element={<Keys />} />
         <Route path="/secrets" element={<Secrets />} />

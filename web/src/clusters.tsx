@@ -3,6 +3,7 @@ import { Network, Plus, Server as ServerIcon } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, peek, type Application, type ArgoApp, type Cluster, type ClusterUsage, type Destruction, type Server, type Template } from "./api";
 import { text } from "./i18n";
+import { Code } from "./code-lazy";
 import { ConfirmDialog, Spinner, useToast } from "./kit";
 import { usePoll } from "./poll";
 import { usageText } from "./measure";
@@ -11,7 +12,7 @@ import { ServerCard, ServerForm, billText } from "./servers";
 import { UpdateBadge, UpdateDialog, urgent, useUpdates } from "./updates";
 import { hourlyRate } from "./measure";
 import { useSession } from "./session";
-import { ActionsMenu, Button, EmptyList, ErrorText, Field, Icon, Input, ItemList, ListActions, ListModeButton, LoadingCards, LoadingLines, MenuItem, PageTitle, Skeleton, TextArea, TextButton, entryClass, removalOf, useDestructions, useListMode, type ListMode } from "./ui";
+import { ActionsMenu, Button, EmptyList, ErrorText, Field, Icon, Input, ItemList, ListActions, ListModeButton, LoadingCards, LoadingLines, MenuItem, PageTitle, Skeleton, TextButton, entryClass, removalOf, useDestructions, useListMode, type ListMode } from "./ui";
 
 export function Clusters() {
   const { canDeploy } = useSession();
@@ -132,7 +133,7 @@ export function Clusters() {
             <Input value={name} onChange={(e) => setName(e.target.value)} required />
           </Field>
           <Field label={text("cluster.kubeconfig")}>
-            <TextArea value={kubeconfig} onChange={(e) => setKubeconfig(e.target.value)} required />
+            <Code value={kubeconfig} onChange={setKubeconfig} language="yaml" label={text("cluster.kubeconfig")} placeholder="apiVersion: v1" minHeight="10rem" />
           </Field>
           <div>
             <Button type="submit" disabled={busy}>

@@ -386,6 +386,10 @@ export type TemplateName = { subdomain: string; zone: string };
 export type TemplateApp = {
   // catalog is the catalogue article the app comes from.
   catalog?: string;
+  // package is the package the app comes from, kept whole; inputs answers
+  // its questions.
+  package?: Package;
+  inputs?: Record<string, string>;
   name: string;
   sourceKind: string;
   source: string;

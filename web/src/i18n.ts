@@ -1272,6 +1272,17 @@ const fr = {
   "package.noneYet": "Aucun paquet encore. Créez-en un dans Paquets.",
   "package.copy": "Copier dans mes paquets",
   "package.open": "Ouvrir le paquet",
+  "appServices.title": "Services de {name}",
+  "appServices.crumb": "Services",
+  "appServices.intro": "Ajoutez, retirez ou changez les services de l'application en place. Les variables communes gardent leur écran ; les copies se changent depuis la redondance.",
+  "appServices.apply": "Appliquer",
+  "appServices.saved": "Les services sont en cours de mise à jour.",
+  "appServices.keep": "Enregistrer comme paquet",
+  "appServices.edit": "Modifier les services",
+  "appServices.lossTitle": "Effacer ces données ?",
+  "appServices.lossConfirm": "Effacer et appliquer",
+  "template.fromPackage": "Ajouter depuis un paquet",
+  "template.packageNamed": "Paquet {name}, emporté avec le template",
 } as const;
 
 export type MsgKey = keyof typeof fr;
@@ -2475,6 +2486,17 @@ const en: Record<MsgKey, string> = {
   "package.noneYet": "No package yet. Create one in Packages.",
   "package.copy": "Copy to my packages",
   "package.open": "Open the package",
+  "appServices.title": "Services of {name}",
+  "appServices.crumb": "Services",
+  "appServices.intro": "Add, remove or change the services of the running application. Shared variables keep their own screen; copies are changed from redundancy.",
+  "appServices.apply": "Apply",
+  "appServices.saved": "The services are being updated.",
+  "appServices.keep": "Save as a package",
+  "appServices.edit": "Edit services",
+  "appServices.lossTitle": "Erase this data?",
+  "appServices.lossConfirm": "Erase and apply",
+  "template.fromPackage": "Add from a package",
+  "template.packageNamed": "Package {name}, carried with the template",
 };
 
 const pt: Record<MsgKey, string> = {
@@ -3654,6 +3676,17 @@ const pt: Record<MsgKey, string> = {
   "package.noneYet": "Ainda não há pacotes. Crie um em Pacotes.",
   "package.copy": "Copiar para os meus pacotes",
   "package.open": "Abrir o pacote",
+  "appServices.title": "Serviços de {name}",
+  "appServices.crumb": "Serviços",
+  "appServices.intro": "Adicione, retire ou altere os serviços da aplicação em funcionamento. As variáveis comuns mantêm o seu ecrã; as cópias alteram-se a partir da redundância.",
+  "appServices.apply": "Aplicar",
+  "appServices.saved": "Os serviços estão a ser atualizados.",
+  "appServices.keep": "Guardar como pacote",
+  "appServices.edit": "Alterar os serviços",
+  "appServices.lossTitle": "Apagar estes dados?",
+  "appServices.lossConfirm": "Apagar e aplicar",
+  "template.fromPackage": "Adicionar a partir de um pacote",
+  "template.packageNamed": "Pacote {name}, levado com o modelo",
 };
 
 const it: Record<MsgKey, string> = {
@@ -4832,6 +4865,17 @@ const it: Record<MsgKey, string> = {
   "package.noneYet": "Nessun pacchetto ancora. Creane uno in Pacchetti.",
   "package.copy": "Copia nei miei pacchetti",
   "package.open": "Apri il pacchetto",
+  "appServices.title": "Servizi di {name}",
+  "appServices.crumb": "Servizi",
+  "appServices.intro": "Aggiungi, rimuovi o modifica i servizi dell'applicazione in esecuzione. Le variabili comuni hanno la loro schermata; le copie si cambiano dalla ridondanza.",
+  "appServices.apply": "Applica",
+  "appServices.saved": "I servizi sono in aggiornamento.",
+  "appServices.keep": "Salva come pacchetto",
+  "appServices.edit": "Modifica i servizi",
+  "appServices.lossTitle": "Cancellare questi dati?",
+  "appServices.lossConfirm": "Cancella e applica",
+  "template.fromPackage": "Aggiungi da un pacchetto",
+  "template.packageNamed": "Pacchetto {name}, portato con il template",
 };
 
 const de: Record<MsgKey, string> = {
@@ -6012,6 +6056,17 @@ const de: Record<MsgKey, string> = {
   "package.noneYet": "Noch keine Pakete. Erstellen Sie eines unter Pakete.",
   "package.copy": "In meine Pakete kopieren",
   "package.open": "Paket öffnen",
+  "appServices.title": "Dienste von {name}",
+  "appServices.crumb": "Dienste",
+  "appServices.intro": "Fügen Sie Dienste der laufenden Anwendung hinzu, entfernen oder ändern Sie sie. Gemeinsame Variablen haben ihre eigene Ansicht; Kopien ändern Sie über die Redundanz.",
+  "appServices.apply": "Anwenden",
+  "appServices.saved": "Die Dienste werden aktualisiert.",
+  "appServices.keep": "Als Paket speichern",
+  "appServices.edit": "Dienste bearbeiten",
+  "appServices.lossTitle": "Diese Daten löschen?",
+  "appServices.lossConfirm": "Löschen und anwenden",
+  "template.fromPackage": "Aus einem Paket hinzufügen",
+  "template.packageNamed": "Paket {name}, im Template enthalten",
 };
 
 const tables: Record<Lang, Record<MsgKey, string>> = { fr, en, pt, it, de };

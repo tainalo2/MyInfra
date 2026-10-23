@@ -5,6 +5,8 @@ import {
   api,
   peek,
   type Catalog,
+  type Package,
+  type PackageRow,
   type Cluster,
   type DnsZone,
   type Project,
@@ -17,8 +19,9 @@ import {
 } from "./api";
 import { CancelDeployment } from "./deployments";
 import { text, knownMessage } from "./i18n";
+import { Code } from "./code-lazy";
 import { OfferFields, OfferStorage, formatPrice } from "./offers";
-import { ConfirmDialog, Spinner, Steps, useToast } from "./kit";
+import { ConfirmDialog, Sheet, Spinner, Steps, useToast } from "./kit";
 import { usePoll } from "./poll";
 import { AppLogo } from "./app-logo";
 import { useI18n } from "./lang";
@@ -41,7 +44,6 @@ import {
   PageTitle,
   SectionTitle,
   Select,
-  TextArea,
   TextButton,
 } from "./ui";
 
@@ -237,6 +239,7 @@ export function TemplateEditor() {
   if (!ready) return <LoadingLines lines={4} />;
   const servers = body.servers ?? [];
   const apps = body.applications ?? [];
+  const [picking, setPicking] = useState(false);
 
   return (
     <>
@@ -321,12 +324,26 @@ export function TemplateEditor() {
                       </TextButton>
                     </div>
                   ))}
-                  <div>
+                  <div className="flex flex-wrap gap-6">
                     <TextButton type="button" onClick={() => setBody({ ...body, applications: [...apps, emptyApp()] })}>
                       <Icon icon={Plus} />
                       {text("ui.ajouterUneApplication")}
                     </TextButton>
+                    <TextButton type="button" onClick={() => setPicking(true)}>
+                      <Icon icon={Plus} />
+                      {text("template.fromPackage")}
+                    </TextButton>
                   </div>
+                  {picking ? (
+                    <PackagePick
+                      onClose={() => setPicking(false)}
+                      onPick={(pkg) => {
+                        setPicking(false);
+                        const pub = pkg.services.find((service) => service.public) ?? pkg.services[0];
+                        setBody({ ...body, applications: [...apps, { name: pkg.name, sourceKind: "image", source: pub?.image ?? "", replicas: 1, package: pkg, inputs: {} }] });
+                      }}
+                    />
+                  ) : null}
                 </section>
               ),
             },
@@ -862,6 +879,21 @@ function AppFields({ app, zones, onChange }: { app: TemplateApp; zones: DnsZone[
       <Field label={text("field.name")}>
         <Input value={app.name} onChange={(e) => onChange({ ...app, name: e.target.value })} required />
       </Field>
+      {app.package ? (
+        <>
+          <div className="flex flex-col gap-1 rounded-md border border-line bg-surface p-3">
+            <span>{text("template.packageNamed", { name: app.package.name })}</span>
+            <span className="font-mono text-[13px] text-muted">{app.package.services.map((service) => service.name).join(" · ")}</span>
+          </div>
+          {(app.package.inputs ?? []).map((input) => (
+            <Field key={input.key} label={input.label}>
+              <Input value={app.inputs?.[input.key] ?? ""} onChange={(e) => onChange({ ...app, inputs: { ...app.inputs, [input.key]: e.target.value } })} required />
+            </Field>
+          ))}
+          <NameList names={names} zones={zones} onChange={(next) => onChange({ ...app, names: next })} />
+        </>
+      ) : (
+      <>
       <Field label={text("field.source")}>
         <Select value={app.sourceKind} onChange={(e) => onChange({ ...app, sourceKind: e.target.value })}>
           <option value="image">{text("common.image")}</option>
@@ -899,6 +931,8 @@ function AppFields({ app, zones, onChange }: { app: TemplateApp; zones: DnsZone[
           </TextButton>
         </div>
       </Fold>
+      </>
+      )}
       <Field label={text("field.redundancy")}>
         <Input
           value={String(app.replicas ?? 1)}
@@ -908,12 +942,15 @@ function AppFields({ app, zones, onChange }: { app: TemplateApp; zones: DnsZone[
       </Field>
       <p className="text-faint">{text("app.replicasHint")}</p>
       <Field label={text("app.variables")}>
-        <TextArea
+        <Code
           value={variables}
-          placeholder={"NOM=valeur"}
-          onChange={(e) => {
-            setVariables(e.target.value);
-            onChange({ ...app, variables: parseVariables(e.target.value) });
+          language="env"
+          label={text("app.variables")}
+          placeholder="NOM=valeur"
+          minHeight="6rem"
+          onChange={(next) => {
+            setVariables(next);
+            onChange({ ...app, variables: parseVariables(next) });
           }}
         />
       </Field>
@@ -1184,5 +1221,51 @@ function Starters() {
         </ul>
       )}
     </section>
+  );
+}
+
+// PackagePick chooses one of the person's packages, to carry it whole in
+// a template.
+function PackagePick({ onClose, onPick }: { onClose: () => void; onPick: (pkg: Package) => void }) {
+  const [rows, setRows] = useState<PackageRow[] | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    api<PackageRow[]>("/api/packages")
+      .then(setRows)
+      .catch((err) => setError(err.message));
+  }, []);
+
+  async function pick(row: PackageRow) {
+    try {
+      const full = await api<PackageRow>(`/api/packages/${row.id}`);
+      if (full.package) onPick(full.package);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : text("common.error"));
+    }
+  }
+
+  return (
+    <Sheet title={text("template.fromPackage")} onClose={onClose}>
+      {error ? <ErrorText>{error}</ErrorText> : null}
+      {rows === null && !error ? <LoadingLines lines={3} /> : null}
+      {rows && rows.length === 0 ? (
+        <p className="text-muted">
+          {text("package.noneYet")}{" "}
+          <Link to="/paquets" className="text-ink underline">
+            {text("nav.packages")}
+          </Link>
+        </p>
+      ) : null}
+      <ul className="flex flex-col gap-3">
+        {(rows ?? []).map((row) => (
+          <li key={row.id}>
+            <button type="button" onClick={() => void pick(row)} className="flex w-full flex-col gap-1 rounded-md border border-line p-3 text-left hover:bg-status">
+              <span>{row.name}</span>
+              <span className="font-mono text-[13px] text-muted">{row.services.join(" · ")}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Sheet>
   );
 }
