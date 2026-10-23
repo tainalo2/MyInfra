@@ -13,6 +13,10 @@ $iscc = (Get-Command iscc.exe -ErrorAction SilentlyContinue).Source
 if (-not $iscc) {
   $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
 }
+# Where winget puts it when installed for the current user only.
+if (-not (Test-Path $iscc)) {
+  $iscc = Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 6\ISCC.exe"
+}
 if (-not (Test-Path $iscc)) { throw "Inno Setup 6 est introuvable : https://jrsoftware.org/isdl.php" }
 
 # Inno Setup only takes numbers: 1.4.0-rc.1 shows as 1.4.0.
