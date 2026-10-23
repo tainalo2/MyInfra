@@ -11,7 +11,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"myinfra/internal/market"
 	"myinfra/internal/spec"
 )
 
@@ -29,7 +28,28 @@ type Package struct {
 	Inputs   []Input           `json:"inputs,omitempty"`
 	Env      map[string]string `json:"env,omitempty"`
 	Services []Service         `json:"services"`
+	// About presents the package: where it comes from, its logo, and its
+	// words in each language.
+	About *About `json:"about,omitempty"`
 }
+
+type About struct {
+	Site string `json:"site,omitempty"`
+	// Logo names the icon the screens draw, as Simple Icons names it.
+	Logo        string `json:"logo,omitempty"`
+	Description string `json:"description,omitempty"`
+	// Translations give the summary and the description in another
+	// language than the one the package is written in.
+	Translations map[string]Words `json:"translations,omitempty"`
+}
+
+type Words struct {
+	Summary     string `json:"summary,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// Languages are those the screens speak.
+var Languages = []string{"fr", "en", "pt", "it", "de"}
 
 // Input is a question asked at installation, read as {{input:key}}.
 type Input struct {
@@ -106,10 +126,30 @@ func Check(p Package) []Problem {
 	if utf8.RuneCountInString(p.Category) > 40 {
 		add("category", "La catégorie tient en 40 caractères.")
 	}
+	if a := p.About; a != nil {
+		if a.Site != "" && (!aboutSite.MatchString(a.Site) || len(a.Site) > 200) {
+			add("about.site", "Indiquez l'adresse https:// du site de l'application.")
+		}
+		if a.Logo != "" && !aboutLogo.MatchString(a.Logo) {
+			add("about.logo", "Le logo se nomme comme sur Simple Icons, en minuscules, par exemple nextcloud.")
+		}
+		if utf8.RuneCountInString(a.Description) > 1000 {
+			add("about.description", "La description tient en 1000 caractères.")
+		}
+		for _, lang := range sortedKeys(wordsKeys(a.Translations)) {
+			words := a.Translations[lang]
+			if !knownLanguage(lang) {
+				add("about.translations."+lang, "Les langues sont fr, en, pt, it et de.")
+			}
+			if utf8.RuneCountInString(words.Summary) > 300 || utf8.RuneCountInString(words.Description) > 1000 {
+				add("about.translations."+lang, "Le résumé tient en 300 caractères, la description en 1000.")
+			}
+		}
+	}
 	inputs := map[string]bool{}
 	for i, input := range p.Inputs {
 		at := fmt.Sprintf("inputs[%d]", i)
-		if !market.InputKey(input.Key) || inputs[input.Key] {
+		if !inputKey.MatchString(input.Key) || inputs[input.Key] {
 			add(at+".key", "Une question a un nom unique, en minuscules, par exemple admin-email.")
 		}
 		inputs[input.Key] = true
@@ -126,7 +166,7 @@ func Check(p Package) []Problem {
 		if len(value) > 8192 || strings.ContainsAny(value, "'\x00\r\n") {
 			add("env."+key, "La valeur est trop longue, ou contient une apostrophe ou un retour à la ligne.")
 		}
-		if err := market.CheckTokens(value, inputs); err != nil {
+		if err := checkTokens(value, inputs); err != nil {
 			add("env."+key, "%s", tokenMessage(err))
 		}
 	}
@@ -185,16 +225,16 @@ func Check(p Package) []Problem {
 			}
 		}
 		for _, key := range sortedKeys(svc.Env) {
-			if err := market.CheckTokens(svc.Env[key], inputs); err != nil {
+			if err := checkTokens(svc.Env[key], inputs); err != nil {
 				add(at+".env."+key, "%s", tokenMessage(err))
-			} else if market.HasSecret(svc.Env[key]) {
+			} else if hasSecret(svc.Env[key]) {
 				add(at+".env."+key, "Les secrets vont dans les variables communes (env), qui sont chiffrées.")
 			}
 		}
 		for j, file := range svc.Files {
-			if err := market.CheckTokens(file.Content, inputs); err != nil {
+			if err := checkTokens(file.Content, inputs); err != nil {
 				add(fmt.Sprintf("%s.files[%d].content", at, j), "%s", tokenMessage(err))
-			} else if market.HasSecret(file.Content) {
+			} else if hasSecret(file.Content) {
 				add(fmt.Sprintf("%s.files[%d].content", at, j), "Les secrets vont dans les variables communes (env), qui sont chiffrées.")
 			}
 		}
@@ -206,6 +246,47 @@ func Check(p Package) []Problem {
 		add("services", "Les services s'attendent les uns les autres : %s.", cycle)
 	}
 	return out
+}
+
+var (
+	aboutSite = regexp.MustCompile(`^https://[^\s'"<>]+$`)
+	aboutLogo = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`)
+)
+
+func knownLanguage(lang string) bool {
+	for _, known := range Languages {
+		if known == lang {
+			return true
+		}
+	}
+	return false
+}
+
+func wordsKeys(m map[string]Words) map[string]string {
+	out := make(map[string]string, len(m))
+	for key := range m {
+		out[key] = ""
+	}
+	return out
+}
+
+// Localized gives the summary and the description in a language, those the
+// package is written in when it has none for it.
+func (p Package) Localized(lang string) (string, string) {
+	summary, description := p.Summary, ""
+	if p.About == nil {
+		return summary, description
+	}
+	description = p.About.Description
+	if words, ok := p.About.Translations[lang]; ok {
+		if words.Summary != "" {
+			summary = words.Summary
+		}
+		if words.Description != "" {
+			description = words.Description
+		}
+	}
+	return summary, description
 }
 
 func tokenMessage(err error) string {
@@ -273,43 +354,6 @@ func (s Service) Disk() (*spec.Volume, spec.Service) {
 	first := s.Volumes[0]
 	rest.Volumes = append([]spec.Volume(nil), s.Volumes[1:]...)
 	return &first, rest
-}
-
-// FromArticle writes a catalogue article as a package, to copy and change.
-func FromArticle(article market.Article) Package {
-	p := Package{
-		Type: Type, Version: Version,
-		Name: article.Name, Summary: article.Summary, Category: article.Category,
-		Env: copyMap(article.Env),
-	}
-	for _, input := range article.Inputs {
-		p.Inputs = append(p.Inputs, Input{Key: input.Key, Label: input.Label})
-	}
-	for _, svc := range article.Services {
-		out := Service{
-			Name: svc.Name, Image: svc.Image, Public: svc.Published, Port: svc.Listen,
-			Args: append([]string(nil), svc.Args...),
-		}
-		if svc.Replicas > 1 {
-			out.Replicas = svc.Replicas
-		}
-		if svc.Disk {
-			out.Volumes = []spec.Volume{{Path: svc.DiskPath, SizeGi: svc.DiskGi}}
-		}
-		p.Services = append(p.Services, out)
-	}
-	return p
-}
-
-func copyMap(in map[string]string) map[string]string {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(in))
-	for key, value := range in {
-		out[key] = value
-	}
-	return out
 }
 
 func sortedKeys(m map[string]string) []string {

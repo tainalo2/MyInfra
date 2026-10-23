@@ -10,7 +10,6 @@ import (
 
 	"myinfra/internal/deploy"
 	"myinfra/internal/manifest"
-	"myinfra/internal/market"
 	"myinfra/internal/pack"
 	"myinfra/internal/spec"
 	"myinfra/internal/store"
@@ -34,7 +33,7 @@ func specAt(s spec.Service, address string) spec.Service {
 	if len(s.Files) > 0 {
 		files := make([]spec.File, len(s.Files))
 		for i, file := range s.Files {
-			files[i] = spec.File{Path: file.Path, Content: market.FillAddress(file.Content, address)}
+			files[i] = spec.File{Path: file.Path, Content: pack.FillAddress(file.Content, address)}
 		}
 		s.Files = files
 	}
@@ -47,7 +46,7 @@ func fillMap(values map[string]string, address string) map[string]string {
 	}
 	out := make(map[string]string, len(values))
 	for key, value := range values {
-		out[key] = market.FillAddress(value, address)
+		out[key] = pack.FillAddress(value, address)
 	}
 	return out
 }

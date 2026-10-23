@@ -1,0 +1,30 @@
+type: myinfra-package
+version: 1
+name: Audiobookshelf
+summary: Des livres audio.
+category: Médias
+services:
+  - name: audiobookshelf
+    image: advplyr/audiobookshelf:2.26.0
+    public: true
+    port: 80
+    volumes:
+      - path: /metadata
+        sizeGi: 16
+about:
+  site: https://www.audiobookshelf.org
+  logo: audiobookshelf
+  description: Des livres audio, avec la progression de lecture. Les livres et la progression sont conservés.
+  translations:
+    de:
+      summary: Hörbücher.
+      description: Hörbücher, mit dem Lesefortschritt. Die Bücher und der Fortschritt bleiben erhalten.
+    en:
+      summary: Audiobooks.
+      description: Audiobooks, with reading progress. The books and the progress are kept.
+    it:
+      summary: Audiolibri.
+      description: Audiolibri, con l'avanzamento della lettura. I libri e l'avanzamento sono conservati.
+    pt:
+      summary: Livros áudio.
+      description: Livros áudio, com o progresso de leitura. Os livros e o progresso são conservados.

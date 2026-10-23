@@ -3,7 +3,6 @@ package pack
 import (
 	"fmt"
 
-	"myinfra/internal/market"
 	"myinfra/internal/spec"
 )
 
@@ -14,11 +13,7 @@ func Expand(p Package, host string, inputs map[string]string) ([]Service, map[st
 	if problems := Check(p); len(problems) > 0 {
 		return nil, nil, fmt.Errorf("Le paquet n'est pas valide : %s", problems[0].Error())
 	}
-	questions := make([]market.Input, 0, len(p.Inputs))
-	for _, input := range p.Inputs {
-		questions = append(questions, market.Input{Key: input.Key, Label: input.Label})
-	}
-	fill, err := market.Filler(host, questions, inputs)
+	fill, err := filler(host, p.Inputs, inputs)
 	if err != nil {
 		return nil, nil, err
 	}

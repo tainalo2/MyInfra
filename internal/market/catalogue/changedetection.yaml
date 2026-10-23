@@ -1,0 +1,30 @@
+type: myinfra-package
+version: 1
+name: Changedetection
+summary: L'alerte quand une page change.
+category: Automatisation
+services:
+  - name: changedetection
+    image: dgtlmoon/changedetection.io:0.50.3
+    public: true
+    port: 5000
+    volumes:
+      - path: /datastore
+        sizeGi: 2
+about:
+  site: https://changedetection.io
+  logo: changedetection
+  description: Une alerte quand une page web change. Les pages suivies et l'historique sont conservés.
+  translations:
+    de:
+      summary: Der Alarm, wenn eine Seite sich ändert.
+      description: Ein Alarm, wenn eine Webseite sich ändert. Beobachtete Seiten und der Verlauf bleiben erhalten.
+    en:
+      summary: An alert when a page changes.
+      description: An alert when a web page changes. Followed pages and the history are kept.
+    it:
+      summary: L'avviso quando una pagina cambia.
+      description: Un avviso quando una pagina web cambia. Le pagine seguite e la cronologia sono conservate.
+    pt:
+      summary: O alerta quando uma página muda.
+      description: Um alerta quando uma página web muda. As páginas seguidas e o histórico são conservados.

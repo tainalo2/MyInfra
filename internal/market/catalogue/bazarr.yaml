@@ -1,0 +1,30 @@
+type: myinfra-package
+version: 1
+name: Bazarr
+summary: Les sous-titres pour Radarr et Sonarr.
+category: Médias
+services:
+  - name: bazarr
+    image: linuxserver/bazarr:1.6.2
+    public: true
+    port: 6767
+    volumes:
+      - path: /config
+        sizeGi: 4
+about:
+  site: https://www.bazarr.media
+  logo: bazarr
+  description: La recherche et l'association de sous-titres pour les films et séries gérés par Radarr et Sonarr. La configuration est conservée.
+  translations:
+    de:
+      summary: Untertitel.
+      description: Untertitel suchen und zuordnen für Filme und Serien aus Radarr und Sonarr. Die Konfiguration bleibt erhalten.
+    en:
+      summary: Subtitles.
+      description: Subtitle search and matching for films and series managed by Radarr and Sonarr. The configuration is kept.
+    it:
+      summary: Sottotitoli.
+      description: Ricerca e abbinamento dei sottotitoli per film e serie gestiti da Radarr e Sonarr. La configurazione è conservata.
+    pt:
+      summary: Legendas.
+      description: A pesquisa e a associação de legendas para filmes e séries geridos por Radarr e Sonarr. A configuração é conservada.

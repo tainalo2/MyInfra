@@ -1,0 +1,32 @@
+type: myinfra-package
+version: 1
+name: SearXNG
+summary: Un métamoteur de recherche.
+category: Outils
+env:
+  SEARXNG_BASE_URL: '{{url}}/'
+services:
+  - name: searxng
+    image: searxng/searxng:2025.8.1
+    public: true
+    port: 8080
+    volumes:
+      - path: /etc/searxng
+        sizeGi: 1
+about:
+  site: https://searxng.org
+  logo: searxng
+  description: Un métamoteur qui interroge plusieurs recherches et n'ouvre pas de compte visiteur. La configuration est conservée.
+  translations:
+    de:
+      summary: Eine Metasuchmaschine.
+      description: Eine Metasuchmaschine, die mehrere Suchen abfragt und kein Besucher-Konto öffnet. Die Konfiguration bleibt erhalten.
+    en:
+      summary: A metasearch engine.
+      description: A metasearch engine that queries several searches and opens no visitor account. The configuration is kept.
+    it:
+      summary: Un metamotore di ricerca.
+      description: Un metamotore che interroga più ricerche e non apre un account visitatore. La configurazione è conservata.
+    pt:
+      summary: Um metamotor de pesquisa.
+      description: Um metamotor que consulta várias pesquisas e não abre conta de visitante. A configuração é conservada.

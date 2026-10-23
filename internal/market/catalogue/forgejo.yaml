@@ -1,0 +1,38 @@
+type: myinfra-package
+version: 1
+name: Forgejo
+summary: Des dépôts Git et leurs demandes.
+category: Code et données
+env:
+  FORGEJO__database__DB_TYPE: sqlite3
+  FORGEJO__database__PATH: /data/forgejo.db
+  FORGEJO__server__DOMAIN: '{{host}}'
+  FORGEJO__server__HTTP_PORT: "3000"
+  FORGEJO__server__ROOT_URL: '{{url}}/'
+  USER_GID: "1000"
+  USER_UID: "1000"
+services:
+  - name: forgejo
+    image: codeberg.org/forgejo/forgejo:7
+    public: true
+    port: 3000
+    volumes:
+      - path: /data
+        sizeGi: 8
+about:
+  site: https://forgejo.org
+  logo: forgejo
+  description: Des dépôts Git, des demandes de changement et un suivi des tickets. Les dépôts sont conservés.
+  translations:
+    de:
+      summary: Git-Depots und ihre Anfragen.
+      description: Git-Depots, Änderungsanfragen und Tickets. Die Depots bleiben erhalten.
+    en:
+      summary: Git repositories and their requests.
+      description: Git repositories, change requests, and issue tracking. The repositories are kept.
+    it:
+      summary: Repository Git e le loro richieste.
+      description: Repository Git, richieste di modifica e ticket. I repository sono conservati.
+    pt:
+      summary: Repositórios Git e os seus pedidos.
+      description: Repositórios Git, pedidos de alteração e seguimento de tickets. Os repositórios são conservados.

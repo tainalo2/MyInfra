@@ -1,0 +1,63 @@
+type: myinfra-package
+version: 1
+name: Paperless-ngx
+summary: Une archive de documents.
+category: Outils
+env:
+  PAPERLESS_CONSUMPTION_DIR: /usr/src/paperless/data/consume
+  PAPERLESS_DATA_DIR: /usr/src/paperless/data
+  PAPERLESS_DBHOST: postgres
+  PAPERLESS_DBNAME: paperless
+  PAPERLESS_DBPASS: '{{secret:DB}}'
+  PAPERLESS_DBPORT: "5432"
+  PAPERLESS_DBUSER: paperless
+  PAPERLESS_MEDIA_ROOT: /usr/src/paperless/data/media
+  PAPERLESS_REDIS: redis://redis:6379
+  PAPERLESS_SECRET_KEY: '{{secret:SECRET}}'
+  PAPERLESS_TIKA_ENABLED: "1"
+  PAPERLESS_TIKA_ENDPOINT: http://tika:9998
+  PAPERLESS_TIKA_GOTENBERG_ENDPOINT: http://gotenberg:3000
+  PAPERLESS_URL: '{{url}}'
+  POSTGRES_DB: paperless
+  POSTGRES_PASSWORD: '{{secret:DB}}'
+  POSTGRES_USER: paperless
+services:
+  - name: web
+    image: paperlessngx/paperless-ngx:2.15.3
+    public: true
+    port: 8000
+    volumes:
+      - path: /usr/src/paperless/data
+        sizeGi: 16
+  - name: postgres
+    image: postgres:16
+    port: 5432
+    volumes:
+      - path: /var/lib/postgresql/data
+        sizeGi: 8
+  - name: redis
+    image: redis:7-alpine
+    port: 6379
+  - name: gotenberg
+    image: gotenberg/gotenberg:8
+    port: 3000
+  - name: tika
+    image: apache/tika:2.9.2.1-full
+    port: 9998
+about:
+  site: https://docs.paperless-ngx.com
+  logo: paperlessngx
+  description: 'Une archive de documents : dépôt, reconnaissance du texte et recherche. Les documents sont conservés.'
+  translations:
+    de:
+      summary: Ein Archiv von Dokumenten.
+      description: 'Ein Archiv von Dokumenten: Ablage, Texterkennung und Suche. Die Dokumente bleiben erhalten.'
+    en:
+      summary: An archive of documents.
+      description: 'An archive of documents: drop-off, text recognition, and search. The documents are kept.'
+    it:
+      summary: Un archivio di documenti.
+      description: 'Un archivio di documenti: deposito, riconoscimento del testo e ricerca. I documenti sono conservati.'
+    pt:
+      summary: Um arquivo de documentos.
+      description: 'Um arquivo de documentos: depósito, reconhecimento do texto e pesquisa. Os documentos são conservados.'

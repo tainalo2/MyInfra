@@ -1,0 +1,30 @@
+type: myinfra-package
+version: 1
+name: Verdaccio
+summary: Un registre de paquets privé.
+category: Code et données
+services:
+  - name: verdaccio
+    image: verdaccio/verdaccio:6.0.5
+    public: true
+    port: 4873
+    volumes:
+      - path: /verdaccio/storage
+        sizeGi: 8
+about:
+  site: https://verdaccio.org
+  logo: verdaccio
+  description: Un registre privé pour publier et installer des paquets. Les paquets déposés sont conservés.
+  translations:
+    de:
+      summary: Eine private Paketregistratur.
+      description: Eine private Registratur, um Pakete zu veröffentlichen und zu installieren. Abgelegte Pakete bleiben erhalten.
+    en:
+      summary: A private package registry.
+      description: A private registry for publishing and installing packages. Deposited packages are kept.
+    it:
+      summary: Un registro di pacchetti privato.
+      description: Un registro privato per pubblicare e installare pacchetti. I pacchetti depositati sono conservati.
+    pt:
+      summary: Um registo de pacotes privado.
+      description: Um registo privado para publicar e instalar pacotes. Os pacotes depositados são conservados.

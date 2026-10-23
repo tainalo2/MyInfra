@@ -1,0 +1,30 @@
+type: myinfra-package
+version: 1
+name: Pinchflat
+summary: L'archivage de chaînes vidéo.
+category: Médias
+services:
+  - name: pinchflat
+    image: ghcr.io/kieraneglin/pinchflat:v2025.6.6
+    public: true
+    port: 8945
+    volumes:
+      - path: /config
+        sizeGi: 16
+about:
+  site: https://github.com/kieraneglin/pinchflat
+  logo: pinchflat
+  description: L'archivage de chaînes vidéo, au fil des nouvelles publications. Les vidéos sont conservées.
+  translations:
+    de:
+      summary: Das Archivieren von Videokanälen.
+      description: Das Archivieren von Videokanälen, sobald neue Veröffentlichungen kommen. Die Videos bleiben erhalten.
+    en:
+      summary: Archiving video channels.
+      description: Archiving video channels as new publications arrive. The videos are kept.
+    it:
+      summary: L'archivio di canali video.
+      description: L'archivio di canali video, man mano che escono nuove pubblicazioni. I video sono conservati.
+    pt:
+      summary: O arquivo de canais de vídeo.
+      description: O arquivo de canais de vídeo, à medida das novas publicações. Os vídeos são conservados.

@@ -348,6 +348,8 @@ export type CatalogueCard = {
   keepsFiles: boolean;
   inputs: CatalogueInput[];
   services: CatalogueService[];
+  // translations hold the summary and the description in the other languages.
+  translations?: Record<string, PackageWords>;
 };
 
 export type CatalogueGroup = { name: string; articles: CatalogueCard[] };
@@ -557,6 +559,12 @@ export type PackageService = {
   noPort?: boolean;
 };
 
+export type PackageWords = { summary?: string; description?: string };
+
+// PackageAbout presents a package: where it comes from, its logo (as Simple
+// Icons names it) and its words in other languages.
+export type PackageAbout = { site?: string; logo?: string; description?: string; translations?: Record<string, PackageWords> };
+
 export type Package = {
   type: string;
   version: number;
@@ -566,6 +574,7 @@ export type Package = {
   inputs?: PackageInput[];
   env?: Record<string, string>;
   services: PackageService[];
+  about?: PackageAbout;
 };
 
 // A problem in a package: where it is (services[1].image) and, from a text,
@@ -575,6 +584,7 @@ export type PackageProblem = { path: string; line?: number; message: string };
 export type PackageRow = {
   id: string;
   name: string;
+  logo?: string;
   summary: string;
   category: string;
   services: string[];

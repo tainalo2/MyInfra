@@ -28,18 +28,13 @@ func (a *API) getCatalogue(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) installCatalogue(w http.ResponseWriter, r *http.Request) {
 	a.installFrom(w, r, func(host string, inputs map[string]string) ([]store.Service, map[string]string, error) {
+		// A catalogue application is a package: it installs as one.
 		services, env, err := market.Expand(r.PathValue("id"), host, inputs)
 		if err != nil {
 			return nil, nil, err
 		}
-		out := make([]store.Service, 0, len(services))
-		for _, svc := range services {
-			out = append(out, store.Service{
-				ID: newID(), Name: svc.Name, Image: svc.Image, Published: svc.Published, Disk: svc.Disk,
-				DiskPath: svc.DiskPath, DiskGi: svc.DiskGi, Listen: svc.Listen, Args: svc.Args, Replicas: svc.Replicas,
-			})
-		}
-		return out, env, nil
+		out, err := packServices(services)
+		return out, env, err
 	})
 }
 

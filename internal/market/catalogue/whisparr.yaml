@@ -1,0 +1,30 @@
+type: myinfra-package
+version: 1
+name: Whisparr
+summary: Le suivi des vidéos pour adultes.
+category: Médias
+services:
+  - name: whisparr
+    image: linuxserver/whisparr:2.7.3
+    public: true
+    port: 6969
+    volumes:
+      - path: /config
+        sizeGi: 8
+about:
+  site: https://whisparr.com
+  logo: whisparr
+  description: Le suivi de vidéos pour adultes, sur le même modèle que Sonarr et Radarr. La configuration et l'historique sont conservés.
+  translations:
+    de:
+      summary: Erwachsenenvideo.
+      description: Verfolgung von Videos für Erwachsene nach demselben Modell wie Sonarr und Radarr. Konfiguration und Verlauf bleiben erhalten.
+    en:
+      summary: Adult video.
+      description: Adult video tracking on the same model as Sonarr and Radarr. The configuration and history are kept.
+    it:
+      summary: Video per adulti.
+      description: Il monitoraggio di video per adulti sullo stesso modello di Sonarr e Radarr. La configurazione e la cronologia sono conservate.
+    pt:
+      summary: Vídeo para adultos.
+      description: O seguimento de vídeos para adultos no mesmo modelo que Sonarr e Radarr. A configuração e o histórico são conservados.

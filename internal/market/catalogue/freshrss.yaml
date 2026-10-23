@@ -1,0 +1,30 @@
+type: myinfra-package
+version: 1
+name: FreshRSS
+summary: Un lecteur de flux.
+category: Sites
+services:
+  - name: freshrss
+    image: freshrss/freshrss:1.26.1
+    public: true
+    port: 80
+    volumes:
+      - path: /var/www/FreshRSS/data
+        sizeGi: 2
+about:
+  site: https://freshrss.org
+  logo: freshrss
+  description: Un lecteur pour suivre des flux et lire les articles au même endroit. Les abonnements et l'historique sont conservés.
+  translations:
+    de:
+      summary: Ein Feed-Leser.
+      description: Ein Leser für Feeds und Artikel an einem Ort. Abonnements und Verlauf bleiben erhalten.
+    en:
+      summary: A feed reader.
+      description: A reader for following feeds and reading articles in one place. Subscriptions and history are kept.
+    it:
+      summary: Un lettore di feed.
+      description: Un lettore per seguire i feed e leggere gli articoli nello stesso posto. Abbonamenti e cronologia sono conservati.
+    pt:
+      summary: Um leitor de feeds.
+      description: Um leitor para seguir feeds e ler artigos no mesmo sítio. As subscrições e o histórico são conservados.

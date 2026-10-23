@@ -4,8 +4,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-
-	"myinfra/internal/market"
 )
 
 const sample = `type: myinfra-package
@@ -128,26 +126,6 @@ func lineWith(text, needle string) int {
 		}
 	}
 	return -1
-}
-
-func TestEveryArticleIsAPackage(t *testing.T) {
-	for _, id := range market.IDs() {
-		article, ok := market.ArticleOf(id)
-		if !ok {
-			t.Fatal(id)
-		}
-		p := FromArticle(article)
-		if problems := Check(p); len(problems) > 0 {
-			t.Fatalf("%s: %v", id, problems)
-		}
-		text, err := YAML(p)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if again, problems := Parse(text); len(problems) > 0 || !reflect.DeepEqual(again, p) {
-			t.Fatalf("%s: %v\n%s", id, problems, text)
-		}
-	}
 }
 
 func TestExpandFillsEveryValueOnce(t *testing.T) {

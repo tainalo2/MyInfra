@@ -300,13 +300,13 @@ func (a *API) redundancyPreview(w http.ResponseWriter, r *http.Request) {
 	}
 	var services []store.Service
 	if body.Article != "" {
-		list, ok := market.ServicesOf(body.Article)
+		p, ok := market.PackageOf(body.Article)
 		if !ok {
 			writeError(w, http.StatusNotFound, "Cet article est introuvable.")
 			return
 		}
-		for _, svc := range list {
-			services = append(services, store.Service{Name: svc.Name, Image: svc.Image, Disk: svc.Disk})
+		for _, svc := range p.Services {
+			services = append(services, store.Service{Name: svc.Name, Image: svc.Image, Disk: len(svc.Volumes) > 0})
 		}
 	} else if image := strings.TrimSpace(body.Image); image != "" {
 		// Whether the image declares a disk is read at creation; a known

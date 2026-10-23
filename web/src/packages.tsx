@@ -1,18 +1,20 @@
 import { FormEvent, Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowRight, BookOpen, Copy, LayoutGrid, Package as PackageIcon, Plus, Ship, Trash2, Upload } from "lucide-react";
-import { ApiError, api, peek, type Package, type PackageFile, type PackageProblem, type PackageRow, type PackageService } from "./api";
+import { ApiError, api, peek, type Package, type PackageAbout, type PackageFile, type PackageProblem, type PackageRow, type PackageService } from "./api";
 import { Code, languageOf } from "./code-lazy";
 import { knownMessage, text, type MsgKey } from "./i18n";
 import { useI18n } from "./lang";
 import { AppsTabs, ConfirmDialog, Sheet, Tabs, useToast } from "./kit";
 import { useSession } from "./session";
 import { ToolInstall } from "./tools";
+import { AppLogo } from "./app-logo";
 import {
   ActionsMenu,
   Button,
   ErrorText,
   Field,
+  Fold,
   Group,
   Icon,
   IconButton,
@@ -200,9 +202,12 @@ export function Packages() {
           {rows.map((row) => (
             <li key={row.id} className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4">
               <div className="flex items-start justify-between gap-3">
-                <Link to={`/applications/paquets/${row.id}`} className="min-w-0 text-ink">
-                  <span className="font-medium">{row.name}</span>
-                  {row.summary ? <p className="mt-1 text-muted">{row.summary}</p> : null}
+                <Link to={`/applications/paquets/${row.id}`} className="flex min-w-0 items-start gap-3 text-ink">
+                  <AppLogo slug={row.logo ?? ""} name={row.name} size={36} />
+                  <span className="min-w-0">
+                    <span className="font-medium">{row.name}</span>
+                    {row.summary ? <p className="mt-1 text-muted">{row.summary}</p> : null}
+                  </span>
                 </Link>
                 <ActionsMenu label={text("apps.more")}>
                   <MenuItem onClick={() => exported(row, "yaml")}>{text("package.exportYaml")}</MenuItem>
@@ -810,6 +815,7 @@ function VisualEditor({
         <Field label={text("package.category")}>
           <Input value={pkg.category ?? ""} onChange={(e) => set("category", e.target.value || undefined)} />
         </Field>
+        <AboutFields about={pkg.about} onChange={(about) => set("about", about)} />
         <Inputs pkg={pkg} onChange={onChange} />
         <Field label={text("package.sharedEnv")} hint={text("package.sharedEnvHint")}>
           <EnvEditor value={pkg.env} onChange={(env) => set("env", env)} label={text("package.sharedEnv")} snippets={sharedSnippets()} />
@@ -899,6 +905,35 @@ function Dependencies({ services }: { services: PackageService[] }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+// AboutFields present a package: its site, its logo and a longer
+// description. Translations are written in the advanced view.
+function AboutFields({ about, onChange }: { about?: PackageAbout; onChange: (about: PackageAbout | undefined) => void }) {
+  function set(key: "site" | "logo" | "description", value: string) {
+    const next: PackageAbout = { ...about, [key]: value || undefined };
+    const empty = !next.site && !next.logo && !next.description && !next.translations;
+    onChange(empty ? undefined : next);
+  }
+  return (
+    <Fold title={text("package.about")} defaultOpen={Boolean(about)}>
+      <div className="flex flex-col gap-4">
+        <p className="text-faint">{text("package.aboutHint")}</p>
+        <Field label={text("package.site")}>
+          <Input value={about?.site ?? ""} onChange={(e) => set("site", e.target.value)} placeholder="https://umami.is" autoCapitalize="off" spellCheck={false} />
+        </Field>
+        <Field label={text("package.logo")} hint={text("package.logoHint")}>
+          <span className="flex items-center gap-3">
+            <AppLogo slug={about?.logo ?? ""} name={about?.logo || "?"} size={36} />
+            <Input value={about?.logo ?? ""} onChange={(e) => set("logo", e.target.value.toLowerCase())} placeholder="umami" autoCapitalize="off" spellCheck={false} />
+          </span>
+        </Field>
+        <Field label={text("package.description")}>
+          <Input value={about?.description ?? ""} onChange={(e) => set("description", e.target.value)} />
+        </Field>
+      </div>
+    </Fold>
   );
 }
 
@@ -1614,6 +1649,7 @@ const guideFields: { field: string; body: MsgKey }[] = [
   { field: "health.http · port", body: "guide.refHealth" },
   { field: "resources.cpu · memory", body: "guide.refResources" },
   { field: "dependsOn", body: "guide.refDependsOn" },
+  { field: "about.site · logo · description · translations", body: "guide.refAbout" },
 ];
 
 // PackageGuide is the tutorial of packages: what each notion is for, the

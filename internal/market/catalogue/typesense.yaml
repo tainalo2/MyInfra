@@ -1,0 +1,34 @@
+type: myinfra-package
+version: 1
+name: Typesense
+summary: Un moteur de recherche.
+category: Code et données
+env:
+  TYPESENSE_API_KEY: '{{secret:KEY}}'
+  TYPESENSE_DATA_DIR: /data
+  TYPESENSE_ENABLE_CORS: "true"
+services:
+  - name: typesense
+    image: typesense/typesense:27.1
+    public: true
+    port: 8108
+    volumes:
+      - path: /data
+        sizeGi: 8
+about:
+  site: https://typesense.org
+  logo: typesense
+  description: Un moteur de recherche à interroger depuis d'autres applications. L'index est conservé.
+  translations:
+    de:
+      summary: Eine Suchmaschine.
+      description: Eine Suchmaschine, die andere Anwendungen abfragen. Der Index bleibt erhalten.
+    en:
+      summary: A search engine.
+      description: A search engine to query from other applications. The index is kept.
+    it:
+      summary: Un motore di ricerca.
+      description: Un motore di ricerca da interrogare da altre applicazioni. L'indice è conservato.
+    pt:
+      summary: Um motor de pesquisa.
+      description: Um motor de pesquisa a consultar a partir de outras aplicações. O índice é conservado.

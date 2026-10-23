@@ -19,6 +19,7 @@ import (
 type packageView struct {
 	ID        string        `json:"id"`
 	Name      string        `json:"name"`
+	Logo      string        `json:"logo,omitempty"`
 	Summary   string        `json:"summary"`
 	Category  string        `json:"category"`
 	Services  []string      `json:"services"`
@@ -35,6 +36,9 @@ func toPackage(row store.Package, full bool) packageView {
 	view := packageView{
 		ID: row.ID, Name: row.Name, Summary: p.Summary, Category: p.Category,
 		Services: []string{}, Inputs: p.Inputs, UpdatedAt: row.UpdatedAt,
+	}
+	if p.About != nil {
+		view.Logo = p.About.Logo
 	}
 	if view.Inputs == nil {
 		view.Inputs = []pack.Input{}
@@ -396,12 +400,12 @@ func (a *API) convertPackage(w http.ResponseWriter, r *http.Request) {
 
 // copyArticle keeps a catalogue article as a package, to change it.
 func (a *API) copyArticle(w http.ResponseWriter, r *http.Request) {
-	article, ok := market.ArticleOf(r.PathValue("id"))
+	p, ok := market.PackageOf(r.PathValue("id"))
 	if !ok {
 		writeError(w, http.StatusNotFound, "Cet article est introuvable.")
 		return
 	}
-	a.keepPackage(w, r, pack.FromArticle(article), true)
+	a.keepPackage(w, r, p, true)
 }
 
 // installPackage creates an application from a package, as from the catalogue.

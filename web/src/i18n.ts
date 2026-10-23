@@ -1375,6 +1375,13 @@ const fr = {
   "guide.refHealth": "le chemin HTTP qui répond quand le service est prêt, et son port s'il diffère.",
   "guide.refResources": "le processeur réservé (0.5 ou 500m) et la mémoire maximale (512Mi, 2Gi).",
   "guide.refDependsOn": "les services à attendre avant de démarrer.",
+  "package.about": "Présentation",
+  "package.aboutHint": "Facultatif : ce qui présente le paquet dans les listes. Les traductions s'écrivent dans la vue Avancé (about.translations).",
+  "package.site": "Site de l'application",
+  "package.logo": "Logo",
+  "package.logoHint": "Son nom sur simpleicons.org, en minuscules : nextcloud, wordpress…",
+  "package.description": "Description",
+  "guide.refAbout": "facultatif : site, logo (nom Simple Icons), description longue, et résumé et description dans d'autres langues (en, pt, it, de). Les applications du catalogue l'utilisent toutes.",
 } as const;
 
 export type MsgKey = keyof typeof fr;
@@ -2681,6 +2688,13 @@ const en: Record<MsgKey, string> = {
   "guide.refHealth": "the HTTP path that answers when the service is ready, and its port if different.",
   "guide.refResources": "the reserved CPU (0.5 or 500m) and the maximum memory (512Mi, 2Gi).",
   "guide.refDependsOn": "the services to wait for before starting.",
+  "package.about": "Presentation",
+  "package.aboutHint": "Optional: what presents the package in lists. Translations are written in the Advanced view (about.translations).",
+  "package.site": "Application site",
+  "package.logo": "Logo",
+  "package.logoHint": "Its name on simpleicons.org, in lower case: nextcloud, wordpress…",
+  "package.description": "Description",
+  "guide.refAbout": "optional: site, logo (Simple Icons name), long description, and summary and description in other languages (en, pt, it, de). Every catalogue application uses it.",
 };
 
 const pt: Record<MsgKey, string> = {
@@ -3963,6 +3977,13 @@ const pt: Record<MsgKey, string> = {
   "guide.refHealth": "o caminho HTTP que responde quando o serviço está pronto, e a porta se diferir.",
   "guide.refResources": "o processador reservado (0.5 ou 500m) e a memória máxima (512Mi, 2Gi).",
   "guide.refDependsOn": "os serviços a esperar antes de arrancar.",
+  "package.about": "Apresentação",
+  "package.aboutHint": "Facultativo: o que apresenta o pacote nas listas. As traduções escrevem-se na vista Avançado (about.translations).",
+  "package.site": "Site da aplicação",
+  "package.logo": "Logótipo",
+  "package.logoHint": "O nome em simpleicons.org, em minúsculas: nextcloud, wordpress…",
+  "package.description": "Descrição",
+  "guide.refAbout": "facultativo: site, logótipo (nome Simple Icons), descrição longa, e resumo e descrição noutras línguas (en, pt, it, de). Todas as aplicações do catálogo o usam.",
 };
 
 const it: Record<MsgKey, string> = {
@@ -5244,6 +5265,13 @@ const it: Record<MsgKey, string> = {
   "guide.refHealth": "il percorso HTTP che risponde quando il servizio è pronto, e la porta se diversa.",
   "guide.refResources": "la CPU riservata (0.5 o 500m) e la memoria massima (512Mi, 2Gi).",
   "guide.refDependsOn": "i servizi da attendere prima di avviarsi.",
+  "package.about": "Presentazione",
+  "package.aboutHint": "Facoltativo: ciò che presenta il pacchetto negli elenchi. Le traduzioni si scrivono nella vista Avanzato (about.translations).",
+  "package.site": "Sito dell'applicazione",
+  "package.logo": "Logo",
+  "package.logoHint": "Il nome su simpleicons.org, in minuscolo: nextcloud, wordpress…",
+  "package.description": "Descrizione",
+  "guide.refAbout": "facoltativo: sito, logo (nome Simple Icons), descrizione lunga, e riepilogo e descrizione in altre lingue (en, pt, it, de). Tutte le applicazioni del catalogo lo usano.",
 };
 
 const de: Record<MsgKey, string> = {
@@ -6527,6 +6555,13 @@ const de: Record<MsgKey, string> = {
   "guide.refHealth": "der HTTP-Pfad, der antwortet, wenn der Dienst bereit ist, und sein Port, falls abweichend.",
   "guide.refResources": "die reservierte CPU (0.5 oder 500m) und der maximale Speicher (512Mi, 2Gi).",
   "guide.refDependsOn": "die Dienste, auf die vor dem Start gewartet wird.",
+  "package.about": "Vorstellung",
+  "package.aboutHint": "Optional: was das Paket in Listen vorstellt. Übersetzungen schreiben Sie in der Ansicht Erweitert (about.translations).",
+  "package.site": "Website der Anwendung",
+  "package.logo": "Logo",
+  "package.logoHint": "Sein Name auf simpleicons.org, kleingeschrieben: nextcloud, wordpress…",
+  "package.description": "Beschreibung",
+  "guide.refAbout": "optional: Website, Logo (Simple-Icons-Name), lange Beschreibung sowie Zusammenfassung und Beschreibung in anderen Sprachen (en, pt, it, de). Alle Katalog-Anwendungen nutzen es.",
 };
 
 const tables: Record<Lang, Record<MsgKey, string>> = { fr, en, pt, it, de };

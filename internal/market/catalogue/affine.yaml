@@ -1,0 +1,47 @@
+type: myinfra-package
+version: 1
+name: AFFiNE
+summary: Notes, tableaux et dessins au même endroit.
+category: Collaboration
+env:
+  AFFINE_SERVER_HOST: '{{host}}'
+  AFFINE_SERVER_HTTPS: "true"
+  DATABASE_URL: postgresql://affine:{{secret:DB}}@postgres:5432/affine
+  POSTGRES_DB: affine
+  POSTGRES_PASSWORD: '{{secret:DB}}'
+  POSTGRES_USER: affine
+  REDIS_SERVER_HOST: redis
+services:
+  - name: web
+    image: ghcr.io/toeverything/affine:0.22.3
+    public: true
+    port: 3010
+    volumes:
+      - path: /root/.affine/storage
+        sizeGi: 8
+  - name: postgres
+    image: postgres:16
+    port: 5432
+    volumes:
+      - path: /var/lib/postgresql/data
+        sizeGi: 8
+  - name: redis
+    image: redis:7-alpine
+    port: 6379
+about:
+  site: https://affine.pro
+  logo: affine
+  description: Notes, tableaux et dessins réunis dans le même espace de travail. Le contenu est conservé dans la base.
+  translations:
+    de:
+      summary: Notizen, Tabellen und Zeichnungen an einem Ort.
+      description: Notizen, Tabellen und Zeichnungen im selben Arbeitsraum. Der Inhalt bleibt in der Datenbank.
+    en:
+      summary: Notes, tables, and drawings in one place.
+      description: Notes, tables, and drawings in the same workspace. The content is kept in the database.
+    it:
+      summary: Note, tabelle e disegni nello stesso posto.
+      description: Note, tabelle e disegni nello stesso spazio di lavoro. Il contenuto è conservato nel database.
+    pt:
+      summary: Notas, tabelas e desenhos no mesmo sítio.
+      description: Notas, tabelas e desenhos reunidos no mesmo espaço de trabalho. O conteúdo é conservado na base.

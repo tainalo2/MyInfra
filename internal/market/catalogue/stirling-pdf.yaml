@@ -1,0 +1,30 @@
+type: myinfra-package
+version: 1
+name: Stirling-PDF
+summary: Des outils pour les PDF.
+category: Outils
+services:
+  - name: stirling-pdf
+    image: stirlingtools/stirling-pdf:0.46.2
+    public: true
+    port: 8080
+    volumes:
+      - path: /configs
+        sizeGi: 2
+about:
+  site: https://stirlingpdf.com
+  logo: stirlingpdf
+  description: 'Des outils pour manipuler des PDF : fusion, découpe, conversion. Les réglages sont conservés.'
+  translations:
+    de:
+      summary: Werkzeuge für PDFs.
+      description: 'Werkzeuge für PDFs: zusammenfügen, schneiden, umwandeln. Die Einstellungen bleiben erhalten.'
+    en:
+      summary: Tools for PDFs.
+      description: 'Tools for handling PDFs: merge, split, convert. The settings are kept.'
+    it:
+      summary: Strumenti per i PDF.
+      description: 'Strumenti per manipolare i PDF: unione, taglio, conversione. Le impostazioni sono conservate.'
+    pt:
+      summary: Ferramentas para os PDF.
+      description: 'Ferramentas para manipular PDF: junção, corte, conversão. Os ajustes são conservados.'

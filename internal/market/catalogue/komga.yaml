@@ -1,0 +1,30 @@
+type: myinfra-package
+version: 1
+name: Komga
+summary: Des bandes dessinées.
+category: Médias
+services:
+  - name: komga
+    image: gotson/komga:1.21.2
+    public: true
+    port: 25600
+    volumes:
+      - path: /config
+        sizeGi: 16
+about:
+  site: https://komga.org
+  logo: komga
+  description: Des bandes dessinées rangées en séries, à lire dans le navigateur. La bibliothèque est conservée.
+  translations:
+    de:
+      summary: Comics.
+      description: Comics, in Serien geordnet, zum Lesen im Browser. Die Bibliothek bleibt erhalten.
+    en:
+      summary: Comics.
+      description: Comics arranged in series, to read in the browser. The library is kept.
+    it:
+      summary: Fumetti.
+      description: Fumetti ordinati in serie, da leggere nel browser. La biblioteca è conservata.
+    pt:
+      summary: Bandas desenhadas.
+      description: Bandas desenhadas arrumadas em séries, para ler no navegador. A biblioteca é conservada.
