@@ -521,3 +521,57 @@ export type UpdateJob = {
   createdAt: string;
   finishedAt?: string;
 };
+
+// An application package: the services of an application, with their disks,
+// files and variables, as MyInfra reads and writes it in YAML or JSON.
+export type PackageInput = { key: string; label: string };
+
+export type PackageVolume = { path: string; sizeGi?: number };
+
+export type PackageFile = { path: string; content: string };
+
+export type PackagePort = { name?: string; port: number };
+
+export type PackageService = {
+  name: string;
+  image: string;
+  public?: boolean;
+  port?: number;
+  replicas?: number;
+  args?: string[];
+  command?: string[];
+  ports?: PackagePort[];
+  volumes?: PackageVolume[];
+  files?: PackageFile[];
+  env?: Record<string, string>;
+  resources?: { cpu?: string; memory?: string };
+  health?: { http?: string; port?: number };
+  dependsOn?: string[];
+};
+
+export type Package = {
+  type: string;
+  version: number;
+  name: string;
+  summary?: string;
+  category?: string;
+  inputs?: PackageInput[];
+  env?: Record<string, string>;
+  services: PackageService[];
+};
+
+// A problem in a package: where it is (services[1].image) and, from a text,
+// its line.
+export type PackageProblem = { path: string; line?: number; message: string };
+
+export type PackageRow = {
+  id: string;
+  name: string;
+  summary: string;
+  category: string;
+  services: string[];
+  inputs: PackageInput[];
+  updatedAt: string;
+  package?: Package;
+  yaml?: string;
+};

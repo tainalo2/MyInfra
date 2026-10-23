@@ -149,3 +149,24 @@ func TestEveryArticleIsAPackage(t *testing.T) {
 		}
 	}
 }
+
+func TestExpandFillsEveryValueOnce(t *testing.T) {
+	p, problems := Parse([]byte(sample))
+	if len(problems) > 0 {
+		t.Fatal(problems)
+	}
+	p.Env["DB_URL"] = "postgres://wiki:{{secret:db}}@db/wiki"
+	if _, _, err := Expand(p, "wiki.exemple.fr", nil); err == nil {
+		t.Fatal("a question without answer is accepted")
+	}
+	services, env, err := Expand(p, "wiki.exemple.fr", map[string]string{"admin-email": "moi@exemple.fr"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if env["ADMIN_EMAIL"] != "moi@exemple.fr" || len(env["DB_PASSWORD"]) != 64 || env["DB_URL"] != "postgres://wiki:"+env["DB_PASSWORD"]+"@db/wiki" {
+		t.Fatal(env)
+	}
+	if services[0].Files[0].Content != "[server]\nurl = https://wiki.exemple.fr\n" || p.Services[0].Files[0].Content != "[server]\nurl = {{url}}\n" {
+		t.Fatalf("%+v", services[0].Files)
+	}
+}

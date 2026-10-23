@@ -25,35 +25,42 @@ var (
 // the package as far as it could be read, and what is wrong in it, each
 // problem at its line.
 func Parse(data []byte) (Package, []Problem) {
+	p, problems, _ := Read(data)
+	return p, problems
+}
+
+// Read is Parse that also tells whether the whole text was read: the
+// problems are then only those Check finds, and the package holds it all.
+func Read(data []byte) (Package, []Problem, bool) {
 	var p Package
 	if len(data) > MaxSize {
-		return p, []Problem{{Message: "Un paquet fait au plus 1 Mio."}}
+		return p, []Problem{{Message: "Un paquet fait au plus 1 Mio."}}, false
 	}
 	var root yaml.Node
 	if err := yaml.Unmarshal(data, &root); err != nil {
-		return p, []Problem{{Line: lineOf(err), Message: "Le texte est illisible : " + plainYAMLError(err)}}
+		return p, []Problem{{Line: lineOf(err), Message: "Le texte est illisible : " + plainYAMLError(err)}}, false
 	}
 	if len(root.Content) == 0 || root.Content[0].Kind != yaml.MappingNode {
-		return p, []Problem{{Line: 1, Message: "Un paquet est une suite de champs, en commençant par type: " + Type + "."}}
+		return p, []Problem{{Line: 1, Message: "Un paquet est une suite de champs, en commençant par type: " + Type + "."}}, false
 	}
 	var generic any
 	if err := root.Content[0].Decode(&generic); err != nil {
-		return p, []Problem{{Line: lineOf(err), Message: "Le texte est illisible : " + plainYAMLError(err)}}
+		return p, []Problem{{Line: lineOf(err), Message: "Le texte est illisible : " + plainYAMLError(err)}}, false
 	}
 	raw, err := json.Marshal(generic)
 	if err != nil {
-		return p, []Problem{{Line: 1, Message: "Les noms des champs sont du texte."}}
+		return p, []Problem{{Line: 1, Message: "Les noms des champs sont du texte."}}, false
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&p); err != nil {
-		return p, []Problem{decodeProblem(err, root.Content[0])}
+		return p, []Problem{decodeProblem(err, root.Content[0])}, false
 	}
 	problems := Check(p)
 	for i := range problems {
 		problems[i].Line = Locate(root.Content[0], problems[i].Path)
 	}
-	return p, problems
+	return p, problems, true
 }
 
 // decodeProblem turns a JSON decoding error into a problem a person reads.

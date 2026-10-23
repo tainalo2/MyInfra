@@ -420,3 +420,24 @@ func IDs() []string {
 	}
 	return out
 }
+
+// Filler fills the {{…}} of the values of one installation: a secret asked
+// twice gets the same value. Every question must have its answer.
+func Filler(host string, questions []Input, inputs map[string]string) (func(string) (string, error), error) {
+	host = strings.TrimSpace(host)
+	if host == "" || strings.ContainsAny(host, " \n\r'\t") {
+		return nil, fmt.Errorf("Le nom public est illisible.")
+	}
+	if inputs == nil {
+		inputs = map[string]string{}
+	}
+	for _, input := range questions {
+		if strings.TrimSpace(inputs[input.Key]) == "" {
+			return nil, fmt.Errorf("Indiquez %s.", strings.ToLower(input.Label))
+		}
+	}
+	secrets := map[string]string{}
+	return func(value string) (string, error) {
+		return fill(value, host, inputs, secrets)
+	}, nil
+}

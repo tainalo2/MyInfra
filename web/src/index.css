@@ -18,6 +18,16 @@
   --color-bad: #991b1b;
   --color-status: #f5f5f4;
   --color-link: #1d4ed8;
+  /* Code colours: each reads at 4.5:1 at least on the surface. */
+  --color-code-key: #1d4ed8;
+  --color-code-string: #15803d;
+  --color-code-number: #b45309;
+  --color-code-keyword: #7c3aed;
+  --color-code-comment: #78716c;
+  --color-code-token: #92400e;
+  --color-code-token-bg: #fef3c7;
+  --color-code-line: #f5f5f480;
+  --color-code-selection: #bfdbfe;
 }
 
 :root {
@@ -39,6 +49,15 @@
   --color-bad: #e7b4b4;
   --color-status: #35302c;
   --color-link: #93c5fd;
+  --color-code-key: #93c5fd;
+  --color-code-string: #86efac;
+  --color-code-number: #fcd34d;
+  --color-code-keyword: #c4b5fd;
+  --color-code-comment: #a8a29e;
+  --color-code-token: #fde68a;
+  --color-code-token-bg: #451a03;
+  --color-code-line: #35302c99;
+  --color-code-selection: #1e3a8a;
 }
 
 html {

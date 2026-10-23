@@ -53,6 +53,8 @@ ALTER TABLE updates ADD COLUMN IF NOT EXISTS sync_seq bigint NOT NULL DEFAULT 0;
 ALTER TABLE updates ADD COLUMN IF NOT EXISTS sync_origin text NOT NULL DEFAULT '';
 ALTER TABLE update_jobs ADD COLUMN IF NOT EXISTS sync_seq bigint NOT NULL DEFAULT 0;
 ALTER TABLE update_jobs ADD COLUMN IF NOT EXISTS sync_origin text NOT NULL DEFAULT '';
+ALTER TABLE packages ADD COLUMN IF NOT EXISTS sync_seq bigint NOT NULL DEFAULT 0;
+ALTER TABLE packages ADD COLUMN IF NOT EXISTS sync_origin text NOT NULL DEFAULT '';
 
 CREATE OR REPLACE FUNCTION myinfra_sync_touch() RETURNS trigger AS $$
 DECLARE
@@ -107,7 +109,7 @@ BEGIN
     FOREACH name IN ARRAY ARRAY[
         'users', 'secrets', 'clusters', 'servers', 'server_keys', 'applications',
         'application_services', 'domains', 'templates', 'destructions', 'template_runs', 'image_rollbacks',
-        'app_secrets', 'updates', 'update_jobs'
+        'app_secrets', 'updates', 'update_jobs', 'packages'
     ]
     LOOP
         EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', name || '_sync', name);

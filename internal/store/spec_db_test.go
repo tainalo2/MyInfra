@@ -2,13 +2,15 @@ package store
 
 import (
 	"context"
+	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"myinfra/internal/spec"
 )
 
-func TestServiceSpecIsKeptAndSynced(t *testing.T) {
+func TestServiceSpecAndPackagesAreKeptAndSynced(t *testing.T) {
 	ctx := context.Background()
 	admin, dsn := testAdmin(t)
 	defer admin.Close(ctx)
@@ -70,7 +72,16 @@ func TestServiceSpecIsKeptAndSynced(t *testing.T) {
 	if !reflect.DeepEqual(got["web"], want) || !got["db"].Empty() {
 		t.Fatalf("%+v", got)
 	}
+	if err := left.CreatePackage(ctx, "u1", "p1", "Wiki", []byte(`{"type":"myinfra-package","name":"Wiki"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := left.CreatePackage(ctx, "u1", "p2", " wiki ", []byte(`{}`)); !errors.Is(err, ErrNameTaken) {
+		t.Fatalf("same name: %v", err)
+	}
 	converge(t, ctx, left, right)
+	if got, err := right.Package(ctx, "u1", "p1"); err != nil || got.Name != "Wiki" || !strings.Contains(string(got.Body), "myinfra-package") {
+		t.Fatalf("%+v %v", got, err)
+	}
 	if got := read(right); !reflect.DeepEqual(got["web"], want) || !got["db"].Empty() {
 		t.Fatalf("%+v", got)
 	}

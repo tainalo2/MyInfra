@@ -305,3 +305,47 @@ export function Steps({ steps, submit, error }: { steps: Step[]; submit: ReactNo
     </>
   );
 }
+
+// Tabs switch between the parts of one thing. The arrow keys move along
+// them, as with the tabs of a window.
+export function Tabs<K extends string>({
+  tabs,
+  active,
+  onChange,
+  label,
+}: {
+  tabs: { key: K; label: string; mark?: boolean }[];
+  active: K;
+  onChange: (key: K) => void;
+  label: string;
+}) {
+  function onKey(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+    event.preventDefault();
+    const at = tabs.findIndex((tab) => tab.key === active);
+    const next = tabs[(at + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+    onChange(next.key);
+    event.currentTarget.querySelector<HTMLButtonElement>(`[data-tab="${next.key}"]`)?.focus();
+  }
+  return (
+    <div role="tablist" aria-label={label} onKeyDown={onKey} className="-mx-1 flex gap-1 overflow-x-auto border-b border-line">
+      {tabs.map((tab) => (
+        <button
+          key={tab.key}
+          type="button"
+          role="tab"
+          data-tab={tab.key}
+          aria-selected={tab.key === active}
+          tabIndex={tab.key === active ? 0 : -1}
+          onClick={() => onChange(tab.key)}
+          className={`-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 ${
+            tab.key === active ? "border-ink text-ink" : "border-transparent text-muted hover:text-ink"
+          } focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus`}
+        >
+          {tab.label}
+          {tab.mark ? <span className="size-1.5 rounded-full bg-bad" role="img" aria-label={text("package.hasProblem")} /> : null}
+        </button>
+      ))}
+    </div>
+  );
+}

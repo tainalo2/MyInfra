@@ -159,6 +159,19 @@ func domainFromPayload(raw json.RawMessage) (syncDomain, error) {
 	return row, err
 }
 
+func packageFromPayload(raw json.RawMessage) (syncPackage, error) {
+	if isSnake(raw) {
+		b := bagOf(raw)
+		return syncPackage{ID: b.str("id"), OwnerID: b.str("owner_id"), Name: b.str("name"), Body: b.raw("body", "{}"), CreatedAt: b.stamp("created_at"), UpdatedAt: b.stamp("updated_at"), Seq: b.i64("sync_seq"), Origin: b.str("sync_origin")}, nil
+	}
+	var row syncPackage
+	err := json.Unmarshal(raw, &row)
+	row.CreatedAt = utc(row.CreatedAt)
+	row.UpdatedAt = utc(row.UpdatedAt)
+	row.Body = canonJSON(row.Body, "{}")
+	return row, err
+}
+
 func templateFromPayload(raw json.RawMessage) (syncTemplate, error) {
 	if isSnake(raw) {
 		b := bagOf(raw)
@@ -360,6 +373,20 @@ func canonDomains(rows []syncDomain) []syncDomain {
 	}
 	for i := range rows {
 		rows[i].CreatedAt = utc(rows[i].CreatedAt)
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
+	return rows
+}
+
+// canonPackages keeps none as nothing, so that the document is unchanged.
+func canonPackages(rows []syncPackage) []syncPackage {
+	if len(rows) == 0 {
+		return nil
+	}
+	for i := range rows {
+		rows[i].CreatedAt = utc(rows[i].CreatedAt)
+		rows[i].UpdatedAt = utc(rows[i].UpdatedAt)
+		rows[i].Body = canonJSON(rows[i].Body, "{}")
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
 	return rows

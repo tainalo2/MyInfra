@@ -11,6 +11,7 @@ import {
   Globe,
   LayoutGrid,
   LayoutTemplate,
+  Package as PackageIcon,
   List,
   Moon,
   MoreHorizontal,
@@ -169,8 +170,8 @@ export function Group({ label, hint, children }: { label: string; hint?: ReactNo
 
 const control = "w-full rounded-md border border-line bg-surface px-3 py-2 outline-none focus:border-focus";
 
-export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={control} />;
+export function Input({ className = "", ...props }: InputHTMLAttributes<HTMLInputElement>) {
+  return <input {...props} className={`${control} ${className}`} />;
 }
 
 export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
@@ -272,6 +273,7 @@ const nav: NavSpec[] = [
   { to: "/applications", label: "nav.apps", icon: LayoutGrid, match: ["/applications", "/nouveau", "/catalogue"] },
   { to: "/clusters", label: "nav.servers", icon: Network, match: ["/serveurs"] },
   { to: "/templates", label: "nav.templates", icon: LayoutTemplate, match: ["/templates"] },
+  { to: "/paquets", label: "nav.packages", icon: PackageIcon, match: ["/paquets"] },
 ];
 
 const activityNav: NavSpec = { to: "/historique", label: "nav.activity", icon: History, match: ["/deploiements", "/suppressions", "/destructions"] };
@@ -581,6 +583,12 @@ async function loadCrumbNames(pathname: string) {
     const row = await api<{ name: string }>(`/api/templates/${id}`);
     return { [`template:${id}`]: row.name };
   }
+  const pkg = pathname.match(/^\/paquets\/([^/]+)$/);
+  if (pkg && pkg[1] !== "nouveau") {
+    const id = decodeURIComponent(pkg[1]);
+    const row = await api<{ name: string }>(`/api/packages/${id}`);
+    return { [`package:${id}`]: row.name };
+  }
   const job = pathname.match(/^\/destructions\/([^/]+)$/);
   if (job) {
     const id = decodeURIComponent(job[1]);
@@ -629,6 +637,13 @@ function crumbsFor(pathname: string, names: Record<string, string>): Crumb[] {
     const crumbs: Crumb[] = [{ label: text("nav.templates"), to: "/templates" }, { label: names[`template:${id}`] || text("crumb.template"), to: `/templates/${id}` }];
     if (template[2]) crumbs.push({ label: text("crumb.deploy") });
     return current(crumbs);
+  }
+  if (path === "/paquets") return [{ label: text("nav.packages") }];
+  if (path === "/paquets/nouveau") return [{ label: text("nav.packages"), to: "/paquets" }, { label: text("package.new") }];
+  const pkg = path.match(/^\/paquets\/([^/]+)$/);
+  if (pkg) {
+    const id = decodeURIComponent(pkg[1]);
+    return current([{ label: text("nav.packages"), to: "/paquets" }, { label: names[`package:${id}`] || text("nav.packages") }]);
   }
   if (path === "/deploiements") return [{ label: text("crumb.deployments") }];
   if (path === "/suppressions") return [{ label: text("crumb.destructions") }];

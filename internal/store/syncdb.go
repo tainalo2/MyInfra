@@ -170,7 +170,7 @@ func (s *Store) SyncMerge(ctx context.Context, remote SyncDoc) (SyncDoc, error) 
 	}
 	if _, err := tx.Exec(ctx, `
 		LOCK TABLE users, secrets, clusters, servers, server_keys, applications, application_services,
-			domains, templates, destructions, template_runs, updates, update_jobs, image_rollbacks, app_secrets, sync_tomb, sync_meta
+			domains, templates, destructions, template_runs, updates, update_jobs, image_rollbacks, app_secrets, packages, sync_tomb, sync_meta
 		IN SHARE ROW EXCLUSIVE MODE`); err != nil {
 		return SyncDoc{}, err
 	}
@@ -208,6 +208,7 @@ func stampSync(ctx context.Context, q querier) error {
 		`UPDATE application_services SET id = id WHERE sync_seq = 0`,
 		`UPDATE domains SET id = id WHERE sync_seq = 0`,
 		`UPDATE templates SET id = id WHERE sync_seq = 0`,
+		`UPDATE packages SET id = id WHERE sync_seq = 0`,
 		`UPDATE destructions SET id = id WHERE sync_seq = 0`,
 		`UPDATE template_runs SET id = id WHERE sync_seq = 0`,
 		`UPDATE updates SET kind = kind WHERE sync_seq = 0`,
@@ -249,6 +250,9 @@ func loadSync(ctx context.Context, q querier) (SyncDoc, error) {
 		return SyncDoc{}, err
 	}
 	if err := loadTemplates(ctx, q, &doc); err != nil {
+		return SyncDoc{}, err
+	}
+	if err := loadPackages(ctx, q, &doc); err != nil {
 		return SyncDoc{}, err
 	}
 	if err := loadDestructions(ctx, q, &doc); err != nil {
@@ -438,6 +442,24 @@ func loadDomains(ctx context.Context, q querier, doc *SyncDoc) error {
 	return rows.Err()
 }
 
+func loadPackages(ctx context.Context, q querier, doc *SyncDoc) error {
+	rows, err := q.Query(ctx, `SELECT id, owner_id, name, body, created_at, updated_at, sync_seq, sync_origin FROM packages`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var row syncPackage
+		var body []byte
+		if err := rows.Scan(&row.ID, &row.OwnerID, &row.Name, &body, &row.CreatedAt, &row.UpdatedAt, &row.Seq, &row.Origin); err != nil {
+			return err
+		}
+		row.Body = body
+		doc.Packages = append(doc.Packages, row)
+	}
+	return rows.Err()
+}
+
 func loadTemplates(ctx context.Context, q querier, doc *SyncDoc) error {
 	rows, err := q.Query(ctx, `SELECT id, owner_id, name, body, created_at, sync_seq, sync_origin FROM templates`)
 	if err != nil {
@@ -585,6 +607,7 @@ func replaceSync(ctx context.Context, q querier, doc SyncDoc) error {
 		{`DELETE FROM applications WHERE NOT (id = ANY($1::text[]))`, idsOf(doc.Applications, func(r syncApp) string { return r.ID })},
 		{`DELETE FROM server_keys WHERE NOT ((server_id || '/' || secret_id) = ANY($1::text[]))`, idsOf(doc.Keys, func(r syncKey) string { return r.ref() })},
 		{`DELETE FROM templates WHERE NOT (id = ANY($1::text[]))`, idsOf(doc.Templates, func(r syncTemplate) string { return r.ID })},
+		{`DELETE FROM packages WHERE NOT (id = ANY($1::text[]))`, idsOf(doc.Packages, func(r syncPackage) string { return r.ID })},
 		{`DELETE FROM servers WHERE NOT (id = ANY($1::text[]))`, idsOf(doc.Servers, func(r syncServer) string { return r.ID })},
 		{`DELETE FROM clusters WHERE NOT (id = ANY($1::text[]))`, idsOf(doc.Clusters, func(r syncCluster) string { return r.ID })},
 		{`DELETE FROM secrets WHERE NOT (id = ANY($1::text[]))`, idsOf(doc.Secrets, func(r syncSecret) string { return r.ID })},
@@ -658,6 +681,14 @@ func replaceSync(ctx context.Context, q querier, doc SyncDoc) error {
 			INSERT INTO server_keys (server_id, secret_id, sync_seq, sync_origin) VALUES ($1,$2,$3,$4)
 			ON CONFLICT (server_id, secret_id) DO UPDATE SET sync_seq = EXCLUDED.sync_seq, sync_origin = EXCLUDED.sync_origin`,
 			row.ServerID, row.SecretID, row.Seq, row.Origin); err != nil {
+			return err
+		}
+	}
+	for _, row := range doc.Packages {
+		if _, err := q.Exec(ctx, `
+			INSERT INTO packages (id, owner_id, name, body, created_at, updated_at, sync_seq, sync_origin) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+			ON CONFLICT (id) DO UPDATE SET owner_id = EXCLUDED.owner_id, name = EXCLUDED.name, body = EXCLUDED.body, created_at = EXCLUDED.created_at, updated_at = EXCLUDED.updated_at, sync_seq = EXCLUDED.sync_seq, sync_origin = EXCLUDED.sync_origin`,
+			row.ID, row.OwnerID, row.Name, string(row.Body), row.CreatedAt, row.UpdatedAt, row.Seq, row.Origin); err != nil {
 			return err
 		}
 	}

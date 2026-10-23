@@ -18,6 +18,7 @@ const pages: { label: MsgKey; to: string; deployOnly?: boolean; adminOnly?: bool
   { label: "nav.clusters", to: "/clusters" },
   { label: "nav.history", to: "/historique" },
   { label: "nav.templates", to: "/templates" },
+  { label: "nav.packages", to: "/paquets" },
   { label: "nav.providers", to: "/providers", deployOnly: true },
   { label: "nav.dns", to: "/dns", deployOnly: true },
   { label: "nav.registries", to: "/registres", deployOnly: true },

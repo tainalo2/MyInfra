@@ -27,6 +27,29 @@ func (a *API) getCatalogue(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) installCatalogue(w http.ResponseWriter, r *http.Request) {
+	a.installFrom(w, r, func(host string, inputs map[string]string) ([]store.Service, map[string]string, error) {
+		services, env, err := market.Expand(r.PathValue("id"), host, inputs)
+		if err != nil {
+			return nil, nil, err
+		}
+		out := make([]store.Service, 0, len(services))
+		for _, svc := range services {
+			out = append(out, store.Service{
+				ID: newID(), Name: svc.Name, Image: svc.Image, Published: svc.Published, Disk: svc.Disk,
+				DiskPath: svc.DiskPath, DiskGi: svc.DiskGi, Listen: svc.Listen, Args: svc.Args, Replicas: svc.Replicas,
+			})
+		}
+		return out, env, nil
+	})
+}
+
+// expandFunc gives the services and the variables of an application about
+// to be installed, its values filled in for its public name.
+type expandFunc func(host string, inputs map[string]string) ([]store.Service, map[string]string, error)
+
+// installFrom creates an application from a catalogue article or a package:
+// its name, destination, domains and redundancy come from the request.
+func (a *API) installFrom(w http.ResponseWriter, r *http.Request, expand expandFunc) {
 	var body struct {
 		Name  string `json:"name"`
 		Names []struct {
@@ -128,7 +151,7 @@ func (a *API) installCatalogue(w http.ResponseWriter, r *http.Request) {
 		}
 		in.Names = append(in.Names, store.Name{ID: newID(), Hostname: host, Zone: zone, SecretID: secretID})
 	}
-	services, env, err := market.Expand(r.PathValue("id"), publicHost, body.Inputs)
+	services, env, err := expand(publicHost, body.Inputs)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -157,11 +180,8 @@ func (a *API) installCatalogue(w http.ResponseWriter, r *http.Request) {
 			in.Source = svc.Image
 			in.Replicas = svc.Replicas
 		}
-		in.Services = append(in.Services, store.Service{
-			ID: newID(), Name: svc.Name, Image: svc.Image, Published: svc.Published, Disk: svc.Disk,
-			DiskPath: svc.DiskPath, DiskGi: svc.DiskGi, Listen: svc.Listen, Args: svc.Args, Replicas: svc.Replicas,
-		})
 	}
+	in.Services = services
 	if body.Copies > 1 {
 		if err := a.shapeRedundancy(r.Context(), in.OwnerID, in.ClusterID, in.Services, body.Copies); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
