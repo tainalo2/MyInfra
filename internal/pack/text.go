@@ -72,11 +72,14 @@ func decodeProblem(err error, doc *yaml.Node) Problem {
 		if want == "" {
 			want = "une autre forme"
 		}
-		line := Locate(doc, path)
+		// Go before 1.26 leaves the indexes out of the field: the value of the
+		// wrong kind is found in the text, to point at it all the same.
 		if !strings.Contains(path, "[") {
-			line = findKey(doc, lastStep(path))
+			if found, ok := wrongValue(doc, strings.Split(path, "."), "", typed.Value); ok {
+				path = found
+			}
 		}
-		return Problem{Path: path, Line: line, Message: fmt.Sprintf("Ce champ attend %s.", want)}
+		return Problem{Path: path, Line: Locate(doc, path), Message: fmt.Sprintf("Ce champ attend %s.", want)}
 	}
 	if m := jsonField.FindStringSubmatch(err.Error()); m != nil {
 		return Problem{Path: m[1], Line: findKey(doc, m[1]), Message: fmt.Sprintf("Le champ %s n'existe pas dans un paquet.", m[1])}
@@ -84,8 +87,56 @@ func decodeProblem(err error, doc *yaml.Node) Problem {
 	return Problem{Line: 1, Message: "Le paquet est illisible."}
 }
 
-// fieldPath writes "services.1.port" as "services[1].port". Older Go leaves
-// the indexes out: the path stays as it came.
+// wrongValue follows the field names of a path through the text, trying
+// each item of a list, to the first value of the kind JSON found there
+// ("string", "number", "bool", "array", "object"). It returns its full path,
+// with the indexes.
+func wrongValue(node *yaml.Node, steps []string, at, kind string) (string, bool) {
+	if node.Kind == yaml.SequenceNode {
+		for i, item := range node.Content {
+			if found, ok := wrongValue(item, steps, fmt.Sprintf("%s[%d]", at, i), kind); ok {
+				return found, true
+			}
+		}
+		return "", false
+	}
+	if len(steps) == 0 {
+		return at, kindOf(node) == kind
+	}
+	if node.Kind != yaml.MappingNode {
+		return "", false
+	}
+	next := steps[0]
+	if at != "" {
+		next = at + "." + steps[0]
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == steps[0] {
+			return wrongValue(node.Content[i+1], steps[1:], next, kind)
+		}
+	}
+	return "", false
+}
+
+// kindOf names a YAML value as encoding/json names the kind it decoded.
+func kindOf(node *yaml.Node) string {
+	switch {
+	case node.Kind == yaml.SequenceNode:
+		return "array"
+	case node.Kind == yaml.MappingNode:
+		return "object"
+	case node.Tag == "!!int" || node.Tag == "!!float":
+		return "number"
+	case node.Tag == "!!bool":
+		return "bool"
+	case node.Tag == "!!str":
+		return "string"
+	}
+	return ""
+}
+
+// fieldPath writes "services.1.port" as "services[1].port". Go before 1.26
+// leaves the indexes out: the path stays as it came.
 func fieldPath(field string) string {
 	var b strings.Builder
 	for i, step := range strings.Split(field, ".") {
@@ -99,13 +150,6 @@ func fieldPath(field string) string {
 		b.WriteString(step)
 	}
 	return b.String()
-}
-
-func lastStep(path string) string {
-	if i := strings.LastIndex(path, "."); i >= 0 {
-		return path[i+1:]
-	}
-	return path
 }
 
 func lineOf(err error) int {
