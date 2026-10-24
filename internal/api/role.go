@@ -31,6 +31,17 @@ func (a *API) userRole(ctx context.Context, userID string) string {
 	return row.Role
 }
 
+// effectiveRole is the role a request acts with: the person's, capped by the
+// role of the access token it came with, if any. Both are read on each
+// request, so a person whose role goes down loses it through their tokens too.
+func (a *API) effectiveRole(ctx context.Context) string {
+	role := a.userRole(ctx, userID(ctx))
+	if token, ok := tokenOf(ctx); ok && roleRank(token.Role) < roleRank(role) {
+		return token.Role
+	}
+	return role
+}
+
 func (a *API) deployAuth(next http.HandlerFunc) http.HandlerFunc {
 	return a.requireRole(store.RoleDeploy)(a.drives(next))
 }
@@ -47,7 +58,7 @@ func (a *API) requireRole(minRole string) func(http.HandlerFunc) http.HandlerFun
 	need := roleRank(minRole)
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return a.auth(func(w http.ResponseWriter, r *http.Request) {
-			if roleRank(a.userRole(r.Context(), userID(r.Context()))) < need {
+			if roleRank(a.effectiveRole(r.Context())) < need {
 				writeError(w, http.StatusForbidden, "Droits insuffisants.")
 				return
 			}

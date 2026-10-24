@@ -291,6 +291,11 @@ ALTER TABLE events ADD CONSTRAINT events_level_check CHECK (level IN ('info', 'o
 
 CREATE INDEX IF NOT EXISTS events_owner_at ON events (owner_id, at DESC);
 
+-- Where the request of an event came from (ui, api for an access token, mcp for
+-- the MCP server) and, for a token, its name.
+ALTER TABLE events ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'ui';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS actor text NOT NULL DEFAULT '';
+
 ALTER TABLE applications ADD COLUMN IF NOT EXISTS run_detail text NOT NULL DEFAULT '';
 ALTER TABLE applications ADD COLUMN IF NOT EXISTS preparing_since timestamptz;
 
@@ -422,3 +427,18 @@ CREATE TABLE IF NOT EXISTS packages (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS packages_owner_name_key ON packages (owner_id, lower(btrim(name)));
+
+-- Personal access tokens a person makes for a program, such as an MCP
+-- client. Like sessions, each copy keeps its own: they are never synced.
+CREATE TABLE IF NOT EXISTS api_tokens (
+    id text PRIMARY KEY,
+    user_id text NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    name text NOT NULL,
+    token_hash text NOT NULL UNIQUE,
+    role text NOT NULL CHECK (role IN ('read', 'deploy', 'admin')),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    last_used_at timestamptz,
+    expires_at timestamptz
+);
+
+CREATE INDEX IF NOT EXISTS api_tokens_user ON api_tokens (user_id);

@@ -74,6 +74,8 @@ type ctxKey int
 
 const userKey ctxKey = 1
 const ownerKey ctxKey = 2
+const tokenKey ctxKey = 3
+const sourceKey ctxKey = 4
 
 func withUser(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, userKey, id)
@@ -81,6 +83,43 @@ func withUser(ctx context.Context, id string) context.Context {
 
 func withOwner(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, ownerKey, id)
+}
+
+func withToken(ctx context.Context, token store.APIToken) context.Context {
+	return context.WithValue(ctx, tokenKey, token)
+}
+
+// tokenOf is the access token a request came with, when it did not come
+// with a session.
+func tokenOf(ctx context.Context) (store.APIToken, bool) {
+	token, ok := ctx.Value(tokenKey).(store.APIToken)
+	return token, ok
+}
+
+// withSource marks a request made for the MCP server; only that server sets
+// it, on the requests it makes itself, so a caller cannot claim it.
+func withSource(ctx context.Context, source string) context.Context {
+	return context.WithValue(ctx, sourceKey, source)
+}
+
+// sourceOf tells where a request comes from: "mcp" for the MCP server, "api"
+// for an access token used directly, "ui" for a person's session.
+func sourceOf(ctx context.Context) string {
+	if source, ok := ctx.Value(sourceKey).(string); ok && source != "" {
+		return source
+	}
+	if _, ok := tokenOf(ctx); ok {
+		return "api"
+	}
+	return "ui"
+}
+
+// actorOf names who acted: the access token's name, or empty for a session.
+func actorOf(ctx context.Context) string {
+	if token, ok := tokenOf(ctx); ok {
+		return token.Name
+	}
+	return ""
 }
 
 func userID(ctx context.Context) string {

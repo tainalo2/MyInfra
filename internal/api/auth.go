@@ -189,6 +189,10 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("POST /api/webhooks/git/{id}", a.gitWebhook)
 	mux.HandleFunc("POST /api/webhooks/git/{id}/{secret}", a.gitWebhook)
 
+	mux.HandleFunc("GET /api/mcp/tokens", a.personOnly(a.listAPITokens))
+	mux.HandleFunc("POST /api/mcp/tokens", a.personOnly(a.steady(a.createAPIToken)))
+	mux.HandleFunc("DELETE /api/mcp/tokens/{id}", a.personOnly(a.steady(a.deleteAPIToken)))
+
 	mux.HandleFunc("GET /api/tools", a.auth(a.hostTools))
 	mux.HandleFunc("POST /api/tools/{name}", a.deployAuth(a.installTool))
 
@@ -707,21 +711,33 @@ func (a *API) startSession(w http.ResponseWriter, r *http.Request, userID string
 
 func (a *API) auth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		cookie, err := r.Cookie(sessionCookie)
-		if err != nil {
-			writeError(w, http.StatusUnauthorized, "Connexion requise.")
-			return
+		ctx := r.Context()
+		var userID string
+		if bearer, ok := bearerToken(r); ok {
+			token, err := a.Store.UserByAPIToken(ctx, hashToken(bearer))
+			if err != nil {
+				writeError(w, http.StatusUnauthorized, "Jeton d'accès invalide ou expiré.")
+				return
+			}
+			userID = token.UserID
+			ctx = withToken(ctx, token)
+		} else {
+			cookie, err := r.Cookie(sessionCookie)
+			if err != nil {
+				writeError(w, http.StatusUnauthorized, "Connexion requise.")
+				return
+			}
+			userID, err = a.Store.UserBySession(ctx, hashToken(cookie.Value))
+			if err != nil {
+				writeError(w, http.StatusUnauthorized, "Connexion requise.")
+				return
+			}
 		}
-		userID, err := a.Store.UserBySession(r.Context(), hashToken(cookie.Value))
-		if err != nil {
-			writeError(w, http.StatusUnauthorized, "Connexion requise.")
-			return
-		}
-		owner, err := a.Store.InfrastructureOwner(r.Context())
+		owner, err := a.Store.InfrastructureOwner(ctx)
 		if err != nil {
 			owner = userID
 		}
-		ctx := withOwner(withUser(r.Context(), userID), owner)
+		ctx = withOwner(withUser(ctx, userID), owner)
 		next(w, r.WithContext(ctx))
 	}
 }
