@@ -67,7 +67,6 @@ ghostfolio
 invoiceninja
 jellyfin
 jellyseerr
-media-stack
 sonarr
 radarr
 lidarr
