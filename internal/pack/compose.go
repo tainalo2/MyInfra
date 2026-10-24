@@ -57,6 +57,15 @@ type composer struct {
 	inputs  map[string]bool
 	configs map[string]map[string]any
 	names   map[string]string
+	// mounts are the named volumes and folders each service mounts: one
+	// mounted by several services becomes a disk they share.
+	shared []composeMount
+}
+
+type composeMount struct {
+	service, path, source string
+	// sizeGi is the size the source gave, 0 when it gave none.
+	sizeGi int
 }
 
 // Compose reads a docker-compose file. name is the package's name when the
@@ -127,7 +136,61 @@ func Compose(data []byte, name string) (Package, []Warning, error) {
 		}
 	}
 	c.choosePublic(published)
+	c.shareDisks()
 	return c.pkg, c.warnings, nil
+}
+
+// shareDisks turns a volume or a folder several services mount into a disk
+// they share, so that what one writes, the others read.
+func (c *composer) shareDisks() {
+	users := map[string][]composeMount{}
+	var order []string
+	for _, m := range c.shared {
+		if _, seen := users[m.source]; !seen {
+			order = append(order, m.source)
+		}
+		users[m.source] = append(users[m.source], m)
+	}
+	taken := map[string]bool{}
+	for _, source := range order {
+		mounts := users[source]
+		services := map[string]bool{}
+		for _, m := range mounts {
+			services[m.service] = true
+		}
+		if len(services) < 2 || len(c.pkg.Disks) == maxDisks {
+			continue
+		}
+		name := slugOf(strings.TrimLeft(source[strings.Index(source, ":")+1:], "./~$"), "data", 31)
+		for base, i := name, 2; taken[name]; i++ {
+			name = fmt.Sprintf("%s-%d", base, i)
+		}
+		taken[name] = true
+		size := 0
+		for _, m := range mounts {
+			size = max(size, m.sizeGi)
+		}
+		if size == 0 {
+			size = 10
+		}
+		c.pkg.Disks = append(c.pkg.Disks, SharedDisk{Name: name, SizeGi: size})
+		var names []string
+		for i := range c.pkg.Services {
+			svc := &c.pkg.Services[i]
+			for j := range svc.Volumes {
+				for _, m := range mounts {
+					if m.service == svc.Name && m.path == svc.Volumes[j].Path {
+						svc.Volumes[j].Disk, svc.Volumes[j].SizeGi = name, 0
+						if svc.Replicas > 1 {
+							svc.Replicas = 1
+						}
+						names = append(names, svc.Name)
+					}
+				}
+			}
+		}
+		c.warn("", "Les services %s montent le même volume : ils partagent le disque %s, de %d Gio. Ils tournent en une copie, sur le même nœud.", strings.Join(names, ", "), name, size)
+	}
 }
 
 func (c *composer) warn(service, format string, args ...any) {
@@ -438,6 +501,9 @@ func (c *composer) volumes(svc *Service, raw any) {
 		}
 		if hasVolume(svc.Volumes, target) {
 			continue
+		}
+		if source != "" {
+			c.shared = append(c.shared, composeMount{service: svc.Name, path: target, source: kind + ":" + source})
 		}
 		svc.Volumes = append(svc.Volumes, spec.Volume{Path: target, SizeGi: 1})
 	}

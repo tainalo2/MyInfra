@@ -3,7 +3,17 @@ import type { DnsZone } from "./api";
 import { text } from "./i18n";
 import { Group, Icon, TextButton, focus } from "./ui";
 
-export type AppName = { subdomain: string; zone: string };
+// service is the public service a name leads to; empty is the main one.
+export type AppName = { subdomain: string; zone: string; service?: string };
+
+// publicServices are the services of an application that get names, the
+// main one first: the public one without names of its own.
+export function publicServices(services: { name: string; published: boolean }[] = [], domains: { service?: string }[] = []) {
+  const named = new Set(domains.map((domain) => domain.service ?? "").filter(Boolean));
+  const publics = services.filter((service) => service.published).map((service) => service.name);
+  const main = publics.find((name) => !named.has(name)) ?? publics[0] ?? "";
+  return { main, others: publics.filter((name) => name !== main) };
+}
 
 const joined = `min-w-0 border border-line bg-surface px-3 py-2 outline-none focus:border-focus ${focus}`;
 
@@ -15,6 +25,7 @@ export function NameList({
   onChange,
   keepOne = false,
   hint,
+  services,
 }: {
   names: AppName[];
   zones: DnsZone[];
@@ -22,6 +33,9 @@ export function NameList({
   // keepOne leaves the last row in place: a new application starts with one.
   keepOne?: boolean;
   hint?: string;
+  // services are the public services a name may lead to, the main first;
+  // with one or none, the choice is not shown.
+  services?: { main: string; others: string[] };
 }) {
   const update = (index: number, next: Partial<AppName>) => onChange(names.map((row, i) => (i === index ? { ...row, ...next } : row)));
   return (
@@ -57,6 +71,21 @@ export function NameList({
                 ))}
               </select>
             </div>
+            {services && services.others.length > 0 ? (
+              <select
+                value={item.service ?? ""}
+                aria-label={text("domain.service")}
+                onChange={(e) => update(index, { service: e.target.value || undefined })}
+                className={`rounded-md ${joined}`}
+              >
+                <option value="">{text("domain.mainService", { name: services.main })}</option>
+                {services.others.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            ) : null}
             {keepOne && names.length <= 1 ? null : (
               <TextButton type="button" onClick={() => onChange(names.filter((_, i) => i !== index))}>
                 {text("common.remove")}
@@ -76,12 +105,12 @@ export function NameList({
 }
 
 // namesOf turns the custom domains of an application back into rows.
-export function namesOf(domains: { hostname: string; kind: string; zone?: string }[] = []): AppName[] {
+export function namesOf(domains: { hostname: string; kind: string; zone?: string; service?: string }[] = []): AppName[] {
   return domains
     .filter((domain) => domain.kind === "custom")
     .map((domain) => {
       const zone = domain.zone ?? "";
       const subdomain = zone && domain.hostname.endsWith(`.${zone}`) ? domain.hostname.slice(0, -zone.length - 1) : domain.hostname === zone ? "" : domain.hostname;
-      return { subdomain, zone };
+      return domain.service ? { subdomain, zone, service: domain.service } : { subdomain, zone };
     });
 }

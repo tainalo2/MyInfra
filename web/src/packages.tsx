@@ -1,7 +1,7 @@
 import { FormEvent, Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowRight, BookOpen, Copy, LayoutGrid, Package as PackageIcon, Plus, Ship, Trash2, Upload } from "lucide-react";
-import { ApiError, api, peek, type Package, type PackageAbout, type PackageFile, type PackageProblem, type PackageRow, type PackageService } from "./api";
+import { ApiError, api, peek, type Package, type PackageAbout, type PackageDisk, type PackageFile, type PackageProblem, type PackageRow, type PackageService } from "./api";
 import { Code, languageOf } from "./code-lazy";
 import { knownMessage, text, type MsgKey } from "./i18n";
 import { useI18n } from "./lang";
@@ -820,10 +820,50 @@ function VisualEditor({
         <Field label={text("package.sharedEnv")} hint={text("package.sharedEnvHint")}>
           <EnvEditor value={pkg.env} onChange={(env) => set("env", env)} label={text("package.sharedEnv")} snippets={sharedSnippets()} />
         </Field>
+        <SharedDisks disks={pkg.disks ?? []} onChange={(disks) => set("disks", disks.length > 0 ? disks : undefined)} />
         {general.length > 0 ? <ProblemList problems={general} /> : null}
       </section>
-      <ServicesEditor services={pkg.services} onChange={(services) => set("services", services)} problems={problems} />
+      <ServicesEditor services={pkg.services} onChange={(services) => set("services", services)} problems={problems} disks={(pkg.disks ?? []).map((disk) => disk.name).filter(Boolean)} />
     </div>
+  );
+}
+
+// SharedDisks declares the disks several services mount: a name and a size,
+// once for the package.
+function SharedDisks({ disks, onChange }: { disks: PackageDisk[]; onChange: (disks: PackageDisk[]) => void }) {
+  function setDisk(index: number, next: PackageDisk) {
+    onChange(disks.map((disk, at) => (at === index ? next : disk)));
+  }
+  return (
+    <Group label={text("package.sharedDisks")} hint={text("package.sharedDisksHint")}>
+      <div className="flex flex-col gap-3">
+        {disks.map((disk, index) => (
+          <div key={index} className="flex items-center gap-3">
+            <Input
+              value={disk.name}
+              placeholder="media"
+              aria-label={text("package.diskName")}
+              className="font-mono"
+              autoCapitalize="off"
+              spellCheck={false}
+              onChange={(e) => setDisk(index, { ...disk, name: e.target.value })}
+            />
+            <span className="flex shrink-0 items-center gap-2">
+              <span className="w-20">
+                <Input inputMode="numeric" value={disk.sizeGi || ""} placeholder="10" aria-label={text("package.diskSize")} onChange={(e) => setDisk(index, { ...disk, sizeGi: numberOrUndefined(e.target.value) ?? 0 })} />
+              </span>
+              <span className="text-muted">Gio</span>
+            </span>
+            <IconButton type="button" icon={Trash2} label={text("common.delete")} onClick={() => onChange(disks.filter((_, at) => at !== index))} />
+          </div>
+        ))}
+        <div>
+          <TextButton type="button" onClick={() => onChange([...disks, { name: disks.length === 0 ? "media" : `disk-${disks.length + 1}`, sizeGi: 10 }])}>
+            {text("package.addSharedDisk")}
+          </TextButton>
+        </div>
+      </div>
+    </Group>
   );
 }
 
@@ -833,18 +873,19 @@ function ServicesEditor({
   services,
   onChange,
   problems,
+  disks,
 }: {
   services: PackageService[];
   onChange: (services: PackageService[]) => void;
   problems: PackageProblem[];
+  // disks are the shared disks a volume may mount; without, those the
+  // services mount already.
+  disks?: string[];
 }) {
+  const shared = disks ?? [...new Set(services.flatMap((service) => (service.volumes ?? []).flatMap((volume) => (volume.disk ? [volume.disk] : []))))];
   function setService(index: number, next: PackageService) {
-    const updated = services.map((service, at) => {
-      if (at === index) return next;
-      // One public service only: choosing one leaves the others.
-      if (next.public && service.public) return { ...service, public: false };
-      return service;
-    });
+    // Several services may be public: each gets its own names.
+    const updated = services.map((service, at) => (at === index ? next : service));
     // A renamed service stays the one the others wait for.
     const before = services[index]?.name;
     const renamed = before && before !== next.name;
@@ -876,6 +917,7 @@ function ServicesEditor({
           key={index}
           service={service}
           others={services.filter((_, at) => at !== index).map((other) => other.name)}
+          disks={shared}
           problems={problemsUnder(problems, `services[${index}]`).map((problem) => ({ ...problem, path: problem.path.slice(`services[${index}]`.length + 1) }))}
           onChange={(next) => setService(index, next)}
           onRemove={services.length > 1 ? () => removeService(index) : undefined}
@@ -1005,12 +1047,14 @@ const tabOf: Record<string, ServiceTab> = {
 function ServiceCard({
   service,
   others,
+  disks,
   problems,
   onChange,
   onRemove,
 }: {
   service: PackageService;
   others: string[];
+  disks: string[];
   problems: PackageProblem[];
   onChange: (service: PackageService) => void;
   onRemove?: () => void;
@@ -1050,7 +1094,7 @@ function ServiceCard({
       <p className="text-faint">{text(tabTip[tab])}</p>
       {tab === "general" ? <GeneralTab service={service} others={others} set={set} onChange={onChange} /> : null}
       {tab === "network" ? <NetworkTab service={service} set={set} /> : null}
-      {tab === "storage" ? <StorageTab service={service} set={set} /> : null}
+      {tab === "storage" ? <StorageTab service={service} set={set} disks={disks} /> : null}
       {tab === "files" ? <FilesTab service={service} set={set} /> : null}
       {tab === "env" ? (
         <Field label={text("package.tabEnv")} hint={text("package.serviceEnvHint")}>
@@ -1211,14 +1255,17 @@ function NetworkTab({ service, set }: { service: PackageService; set: Setter }) 
   );
 }
 
-function StorageTab({ service, set }: { service: PackageService; set: Setter }) {
+function StorageTab({ service, set, disks }: { service: PackageService; set: Setter; disks: string[] }) {
   const volumes = service.volumes ?? [];
+  const own = volumes.filter((volume) => !volume.disk);
   return (
     <Group label={text("package.volumes")} hint={text("package.volumesHint")}>
       <div className="flex flex-col gap-3">
         {volumes.map((volume, index) => (
           <div key={index} className="flex flex-col gap-2">
-            <span className="text-muted">{index === 0 ? text("package.mainDisk") : text("package.extraDisk", { n: index })}</span>
+            <span className="text-muted">
+              {volume.disk ? text("package.sharedDiskOf", { name: volume.disk }) : own.indexOf(volume) === 0 ? text("package.mainDisk") : text("package.extraDisk", { n: own.indexOf(volume) })}
+            </span>
             <div className="flex items-center gap-3">
               <Input
                 value={volume.path}
@@ -1227,18 +1274,41 @@ function StorageTab({ service, set }: { service: PackageService; set: Setter }) 
                 className="font-mono"
                 onChange={(e) => set("volumes", volumes.map((item, at) => (at === index ? { ...item, path: e.target.value } : item)))}
               />
-              <span className="flex shrink-0 items-center gap-2">
-                <span className="w-20">
-                  <Input
-                    inputMode="numeric"
-                    value={volume.sizeGi ?? ""}
-                    placeholder="1"
-                    aria-label={text("package.diskSize")}
-                    onChange={(e) => set("volumes", volumes.map((item, at) => (at === index ? { ...item, sizeGi: numberOrUndefined(e.target.value) } : item)))}
-                  />
+              {disks.length > 0 ? (
+                <span className="w-40 shrink-0">
+                  <Select
+                    value={volume.disk ?? ""}
+                    aria-label={text("package.diskKind")}
+                    onChange={(e) =>
+                      set(
+                        "volumes",
+                        volumes.map((item, at) => (at === index ? (e.target.value ? { path: item.path, disk: e.target.value } : { path: item.path, sizeGi: 1 }) : item)),
+                      )
+                    }
+                  >
+                    <option value="">{text("package.ownDisk")}</option>
+                    {disks.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </Select>
                 </span>
-                <span className="text-muted">Gio</span>
-              </span>
+              ) : null}
+              {volume.disk ? null : (
+                <span className="flex shrink-0 items-center gap-2">
+                  <span className="w-20">
+                    <Input
+                      inputMode="numeric"
+                      value={volume.sizeGi ?? ""}
+                      placeholder="1"
+                      aria-label={text("package.diskSize")}
+                      onChange={(e) => set("volumes", volumes.map((item, at) => (at === index ? { ...item, sizeGi: numberOrUndefined(e.target.value) } : item)))}
+                    />
+                  </span>
+                  <span className="text-muted">Gio</span>
+                </span>
+              )}
               <IconButton type="button" icon={Trash2} label={text("common.delete")} onClick={() => set("volumes", volumes.filter((_, at) => at !== index))} />
             </div>
           </div>
@@ -1618,6 +1688,7 @@ const guideSections: { title: MsgKey; body: MsgKey }[] = [
   { title: "guide.servicesTitle", body: "guide.servicesBody" },
   { title: "guide.publicTitle", body: "guide.publicBody" },
   { title: "guide.disksTitle", body: "guide.disksBody" },
+  { title: "guide.sharedTitle", body: "guide.sharedBody" },
   { title: "guide.filesTitle", body: "guide.filesBody" },
   { title: "guide.variablesTitle", body: "guide.variablesBody" },
   { title: "guide.orderTitle", body: "guide.orderBody" },
@@ -1643,7 +1714,8 @@ const guideFields: { field: string; body: MsgKey }[] = [
   { field: "replicas", body: "guide.refReplicas" },
   { field: "command · args", body: "guide.refCommand" },
   { field: "ports[].name · port", body: "guide.refPorts" },
-  { field: "volumes[].path · sizeGi", body: "guide.refVolumes" },
+  { field: "disks[].name · sizeGi", body: "guide.refDisks" },
+  { field: "volumes[].path · sizeGi · disk", body: "guide.refVolumes" },
   { field: "files[].path · content", body: "guide.refFiles" },
   { field: "services[].env", body: "guide.refServiceEnv" },
   { field: "health.http · port", body: "guide.refHealth" },

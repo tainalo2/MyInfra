@@ -295,6 +295,8 @@ export type AppService = {
 export type ArgoApp = { name: string; namespace: string; sync: string; health: string };
 
 export type Domain = {
+  // service is the public service the name leads to; empty is the main one.
+  service?: string;
   hostname: string;
   kind: string;
   status: string;
@@ -566,7 +568,11 @@ export type UpdateJob = {
 // files and variables, as MyInfra reads and writes it in YAML or JSON.
 export type PackageInput = { key: string; label: string };
 
-export type PackageVolume = { path: string; sizeGi?: number };
+// A volume of its own has a size; one that names disk mounts a disk the
+// services of the package share, of the size declared in disks.
+export type PackageVolume = { path: string; sizeGi?: number; disk?: string };
+
+export type PackageDisk = { name: string; sizeGi: number };
 
 export type PackageFile = { path: string; content: string };
 
@@ -606,6 +612,7 @@ export type Package = {
   inputs?: PackageInput[];
   env?: Record<string, string>;
   services: PackageService[];
+  disks?: PackageDisk[];
   about?: PackageAbout;
 };
 

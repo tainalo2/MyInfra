@@ -138,6 +138,7 @@ type snapDomain struct {
 	Zone          string `json:"zone,omitempty"`
 	SecretID      string `json:"secretId,omitempty"`
 	Detail        string `json:"detail,omitempty"`
+	Service       string `json:"service,omitempty"`
 }
 
 func (s *Store) HostnameTaken(ctx context.Context, host string) (bool, error) {
@@ -289,14 +290,14 @@ func (s *Store) ExportSnapshot(ctx context.Context) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 
-	domains, err := s.pool.Query(ctx, `SELECT id, application_id, hostname, kind, status, zone, secret_id, detail FROM domains ORDER BY created_at`)
+	domains, err := s.pool.Query(ctx, `SELECT id, application_id, hostname, kind, status, zone, secret_id, detail, service FROM domains ORDER BY created_at`)
 	if err != nil {
 		return Snapshot{}, err
 	}
 	defer domains.Close()
 	for domains.Next() {
 		var row snapDomain
-		if err := domains.Scan(&row.ID, &row.ApplicationID, &row.Hostname, &row.Kind, &row.Status, &row.Zone, &row.SecretID, &row.Detail); err != nil {
+		if err := domains.Scan(&row.ID, &row.ApplicationID, &row.Hostname, &row.Kind, &row.Status, &row.Zone, &row.SecretID, &row.Detail, &row.Service); err != nil {
 			return Snapshot{}, err
 		}
 		snap.Domains = append(snap.Domains, row)
@@ -453,8 +454,8 @@ func (s *Store) ImportSnapshot(ctx context.Context, snap Snapshot) error {
 	}
 	for _, row := range snap.Domains {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO domains (id, application_id, hostname, kind, status, zone, secret_id, detail) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-			row.ID, row.ApplicationID, row.Hostname, row.Kind, row.Status, row.Zone, row.SecretID, row.Detail,
+			INSERT INTO domains (id, application_id, hostname, kind, status, zone, secret_id, detail, service) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			row.ID, row.ApplicationID, row.Hostname, row.Kind, row.Status, row.Zone, row.SecretID, row.Detail, row.Service,
 		); err != nil {
 			return err
 		}

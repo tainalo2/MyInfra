@@ -68,7 +68,7 @@ func (a *API) restoreApplicationBackup(w http.ResponseWriter, r *http.Request) {
 }
 
 func backupRestoreAllowed(app store.Application, svc store.Service, source string) bool {
-	profile := market.ProfileOf(svc.Image, svc.Disk)
+	profile := profileOf(svc)
 	switch source {
 	case "postgres":
 		return app.ClusterID != "" && svc.Database == "ready" && profile.Postgres != nil
@@ -89,7 +89,7 @@ func backupRestoreAllowed(app store.Application, svc store.Service, source strin
 }
 
 func (a *API) restoreCommand(ctx context.Context, owner string, app store.Application, svc store.Service, source string) (command string, host deploy.Host, err error) {
-	profile := market.ProfileOf(svc.Image, svc.Disk)
+	profile := profileOf(svc)
 	switch {
 	case app.ClusterID != "":
 		host, err = a.clusterHost(ctx, owner, app.ClusterID)

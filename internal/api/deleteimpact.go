@@ -132,6 +132,17 @@ func (a *API) deletionImpact(ctx context.Context, owner, kind, id string) (delet
 			return out, err
 		}
 		steps = appSteps(app, names)
+		for _, disk := range sortedSet(sharedNames(app.Services)) {
+			size := 0
+			for _, svc := range app.Services {
+				for _, volume := range svc.Spec.Volumes {
+					if volume.Disk == disk {
+						size = max(size, sizeGi(volume.SizeGi))
+					}
+				}
+			}
+			out.Notes = append(out.Notes, "Le disque partagé "+disk+" ("+strconv.Itoa(size)+" Gio), avec tous ses fichiers, part avec l'application.")
+		}
 		if app.DestinationKind == "cluster" {
 			steps = append(steps, destructionStep{Label: "Retirer les charges du cluster"})
 		}

@@ -204,6 +204,10 @@ ALTER TABLE domains ADD COLUMN IF NOT EXISTS secret_id text NOT NULL DEFAULT '';
 
 ALTER TABLE domains ADD COLUMN IF NOT EXISTS detail text NOT NULL DEFAULT '';
 
+-- The public service a name leads to, empty for the main one: the only one
+-- before applications could publish several.
+ALTER TABLE domains ADD COLUMN IF NOT EXISTS service text NOT NULL DEFAULT '';
+
 CREATE UNIQUE INDEX IF NOT EXISTS domains_hostname_key ON domains (hostname);
 
 CREATE TABLE IF NOT EXISTS templates (

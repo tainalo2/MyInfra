@@ -213,7 +213,7 @@ func writeService(b *strings.Builder, report string, app Workload) error {
 		if name := pausedName(app); name != "" {
 			// The proxy sends the visitors to a page instead of an error.
 			fmt.Fprintf(b, "if ! docker inspect '%s' >/dev/null 2>&1; then\n", name)
-			fmt.Fprintf(b, "  docker run -d --name '%s' --restart unless-stopped --network myinfra%s -e 'PAGE=%s' '%s' sh -c '%s'\n", name, publishLabels(app.ID, app.Hosts, app.Zones, pause.Port), pause.Page, pause.Image, pause.Script)
+			fmt.Fprintf(b, "  docker run -d --name '%s' --restart unless-stopped --network myinfra%s -e 'PAGE=%s' '%s' sh -c '%s'\n", name, publishLabels(app.ID+app.Service+"paused", app.Hosts, app.Zones, pause.Port), pause.Page, pause.Image, pause.Script)
 			b.WriteString("fi\n")
 		}
 		fmt.Fprintf(b, "report '%s' paused\n", app.ID)
@@ -367,11 +367,13 @@ func safeLogin(login Login) bool {
 	return true
 }
 
+// pausedName is the container that shows the pause page on the names of
+// one public service.
 func pausedName(app Workload) string {
 	if !app.Paused || !app.Published || len(app.Hosts) == 0 {
 		return ""
 	}
-	return "myinfra-" + compact(app.ID) + "-paused"
+	return "myinfra-" + compact(app.ID) + "-" + app.Service + "-paused"
 }
 
 func serviceNames(app Workload) []string {
@@ -606,12 +608,12 @@ func hostRule(hosts []string) string {
 	return strings.Join(parts, " || ")
 }
 
+// routerName names the Traefik routers of what id names: an application,
+// one of its services, a DNS zone. The whole of it is hashed, so that two
+// services or two zones of one application never share a router.
 func routerName(id string) string {
-	compact := strings.ReplaceAll(id, "-", "")
-	if len(compact) > 12 {
-		compact = compact[:12]
-	}
-	return "app" + compact
+	sum := sha256.Sum256([]byte(id))
+	return "app" + hex.EncodeToString(sum[:])[:16]
 }
 
 // startOrder starts the services an application's others depend on first.
@@ -688,6 +690,12 @@ func writeFiles(b *strings.Builder, app Workload) {
 
 // specFlags are the docker run options of a service's spec: entrypoint,
 // disks besides the first, files, variables and reservations.
+// SharedVolume names the Docker volume of a disk the services of an
+// application share.
+func SharedVolume(appID, disk string) string {
+	return "myinfra-data-" + compact(appID) + "-disk-" + disk
+}
+
 func specFlags(app Workload, copy, replicas int) string {
 	var b strings.Builder
 	if len(app.Spec.Command) > 0 {
@@ -695,7 +703,10 @@ func specFlags(app Workload, copy, replicas int) string {
 	}
 	for i, volume := range app.Spec.Volumes {
 		name := fmt.Sprintf("myinfra-data-%s-%s-v%d", compact(app.ID), app.Service, i+1)
-		if replicas > 1 {
+		if volume.Disk != "" {
+			// One volume for the application, whichever service mounts it.
+			name = SharedVolume(app.ID, volume.Disk)
+		} else if replicas > 1 {
 			name = fmt.Sprintf("%s-%d", name, copy)
 		}
 		fmt.Fprintf(&b, " -v '%s:%s'", name, volume.Path)

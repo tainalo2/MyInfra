@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -50,6 +51,9 @@ func (a *API) installFrom(w http.ResponseWriter, r *http.Request, expand expandF
 		Names []struct {
 			Subdomain string `json:"subdomain"`
 			Zone      string `json:"zone"`
+			// Service is the public service the name leads to; empty or
+			// the first public one is the main.
+			Service string `json:"service"`
 		} `json:"names"`
 		DestinationKind string            `json:"destinationKind"`
 		ServerID        string            `json:"serverId"`
@@ -58,6 +62,9 @@ func (a *API) installFrom(w http.ResponseWriter, r *http.Request, expand expandF
 		Tag             string            `json:"tag"`
 		// Copies is the redundancy asked: 0 or 1 keeps the article's own.
 		Copies int `json:"copies"`
+		// DiskNode is the server of the cluster whose disk holds the
+		// shared disks; empty lets the cluster choose.
+		DiskNode string `json:"diskNode"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
@@ -144,16 +151,27 @@ func (a *API) installFrom(w http.ResponseWriter, r *http.Request, expand expandF
 		if publicHost == defaultHost {
 			publicHost = host
 		}
-		in.Names = append(in.Names, store.Name{ID: newID(), Hostname: host, Zone: zone, SecretID: secretID})
+		in.Names = append(in.Names, store.Name{ID: newID(), Hostname: host, Zone: zone, SecretID: secretID, Service: strings.TrimSpace(item.Service)})
 	}
 	services, env, err := expand(publicHost, body.Inputs)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	main, err := servicesNames(&in, services, name)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if node := strings.TrimSpace(body.DiskNode); node != "" {
+		if err := a.placeDisks(r.Context(), in.OwnerID, in.ClusterID, node, services); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
 	if tag := strings.TrimSpace(body.Tag); tag != "" {
 		for i, svc := range services {
-			if !svc.Published {
+			if svc.Name != main {
 				continue
 			}
 			next, tagErr := registry.WithTag(svc.Image, tag)
@@ -180,7 +198,7 @@ func (a *API) installFrom(w http.ResponseWriter, r *http.Request, expand expandF
 	// without, those of the article's published service.
 	in.Replicas = 1
 	for _, svc := range in.Services {
-		if svc.Published {
+		if svc.Name == main {
 			in.Source = svc.Image
 			in.Replicas = svc.Replicas
 		}
@@ -212,4 +230,63 @@ func (a *API) installFrom(w http.ResponseWriter, r *http.Request, expand expandF
 		go a.deliverClusters(context.Background())
 	}
 	writeJSON(w, http.StatusCreated, toApp(app))
+}
+
+// servicesNames ties the names of a new application to its public services:
+// a name for the main one, the first public, is kept without service; one
+// for another names it. Each public service besides the main one gets the
+// address MyInfra gives it, <service>-<application>.<apps domain>.
+func servicesNames(in *store.NewApplication, services []store.Service, app string) (string, error) {
+	main := ""
+	published := map[string]bool{}
+	for _, svc := range services {
+		if svc.Published {
+			if main == "" {
+				main = svc.Name
+			}
+			published[svc.Name] = true
+		}
+	}
+	for i, n := range in.Names {
+		switch {
+		case n.Service == "" || n.Service == main:
+			in.Names[i].Service = ""
+		case !published[n.Service]:
+			return "", fmt.Errorf("Le nom %s mène au service %s, qui n'est pas public.", n.Hostname, n.Service)
+		}
+	}
+	domain := in.DefaultHost[strings.Index(in.DefaultHost, ".")+1:]
+	for _, svc := range services {
+		if svc.Published && svc.Name != main {
+			in.ServiceDefaults = append(in.ServiceDefaults, store.Name{
+				ID: newID(), Hostname: slug(svc.Name) + "-" + slug(app) + "." + domain, Service: svc.Name,
+			})
+		}
+	}
+	return main, nil
+}
+
+// placeDisks keeps the shared disks of a new application on one server of
+// its cluster: the one with room for them, which the cluster cannot know.
+func (a *API) placeDisks(ctx context.Context, owner, clusterID, serverID string, services []store.Service) error {
+	if clusterID == "" {
+		return fmt.Errorf("Le serveur d'un disque partagé se choisit sur un cluster.")
+	}
+	server, err := a.Store.Server(ctx, owner, serverID)
+	if err != nil || server.ClusterID != clusterID {
+		return fmt.Errorf("Ce serveur n'est pas dans le cluster de l'application.")
+	}
+	placed := false
+	for i := range services {
+		for j := range services[i].Spec.Volumes {
+			if services[i].Spec.Volumes[j].Disk != "" {
+				services[i].Spec.Volumes[j].Node = server.ID
+				placed = true
+			}
+		}
+	}
+	if !placed {
+		return fmt.Errorf("Cette application n'a pas de disque partagé à placer.")
+	}
+	return nil
 }

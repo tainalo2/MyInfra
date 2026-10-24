@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"sort"
 	"strings"
 
 	"myinfra/internal/spec"
@@ -73,9 +74,76 @@ func filesName(svc Service) string {
 }
 
 // claimName names the claim of a disk besides the first: service names hold
-// no dot, so it never meets another service's own claim.
+// no dot, so it never meets another service's own claim. A shared disk has
+// one claim for the application, whichever service mounts it.
 func claimName(svc Service, i int) string {
+	if disk := svc.Spec.Volumes[i].Disk; disk != "" {
+		return SharedClaim(disk)
+	}
 	return fmt.Sprintf("%s.%s", svc.Name, volumeName(i))
+}
+
+// SharedClaim names the claim of a disk the services of an application
+// share; "disk-" never begins a service name followed by a dot.
+func SharedClaim(disk string) string {
+	return "disk-" + disk
+}
+
+// sharedDisks lists the disks the services of an application share, with
+// the largest size asked for each.
+func sharedDisks(app App) ([]string, map[string]int) {
+	sizes := map[string]int{}
+	var names []string
+	for _, svc := range app.Services {
+		for _, volume := range svc.Spec.Volumes {
+			if volume.Disk == "" {
+				continue
+			}
+			if _, seen := sizes[volume.Disk]; !seen {
+				names = append(names, volume.Disk)
+			}
+			if sizeOf(volume) > sizes[volume.Disk] {
+				sizes[volume.Disk] = sizeOf(volume)
+			}
+		}
+	}
+	sort.Strings(names)
+	return names, sizes
+}
+
+// sharedLabels marks the pods of a service with the disks it shares, and
+// sharedAffinity keeps them on the node of the pods that mount the same:
+// the claim lives on one node's disk.
+func sharedLabels(svc Service) string {
+	var b strings.Builder
+	for _, name := range diskNames(svc) {
+		fmt.Fprintf(&b, "        myinfra.io/disk-%s: \"true\"\n", name)
+	}
+	return b.String()
+}
+
+func sharedAffinity(svc Service) string {
+	names := diskNames(svc)
+	if len(names) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("      affinity:\n        podAffinity:\n          requiredDuringSchedulingIgnoredDuringExecution:\n")
+	for _, name := range names {
+		fmt.Fprintf(&b, "            - topologyKey: kubernetes.io/hostname\n              labelSelector:\n                matchLabels:\n                  myinfra.io/disk-%s: \"true\"\n", name)
+	}
+	return b.String()
+}
+
+func diskNames(svc Service) []string {
+	var out []string
+	for _, volume := range svc.Spec.Volumes {
+		if volume.Disk != "" {
+			out = append(out, volume.Disk)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func volumeName(i int) string {
@@ -110,6 +178,9 @@ func writeFiles(b *strings.Builder, ns string, svc Service) {
 // service that is not a StatefulSet.
 func writeClaims(b *strings.Builder, ns string, svc Service) {
 	for i, volume := range svc.Spec.Volumes {
+		if volume.Disk != "" {
+			continue
+		}
 		fmt.Fprintf(b, "---\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: %s\n  namespace: %s\nspec:\n  accessModes: [ReadWriteOnce]\n  resources:\n    requests:\n      storage: %dGi\n", claimName(svc, i), ns, sizeOf(volume))
 	}
 }

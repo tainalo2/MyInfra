@@ -38,6 +38,23 @@ type Port struct {
 type Volume struct {
 	Path   string `json:"path"`
 	SizeGi int    `json:"sizeGi,omitempty"`
+	// Disk names a disk of the application that several services mount:
+	// its size is the disk's, and its data stays when one service goes.
+	Disk string `json:"disk,omitempty"`
+	// Node is the server whose disk holds a shared disk, chosen at
+	// installation; empty lets the cluster choose.
+	Node string `json:"node,omitempty"`
+}
+
+// Shares tells whether a service mounts a disk of the application: such a
+// service runs one copy, on the node that holds the disk.
+func Shares(s Service) bool {
+	for _, volume := range s.Volumes {
+		if volume.Disk != "" {
+			return true
+		}
+	}
+	return false
 }
 
 type File struct {
@@ -76,7 +93,9 @@ const (
 
 var (
 	serviceName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
-	portName    = regexp.MustCompile(`^[a-z][a-z0-9-]{0,14}$`)
+	// DiskName names a disk the services of an application share.
+	DiskName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
+	portName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,14}$`)
 	// reservedPort names the ports left unnamed, and main the service's own.
 	reservedPort = regexp.MustCompile(`^p[0-9]+$`)
 	envKey       = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`)
@@ -146,6 +165,9 @@ func Check(s Service) []Problem {
 		paths[volume.Path] = true
 		if volume.SizeGi < 0 || volume.SizeGi > 1024 {
 			add(at+".sizeGi", "Un disque fait de 1 à 1024 Gio.")
+		}
+		if volume.Disk != "" && !DiskName.MatchString(volume.Disk) {
+			add(at+".disk", "Le nom d'un disque partagé est en minuscules, par exemple media.")
 		}
 	}
 	if len(s.Files) > maxFiles {

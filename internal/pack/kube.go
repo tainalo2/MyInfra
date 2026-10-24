@@ -174,6 +174,7 @@ func Kube(data []byte, name, namespace string) (Package, []Warning, error) {
 		k.workload(w, services)
 	}
 	k.publish(workloads, services, ingresses)
+	k.shareDisks()
 	k.rename()
 	kinds := make([]string, 0, len(skipped))
 	for kind := range skipped {
@@ -402,6 +403,7 @@ func (k *kube) mounts(svc *Service, w workload, c map[string]any, volumes map[st
 			}
 			if !hasVolume(svc.Volumes, path) {
 				svc.Volumes = append(svc.Volumes, spec.Volume{Path: path, SizeGi: size})
+				k.shared = append(k.shared, composeMount{service: svc.Name, path: path, source: "pvc:" + scalar(claim["claimName"]), sizeGi: size})
 			}
 		case v["configMap"] != nil:
 			ref, _ := v["configMap"].(map[string]any)

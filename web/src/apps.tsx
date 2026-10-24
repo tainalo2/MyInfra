@@ -18,7 +18,7 @@ import { useSession } from "./session";
 import { AppSecretLinks } from "./secrets";
 import { PodActions } from "./pods";
 import { LocalImagePicker } from "./localimages";
-import { NameList, namesOf, type AppName } from "./names";
+import { NameList, namesOf, publicServices, type AppName } from "./names";
 import { ImageOrigin } from "./registries";
 import { TofuFiles } from "./tofu";
 import { AppBackups } from "./backups";
@@ -732,6 +732,10 @@ export function ApplicationPage() {
   }
 
   const where = app.destinationKind === "cluster" ? app.clusterName : app.serverName;
+  // With several public services, each shows its names, or the address
+  // MyInfra gave it while it has none.
+  const publics = publicServices(app.services, app.domains);
+  const listedDomains = (app.domains ?? []).filter((domain) => domain.kind === "custom" || (domain.kind === "default" && Boolean(domain.service)));
   const address = app.domains?.find((domain) => domain.kind === "custom" && domain.status === "ready")?.hostname ?? app.domains?.find((domain) => domain.kind === "custom")?.hostname ?? "";
   const pods = runtime?.pods ?? [];
   const health = appHealth(app, runtime?.status, pods);
@@ -841,15 +845,18 @@ export function ApplicationPage() {
             ) : null}
           </div>
           <ul className="mt-2 flex flex-col">
-            {(app.domains ?? []).filter((domain) => domain.kind === "custom").length === 0 ? (
+            {listedDomains.length === 0 ? (
               <li className="border-t border-line py-4 text-muted">{text("names.none")}</li>
             ) : null}
-            {(app.domains ?? []).filter((domain) => domain.kind === "custom").map((domain) => (
+            {listedDomains.map((domain) => (
               <li key={domain.hostname} className="border-t border-line py-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-                  <a href={`https://${domain.hostname}`} target="_blank" rel="noreferrer" className="break-all font-mono text-[13px] underline">
-                    {domain.hostname}
-                  </a>
+                  <span className="flex min-w-0 flex-wrap items-baseline gap-x-3">
+                    <a href={`https://${domain.hostname}`} target="_blank" rel="noreferrer" className="break-all font-mono text-[13px] underline">
+                      {domain.hostname}
+                    </a>
+                    {publics.others.length > 0 ? <span className="text-[13px] text-muted">{domain.service || publics.main}</span> : null}
+                  </span>
                   <StatusBadge status={domain.status} />
                 </div>
                 {domain.detail ? <p className={`mt-2 ${domain.status === "ready" ? "text-muted" : "text-bad"}`}>{domain.detail}</p> : null}
@@ -1053,7 +1060,7 @@ function NamesSheet({ app, onClose, onSaved }: { app: Application; onClose: () =
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const before = namesOf(app.domains);
-  const removed = before.filter((old) => !names.some((name) => name.subdomain === old.subdomain && name.zone === old.zone));
+  const removed = before.filter((old) => !names.some((name) => name.subdomain === old.subdomain && name.zone === old.zone && (name.service ?? "") === (old.service ?? "")));
 
   useEffect(() => {
     api<DnsZone[]>("/api/dns/zones")
@@ -1092,7 +1099,7 @@ function NamesSheet({ app, onClose, onSaved }: { app: Application; onClose: () =
             </Link>
           </p>
         ) : (
-          <NameList names={names} zones={zones} onChange={setNames} />
+          <NameList names={names} zones={zones} onChange={setNames} services={publicServices(app.services, app.domains)} />
         )}
         {removed.length > 0 ? (
           <p className="text-warn">{text("names.removing", { names: removed.map((name) => (name.subdomain ? `${name.subdomain}.${name.zone}` : name.zone)).join(", ") })}</p>

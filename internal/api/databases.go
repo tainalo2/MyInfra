@@ -34,7 +34,7 @@ func filesSecret(svc string) string  { return svc + "-files" }
 // database, stops the service, moves the data, then starts its copies.
 func (a *API) startDatabase(ctx context.Context, owner string, app store.Application, copies int) error {
 	for _, svc := range app.Services {
-		profile := market.ProfileOf(svc.Image, svc.Disk)
+		profile := profileOf(svc)
 		if profile.Kind != market.Database || profile.Postgres == nil {
 			continue
 		}

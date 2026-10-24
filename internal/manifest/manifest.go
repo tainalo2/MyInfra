@@ -22,6 +22,7 @@ var (
 	deployPath    = regexp.MustCompile(`^/[A-Za-z0-9._/-]+$`)
 	deployArg     = regexp.MustCompile(`^[A-Za-z0-9_.,:/=@+-]+$`)
 	sharedName    = regexp.MustCompile(`^sec[a-z0-9]{1,40}$`)
+	nodeName      = regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$`)
 )
 
 func EnvOK(env map[string]string) bool {
@@ -141,12 +142,18 @@ type Service struct {
 	Name      string
 	Image     string
 	Published bool
-	Disk      bool
-	DiskPath  string
-	DiskGi    int
-	Listen    int
-	Args      []string
-	Replicas  int
+	// Hosts are the names that lead to this public service. Nil reads the
+	// application's: one public service, all its names.
+	Hosts []string
+	// Node is the Kubernetes node the service runs on, the one that holds
+	// its shared disk; empty lets the cluster choose.
+	Node     string
+	Disk     bool
+	DiskPath string
+	DiskGi   int
+	Listen   int
+	Args     []string
+	Replicas int
 	// Backup copies the SQLite files of a single writer to the cluster's
 	// object store, so that its one copy can start again on any node.
 	Backup *Backup
@@ -399,12 +406,22 @@ func Render(app App) string {
 	refs := envRefs(app)
 	sum := configSum(app)
 	ports := servicePorts(app)
+	disks, sizes := sharedDisks(app)
+	redirect, paused := false, false
+	for _, name := range disks {
+		fmt.Fprintf(&b, "---\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: %s\n  namespace: %s\n  labels:\n    myinfra.io/shared-disk: %q\nspec:\n  accessModes: [ReadWriteOnce]\n  resources:\n    requests:\n      storage: %dGi\n", SharedClaim(name), ns, name, sizes[name])
+	}
 	for _, svc := range app.Services {
 		svc.configSum = withFiles(sum, svc)
 		writeFiles(&b, ns, svc)
 		replicas := svc.Replicas
 		if replicas < 1 {
 			replicas = 1
+		}
+		// A service on a shared disk runs one copy, as a Deployment beside
+		// the others on that disk: no StatefulSet, no replicated SQLite.
+		if spec.Shares(svc.Spec) {
+			replicas, svc.Replicas, svc.Backup = 1, 1, nil
 		}
 		if app.Paused || svc.Stopped {
 			replicas = 0
@@ -447,10 +464,14 @@ spec:
     metadata:
       labels:
         myinfra.io/service: %s
-%s    spec:
-`, svc.Name, ns, app.ID, replicas, strategy, rolling(strategy), svc.Name, svc.Name, configAnnotation(svc, true))
+%s%s    spec:
+`, svc.Name, ns, app.ID, replicas, strategy, rolling(strategy), svc.Name, svc.Name, sharedLabels(svc), configAnnotation(svc, true))
 			if replicas > 1 {
 				b.WriteString(spread(svc.Name))
+			}
+			b.WriteString(sharedAffinity(svc))
+			if svc.Node != "" && nodeName.MatchString(svc.Node) {
+				fmt.Fprintf(&b, "      nodeSelector:\n        kubernetes.io/hostname: %q\n", svc.Node)
 			}
 			b.WriteString(moveAway())
 			b.WriteString(waitFor(svc, ports))
@@ -476,8 +497,16 @@ spec:
   ports:
 %s`, svc.Name, ns, svc.Name, servicePortLines(svc))
 		}
-		if svc.Published && len(app.Hosts) > 0 {
-			fmt.Fprintf(&b, `---
+		hosts := svc.Hosts
+		if hosts == nil {
+			hosts = app.Hosts
+		}
+		if svc.Published && len(hosts) > 0 {
+			// The redirection and the pause page serve every public service:
+			// written once for the application.
+			if !redirect {
+				redirect = true
+				fmt.Fprintf(&b, `---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -488,13 +517,17 @@ spec:
     scheme: https
     permanent: true
 `, ns)
+			}
 			target, port := svc.Name, listenOf(svc)
 			if app.Paused {
 				// A paused application shows a page instead of a proxy error.
-				writePausePage(&b, ns)
+				if !paused {
+					paused = true
+					writePausePage(&b, ns)
+				}
 				target, port = "paused", pause.Port
 			}
-			for _, group := range hostGroups(app.Hosts, app.Zones) {
+			for _, group := range hostGroups(hosts, app.Zones) {
 				suffix := "-" + cert.Resolver(group.zone)
 				match := hostMatch(group.hosts)
 				fmt.Fprintf(&b, `---

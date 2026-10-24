@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -770,7 +771,7 @@ func (s *Store) desired(ctx context.Context, query, id string) ([]DesiredApp, er
 	}
 	defer rows.Close()
 	var out []DesiredApp
-	hostsByApp := map[string][]string{}
+	hostsByApp := map[string]map[string][]string{}
 	zonesByApp := map[string]map[string]string{}
 	for rows.Next() {
 		var app DesiredApp
@@ -789,7 +790,7 @@ func (s *Store) desired(ctx context.Context, query, id string) ([]DesiredApp, er
 		if app.Replicas < 1 {
 			app.Replicas = 1
 		}
-		if app.Disk {
+		if app.Disk || spec.Shares(app.Spec) {
 			app.Replicas = 1
 		}
 		out = append(out, app)
@@ -797,46 +798,121 @@ func (s *Store) desired(ctx context.Context, query, id string) ([]DesiredApp, er
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	published := map[string][]string{}
+	for _, app := range out {
+		if app.Published {
+			published[app.ID] = append(published[app.ID], app.Service)
+		}
+	}
+	mains := map[string]string{}
 	for i := range out {
 		if !out[i].Published {
 			continue
 		}
-		hosts, ok := hostsByApp[out[i].ID]
+		byService, ok := hostsByApp[out[i].ID]
 		if !ok {
 			found, zones, err := readyHosts(ctx, s, out[i].ID)
 			if err != nil {
 				return nil, err
 			}
-			hosts = found
-			hostsByApp[out[i].ID] = hosts
+			named, err := namedServices(ctx, s, out[i].ID)
+			if err != nil {
+				return nil, err
+			}
+			byService = found
+			hostsByApp[out[i].ID] = found
 			zonesByApp[out[i].ID] = zones
+			mains[out[i].ID] = MainService(published[out[i].ID], named)
 		}
-		out[i].Hosts = hosts
+		out[i].Hosts = HostsOf(out[i].Service, mains[out[i].ID], byService)
 		out[i].Zones = zonesByApp[out[i].ID]
 	}
 	return out, nil
 }
 
-func readyHosts(ctx context.Context, s *Store, applicationID string) ([]string, map[string]string, error) {
+// readyHosts are the published names of an application, by the service
+// they lead to: "" for the main one.
+func readyHosts(ctx context.Context, s *Store, applicationID string) (map[string][]string, map[string]string, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT hostname, COALESCE(zone, '') FROM domains
+		SELECT hostname, COALESCE(zone, ''), service FROM domains
 		WHERE application_id = $1 AND status = 'ready'
 		ORDER BY hostname`, applicationID)
 	if err != nil {
 		return nil, nil, err
 	}
 	defer rows.Close()
-	var hosts []string
+	hosts := map[string][]string{}
 	zones := map[string]string{}
 	for rows.Next() {
-		var host, zone string
-		if err := rows.Scan(&host, &zone); err != nil {
+		var host, zone, service string
+		if err := rows.Scan(&host, &zone, &service); err != nil {
 			return nil, nil, err
 		}
-		hosts = append(hosts, host)
+		hosts[service] = append(hosts[service], host)
 		zones[host] = zone
 	}
 	return hosts, zones, rows.Err()
+}
+
+// namedServices are the services that have names of their own.
+func namedServices(ctx context.Context, s *Store, applicationID string) (map[string]bool, error) {
+	rows, err := s.pool.Query(ctx, `SELECT DISTINCT service FROM domains WHERE application_id = $1 AND service <> ''`, applicationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		out[name] = true
+	}
+	return out, rows.Err()
+}
+
+// MainService is the public service the names without a service lead to:
+// the only published one without names of its own.
+func MainService(published []string, named map[string]bool) string {
+	for _, name := range published {
+		if !named[name] {
+			return name
+		}
+	}
+	return ""
+}
+
+// HostsOf are the hosts of one public service among those by service.
+func HostsOf(service, main string, byService map[string][]string) []string {
+	hosts := append([]string(nil), byService[service]...)
+	if service == main {
+		hosts = append(hosts, byService[""]...)
+	}
+	sort.Strings(hosts)
+	return hosts
+}
+
+// Addresses are the names each public service answers on now: its own name
+// once ready, else the one MyInfra gave it. "" is the main service.
+func (s *Store) Addresses(ctx context.Context, applicationID string) (map[string]string, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT DISTINCT ON (service) service, hostname FROM domains
+		WHERE application_id = $1 AND (kind = 'default' OR status = 'ready')
+		ORDER BY service, (kind = 'custom') DESC, created_at, hostname`, applicationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var service, host string
+		if err := rows.Scan(&service, &host); err != nil {
+			return nil, err
+		}
+		out[service] = host
+	}
+	return out, rows.Err()
 }
 
 // Address is the name an application answers on now: its own name once
@@ -846,7 +922,7 @@ func (s *Store) Address(ctx context.Context, applicationID string) (string, erro
 	var host string
 	err := s.pool.QueryRow(ctx, `
 		SELECT hostname FROM domains
-		WHERE application_id = $1 AND (kind = 'default' OR status = 'ready')
+		WHERE application_id = $1 AND service = '' AND (kind = 'default' OR status = 'ready')
 		ORDER BY (kind = 'custom') DESC, created_at, hostname
 		LIMIT 1`, applicationID).Scan(&host)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -859,7 +935,7 @@ func (s *Store) Address(ctx context.Context, applicationID string) (string, erro
 // that publishes each one.
 func (s *Store) AppNames(ctx context.Context, applicationID string) ([]Name, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, hostname, COALESCE(zone, ''), COALESCE(secret_id, '') FROM domains
+		SELECT id, hostname, COALESCE(zone, ''), COALESCE(secret_id, ''), service FROM domains
 		WHERE application_id = $1 AND kind = 'custom'
 		ORDER BY created_at, hostname`, applicationID)
 	if err != nil {
@@ -869,7 +945,7 @@ func (s *Store) AppNames(ctx context.Context, applicationID string) ([]Name, err
 	var out []Name
 	for rows.Next() {
 		var name Name
-		if err := rows.Scan(&name.ID, &name.Hostname, &name.Zone, &name.SecretID); err != nil {
+		if err := rows.Scan(&name.ID, &name.Hostname, &name.Zone, &name.SecretID, &name.Service); err != nil {
 			return nil, err
 		}
 		out = append(out, name)
@@ -897,9 +973,9 @@ func (s *Store) AddNames(ctx context.Context, applicationID string, names []Name
 			return ErrNameTaken
 		}
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO domains (id, application_id, hostname, kind, status, zone, secret_id)
-			VALUES ($1, $2, $3, 'custom', 'pending_dns', $4, $5)`,
-			name.ID, applicationID, name.Hostname, name.Zone, name.SecretID); err != nil {
+			INSERT INTO domains (id, application_id, hostname, kind, status, zone, secret_id, service)
+			VALUES ($1, $2, $3, 'custom', 'pending_dns', $4, $5, $6)`,
+			name.ID, applicationID, name.Hostname, name.Zone, name.SecretID, name.Service); err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 				return ErrNameTaken
@@ -1323,9 +1399,12 @@ type ClusterApp struct {
 	RunStatus      string
 	PreparingSince *time.Time
 	Services       []Service
-	Hosts          []string
-	Zones          map[string]string
-	Env            map[string]string
+	// Hosts are all the published names of the application; ServiceHosts
+	// the names of each public service.
+	Hosts        []string
+	ServiceHosts map[string][]string
+	Zones        map[string]string
+	Env          map[string]string
 }
 
 func (s *Store) ClusterApps(ctx context.Context, clusterID string) ([]ClusterApp, error) {
@@ -1364,8 +1443,9 @@ func (s *Store) ClusterApps(ctx context.Context, clusterID string) ([]ClusterApp
 			byID[appID] = app
 			order = append(order, appID)
 		}
-		// A disk holds one copy, unless the data moved to PostgreSQL.
-		if (svc.Disk && svc.Database != "ready") || svc.Replicas < 1 {
+		// A disk holds one copy, unless the data moved to PostgreSQL; a
+		// shared disk always.
+		if (svc.Disk && svc.Database != "ready") || svc.Replicas < 1 || spec.Shares(svc.Spec) {
 			svc.Replicas = 1
 		}
 		app.Services = append(app.Services, svc)
@@ -1376,16 +1456,30 @@ func (s *Store) ClusterApps(ctx context.Context, clusterID string) ([]ClusterApp
 	out := make([]ClusterApp, 0, len(order))
 	for _, id := range order {
 		app := byID[id]
+		var published []string
 		for _, svc := range app.Services {
 			if svc.Published {
-				hosts, zones, err := readyHosts(ctx, s, id)
-				if err != nil {
-					return nil, err
-				}
-				app.Hosts = hosts
-				app.Zones = zones
-				break
+				published = append(published, svc.Name)
 			}
+		}
+		if len(published) > 0 {
+			byService, zones, err := readyHosts(ctx, s, id)
+			if err != nil {
+				return nil, err
+			}
+			named, err := namedServices(ctx, s, id)
+			if err != nil {
+				return nil, err
+			}
+			main := MainService(published, named)
+			app.ServiceHosts = map[string][]string{}
+			for _, name := range published {
+				hosts := HostsOf(name, main, byService)
+				app.ServiceHosts[name] = hosts
+				app.Hosts = append(app.Hosts, hosts...)
+			}
+			sort.Strings(app.Hosts)
+			app.Zones = zones
 		}
 		out = append(out, *app)
 	}
@@ -1497,6 +1591,8 @@ type Domain struct {
 	Status   string
 	Zone     string
 	Detail   string
+	// Service is the public service the name leads to; empty is the main.
+	Service string
 }
 
 type Name struct {
@@ -1504,6 +1600,8 @@ type Name struct {
 	Hostname string
 	Zone     string
 	SecretID string
+	// Service is the public service the name leads to; empty is the main.
+	Service string
 }
 
 type Application struct {
@@ -1546,6 +1644,9 @@ type NewApplication struct {
 	Variables       map[string]string
 	DefaultID       string
 	DefaultHost     string
+	// ServiceDefaults are the names MyInfra gives the public services
+	// besides the main one.
+	ServiceDefaults []Name
 	Names           []Name
 	Services        []Service
 }
@@ -1607,6 +1708,17 @@ func (s *Store) CreateApplication(ctx context.Context, in NewApplication) error 
 	if err != nil {
 		return err
 	}
+	for _, name := range in.ServiceDefaults {
+		host, err := freeHostname(ctx, tx, name.Hostname, name.ID)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO domains (id, application_id, hostname, kind, status, service)
+			VALUES ($1, $2, $3, 'default', 'unpublished', $4)`, name.ID, in.ID, host, name.Service); err != nil {
+			return err
+		}
+	}
 	for _, name := range in.Names {
 		var exists bool
 		if err := tx.QueryRow(ctx, `SELECT exists(SELECT 1 FROM domains WHERE hostname = $1)`, name.Hostname).Scan(&exists); err != nil {
@@ -1616,9 +1728,9 @@ func (s *Store) CreateApplication(ctx context.Context, in NewApplication) error 
 			return ErrNameTaken
 		}
 		_, err = tx.Exec(ctx, `
-			INSERT INTO domains (id, application_id, hostname, kind, status, zone, secret_id)
-			VALUES ($1, $2, $3, 'custom', 'pending_dns', $4, $5)`,
-			name.ID, in.ID, name.Hostname, name.Zone, name.SecretID)
+			INSERT INTO domains (id, application_id, hostname, kind, status, zone, secret_id, service)
+			VALUES ($1, $2, $3, 'custom', 'pending_dns', $4, $5, $6)`,
+			name.ID, in.ID, name.Hostname, name.Zone, name.SecretID, name.Service)
 		if err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -1703,17 +1815,20 @@ func (s *Store) Application(ctx context.Context, ownerID, id string) (Applicatio
 		_ = json.Unmarshal(raw, &app.Variables)
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, hostname, kind, status, zone, detail FROM domains WHERE application_id = $1 ORDER BY kind DESC, hostname`, id)
+		SELECT id, hostname, kind, status, zone, detail, service FROM domains WHERE application_id = $1 ORDER BY kind DESC, service, hostname`, id)
 	if err != nil {
 		return Application{}, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var d Domain
-		if err := rows.Scan(&d.ID, &d.Hostname, &d.Kind, &d.Status, &d.Zone, &d.Detail); err != nil {
+		if err := rows.Scan(&d.ID, &d.Hostname, &d.Kind, &d.Status, &d.Zone, &d.Detail, &d.Service); err != nil {
 			return Application{}, err
 		}
 		app.Domains = append(app.Domains, d)
+		if d.Service != "" {
+			continue
+		}
 		if d.Kind == "custom" || app.Hostname == "" {
 			app.Hostname = d.Hostname
 		}
