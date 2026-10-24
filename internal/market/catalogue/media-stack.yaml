@@ -72,6 +72,7 @@ services:
     image: linuxserver/qbittorrent:5.1.2
     public: true
     port: 8080
+    command: [sh, -c, "python3 /myinfra/password.py && exec /init"]
     env:
       WEBUI_PORT: "8080"
     volumes:
@@ -80,6 +81,23 @@ services:
       - path: /data
         disk: media
     files:
+      - path: /myinfra/password.py
+        content: |
+          import base64, hashlib, os
+
+          # Sets the administrator's password in qBittorrent's configuration before
+          # it starts: a hash only, as qBittorrent keeps it, never the password.
+          conf = "/config/qBittorrent/qBittorrent.conf"
+          os.makedirs(os.path.dirname(conf), exist_ok=True)
+          text = open(conf).read() if os.path.exists(conf) else open("/defaults/qBittorrent.conf").read()
+          if "WebUI\\Password_PBKDF2" not in text:
+              salt = os.urandom(16)
+              key = hashlib.pbkdf2_hmac("sha512", os.environ["ADMIN_PASSWORD"].encode(), salt, 100000, 64)
+              lines = 'WebUI\\Password_PBKDF2="@ByteArray(%s:%s)"\nWebUI\\Username=%s\n' % (
+                  base64.b64encode(salt).decode(), base64.b64encode(key).decode(), os.environ["ADMIN_USER"])
+              text = text.replace("[Preferences]\n", "[Preferences]\n" + lines, 1)
+              with open(conf, "w") as out:
+                  out.write(text)
       - path: /defaults/qBittorrent.conf
         content: |
           [BitTorrent]
@@ -93,10 +111,8 @@ services:
           WebUI\Address=*
           WebUI\Port=8080
           WebUI\HostHeaderValidation=false
-          WebUI\AuthSubnetWhitelistEnabled=true
-          WebUI\AuthSubnetWhitelist=10.42.0.0/16, 172.16.0.0/12
-          WebUI\ReverseProxySupportEnabled=true
-          WebUI\TrustedReverseProxiesList=10.42.0.0/16, 172.16.0.0/12
+          WebUI\AuthSubnetWhitelistEnabled=false
+          WebUI\LocalHostAuth=true
   - name: setup
     image: alpine:3.20
     noPort: true
@@ -180,11 +196,12 @@ services:
           }
 
           qbittorrent() {
-            # Reached from the pods' network, qBittorrent asks no password: the
-            # preferences are set once, the password for visitors among them.
-            prefs=$(jq -n --arg u "$ADMIN" --arg p "$PASS" '{web_ui_username:$u, web_ui_password:$p, save_path:"/data/torrents", temp_path_enabled:false}')
-            if curl -fsS -m 10 "$QBIT/api/v2/app/preferences" | jq -e --arg u "$ADMIN" '.web_ui_username==$u and .save_path=="/data/torrents"' >/dev/null; then return; fi
-            curl -fsS -m 10 -X POST --data-urlencode "json=$prefs" "$QBIT/api/v2/app/setPreferences" >/dev/null && log "qbittorrent : réglé" || log "qbittorrent : réglages refusés"
+            # Signed in with the administrator, whose password qBittorrent
+            # had before it started: no network passes without it.
+            jar=/tmp/qbit.cookies
+            curl -fsS -m 10 -c "$jar" --data-urlencode "username=$ADMIN" --data-urlencode "password=$PASS" "$QBIT/api/v2/auth/login" | grep -q Ok || { log "qbittorrent : connexion refusée"; return; }
+            if curl -fsS -m 10 -b "$jar" "$QBIT/api/v2/app/preferences" | jq -e '.save_path=="/data/torrents"' >/dev/null; then return; fi
+            curl -fsS -m 10 -b "$jar" -X POST --data-urlencode 'json={"save_path":"/data/torrents","temp_path_enabled":false}' "$QBIT/api/v2/app/setPreferences" >/dev/null && log "qbittorrent : réglé" || log "qbittorrent : réglages refusés"
           }
 
           jellyfin() {
