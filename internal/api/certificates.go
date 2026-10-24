@@ -31,6 +31,14 @@ const certificateSweep = 5 * time.Minute
 // readCertificates prints "acme-zone.json <base64>" for each file of Traefik.
 const readCertificates = `k3s kubectl -n kube-system exec deploy/traefik -- sh -c 'for f in /data/acme-*.json; do [ -s "$f" ] || continue; printf "%s " "${f##*/}"; base64 "$f" | tr -d "\n"; echo; done' 2>/dev/null || true`
 
+// applyCertificates writes the Secret applied on the server's side. A client
+// side apply copies the whole Secret into an annotation that may not exceed
+// 256 KiB, which a few zones of certificates go past; the server keeps that
+// annotation up to date while it is there, so it goes first.
+var applyCertificates = "k3s kubectl -n kube-system annotate secret " + manifest.CertificateSecret +
+	" kubectl.kubernetes.io/last-applied-configuration- >/dev/null 2>&1; " +
+	"k3s kubectl apply --server-side --force-conflicts --field-manager=myinfra -f -"
+
 // keepCertificates saves what Traefik obtained and gives the cluster back what
 // MyInfra kept for its zones. It runs before the proxy is configured, so that a
 // new cluster finds the certificates at the first start of Traefik.
@@ -68,7 +76,7 @@ func (a *API) keepCertificates(ctx context.Context, host deploy.Host, leader sto
 	if a.appliedRecently(key, digest(secret)) {
 		return
 	}
-	if _, err := deploy.SSHInput(ctx, host, "k3s kubectl apply -f -", []byte(secret)); err != nil {
+	if _, err := deploy.SSHInput(ctx, host, applyCertificates, []byte(secret)); err != nil {
 		slog.Info("certificats", "err", err)
 		return
 	}
