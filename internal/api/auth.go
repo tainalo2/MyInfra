@@ -194,6 +194,7 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("DELETE /api/mcp/tokens/{id}", a.personOnly(a.steady(a.deleteAPIToken)))
 
 	mux.HandleFunc("GET /api/costs", a.auth(a.listCosts))
+	mux.HandleFunc("POST /api/offers/search", a.auth(a.offerSearch))
 	mux.HandleFunc("GET /api/servers/{id}/delete/impact", a.auth(a.deleteImpact("server")))
 	mux.HandleFunc("GET /api/clusters/{id}/delete/impact", a.auth(a.deleteImpact("cluster")))
 	mux.HandleFunc("GET /api/applications/{id}/delete/impact", a.auth(a.deleteImpact("application")))

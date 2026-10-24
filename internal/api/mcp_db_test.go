@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"myinfra/internal/box"
 	"myinfra/internal/store"
 )
 
@@ -208,5 +209,83 @@ func TestMCPDeletionAsksFirst(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatal(want, body)
 		}
+	}
+}
+
+// buyingFixture adds a sample Hetzner account and an SSH key; sample
+// catalogs answer without network.
+func buyingFixture(t *testing.T) (*API, http.Handler) {
+	t.Helper()
+	a, h := tokenFixture(t)
+	key := make([]byte, 32)
+	b, err := box.New(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.Box = b
+	a.Verify.AllowTest = true
+	if rec := call(t, h, http.MethodPost, "/api/secrets/tokens", "", "sess-owner", map[string]any{"name": "perso", "kind": "provider_token", "provider": "hetzner", "token": "test-abc"}); rec.Code != http.StatusCreated {
+		t.Fatal(rec.Code, rec.Body.String())
+	}
+	if rec := call(t, h, http.MethodPost, "/api/secrets/ssh-keys", "", "sess-owner", map[string]any{"name": "ma-clé"}); rec.Code != http.StatusCreated {
+		t.Fatal(rec.Code, rec.Body.String())
+	}
+	return a, h
+}
+
+func TestMCPFindsOffersAndAlternatives(t *testing.T) {
+	_, h := buyingFixture(t)
+	read := makeToken(t, h, "sess-owner", store.RoleRead, 0).Token
+	text, failed := mcpCallTool(t, h, read, "find_server_offers", map[string]any{"min_vcpu": 4, "min_memory_gb": 8, "countries": []string{"DE"}})
+	if failed || !strings.Contains(text, `"model": "CX33"`) || !strings.Contains(text, "order_servers") {
+		t.Fatal(text)
+	}
+	// Nothing in France at Hetzner: the nearest, with what they miss.
+	text, failed = mcpCallTool(t, h, read, "find_server_offers", map[string]any{"min_memory_gb": 8, "countries": []string{"France"}, "max_monthly_price": 9})
+	if failed || !strings.Contains(text, `"matches": []`) || !strings.Contains(text, "au lieu de France") {
+		t.Fatal(text)
+	}
+	text, _ = mcpCallTool(t, h, read, "find_server_offers", map[string]any{"providers": []string{"ovh"}})
+	if !strings.Contains(text, "Aucun compte « ovh »") {
+		t.Fatal(text)
+	}
+}
+
+// An order shows its recap with costs and asks for a code; the recap does
+// not change between two calls, so the code would hold. The purchase itself
+// is left out: it would run OpenTofu against the provider.
+func TestMCPOrderRecap(t *testing.T) {
+	a, h := buyingFixture(t)
+	deploy := makeToken(t, h, "sess-owner", store.RoleDeploy, 0).Token
+	args := map[string]any{"account": "perso", "location": "nbg1", "model": "cx33", "quantity": 3, "new_cluster": "SW", "control_planes": 3, "min_disk_gb": 100}
+	text, failed := mcpCallTool(t, h, deploy, "order_servers", args)
+	for _, want := range []string{"3 machine(s) → nouveau cluster « SW »", "sw-1 : hetzner / perso, CX33", "Nuremberg", "(Allemagne)", "plan de contrôle", "Volume ajouté", "Coût théorique actuel : 0,00 €/mois", "Coût théorique après achat", "Clés SSH posées : ma-clé", `confirmation="`} {
+		if failed || !strings.Contains(text, want) {
+			t.Fatalf("%q absent :\n%s", want, text)
+		}
+	}
+	again, _ := mcpCallTool(t, h, deploy, "order_servers", args)
+	plan1, plan2 := text[:strings.Index(text, "Rien n'a encore")], again[:strings.Index(again, "Rien n'a encore")]
+	if plan1 != plan2 {
+		t.Fatal("récapitulatif instable")
+	}
+	servers, _ := a.Store.ListServers(t.Context(), "owner")
+	if len(servers) != 0 {
+		t.Fatal("machine créée avant l'accord")
+	}
+	for label, bad := range map[string]map[string]any{
+		"pair":   {"account": "perso", "location": "nbg1", "model": "cx33", "quantity": 2, "new_cluster": "SW", "control_planes": 2},
+		"lieu":   {"account": "perso", "location": "xyz9", "model": "cx33"},
+		"modèle": {"account": "perso", "location": "nbg1", "model": "nope"},
+		"seul":   {"account": "perso", "location": "nbg1", "model": "cx33", "control_planes": 1},
+	} {
+		if text, failed := mcpCallTool(t, h, deploy, "order_servers", bad); !failed {
+			t.Fatalf("%s accepté : %s", label, text)
+		}
+	}
+	code := confirmCode.FindStringSubmatch(text)[1]
+	changed := map[string]any{"account": "perso", "location": "nbg1", "model": "cx33", "quantity": 2, "new_cluster": "SW", "control_planes": 3, "min_disk_gb": 100, "confirmation": code}
+	if text, failed := mcpCallTool(t, h, deploy, "order_servers", changed); !failed || !strings.Contains(text, "ne correspond pas") {
+		t.Fatal(text)
 	}
 }
