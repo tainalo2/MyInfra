@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -50,6 +51,9 @@ func (a *API) installFrom(w http.ResponseWriter, r *http.Request, expand expandF
 		Names []struct {
 			Subdomain string `json:"subdomain"`
 			Zone      string `json:"zone"`
+			// Service is the public service the name leads to; empty or
+			// the first public one is the main.
+			Service string `json:"service"`
 		} `json:"names"`
 		DestinationKind string            `json:"destinationKind"`
 		ServerID        string            `json:"serverId"`
@@ -144,16 +148,21 @@ func (a *API) installFrom(w http.ResponseWriter, r *http.Request, expand expandF
 		if publicHost == defaultHost {
 			publicHost = host
 		}
-		in.Names = append(in.Names, store.Name{ID: newID(), Hostname: host, Zone: zone, SecretID: secretID})
+		in.Names = append(in.Names, store.Name{ID: newID(), Hostname: host, Zone: zone, SecretID: secretID, Service: strings.TrimSpace(item.Service)})
 	}
 	services, env, err := expand(publicHost, body.Inputs)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	main, err := servicesNames(&in, services, name)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if tag := strings.TrimSpace(body.Tag); tag != "" {
 		for i, svc := range services {
-			if !svc.Published {
+			if svc.Name != main {
 				continue
 			}
 			next, tagErr := registry.WithTag(svc.Image, tag)
@@ -180,7 +189,7 @@ func (a *API) installFrom(w http.ResponseWriter, r *http.Request, expand expandF
 	// without, those of the article's published service.
 	in.Replicas = 1
 	for _, svc := range in.Services {
-		if svc.Published {
+		if svc.Name == main {
 			in.Source = svc.Image
 			in.Replicas = svc.Replicas
 		}
@@ -212,4 +221,38 @@ func (a *API) installFrom(w http.ResponseWriter, r *http.Request, expand expandF
 		go a.deliverClusters(context.Background())
 	}
 	writeJSON(w, http.StatusCreated, toApp(app))
+}
+
+// servicesNames ties the names of a new application to its public services:
+// a name for the main one, the first public, is kept without service; one
+// for another names it. Each public service besides the main one gets the
+// address MyInfra gives it, <service>-<application>.<apps domain>.
+func servicesNames(in *store.NewApplication, services []store.Service, app string) (string, error) {
+	main := ""
+	published := map[string]bool{}
+	for _, svc := range services {
+		if svc.Published {
+			if main == "" {
+				main = svc.Name
+			}
+			published[svc.Name] = true
+		}
+	}
+	for i, n := range in.Names {
+		switch {
+		case n.Service == "" || n.Service == main:
+			in.Names[i].Service = ""
+		case !published[n.Service]:
+			return "", fmt.Errorf("Le nom %s mène au service %s, qui n'est pas public.", n.Hostname, n.Service)
+		}
+	}
+	domain := in.DefaultHost[strings.Index(in.DefaultHost, ".")+1:]
+	for _, svc := range services {
+		if svc.Published && svc.Name != main {
+			in.ServiceDefaults = append(in.ServiceDefaults, store.Name{
+				ID: newID(), Hostname: slug(svc.Name) + "-" + slug(app) + "." + domain, Service: svc.Name,
+			})
+		}
+	}
+	return main, nil
 }

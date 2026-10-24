@@ -57,3 +57,32 @@ func TestSharedDiskIsOneClaim(t *testing.T) {
 		t.Fatal("copies ou disque propre pour un disque partagé")
 	}
 }
+
+// Each public service is routed on its own names; the redirection is
+// written once for the application.
+func TestEachPublicServiceIsRoutedOnItsNames(t *testing.T) {
+	app := App{ID: specApp, Hosts: []string{"media.example.org", "series.example.org"}, Zones: map[string]string{"media.example.org": "example.org", "series.example.org": "example.org"}, Services: []Service{
+		{Name: "jellyseerr", Image: "fallenbagel/jellyseerr:2.7.3", Published: true, Listen: 5055, Hosts: []string{"media.example.org"}},
+		{Name: "sonarr", Image: "linuxserver/sonarr:4.0.20", Published: true, Listen: 8989, Hosts: []string{"series.example.org"}},
+		{Name: "prowlarr", Image: "linuxserver/prowlarr:1.32.2", Published: true, Listen: 9696, Hosts: []string{}},
+	}}
+	raw := Render(app)
+	docs := documents(t, raw)
+	if strings.Count(raw, "kind: Middleware") != 1 {
+		t.Fatal("redirection écrite plusieurs fois")
+	}
+	routes := map[string]string{}
+	for key, doc := range docs {
+		if !strings.HasPrefix(key, "IngressRoute/") || strings.Contains(key, "-http") {
+			continue
+		}
+		route := dig(doc, "spec", "routes", 0)
+		routes[dig(route, "services", 0, "name").(string)] = dig(route, "match").(string)
+	}
+	if routes["jellyseerr"] != "Host(`media.example.org`)" || routes["sonarr"] != "Host(`series.example.org`)" {
+		t.Fatal(routes)
+	}
+	if _, ok := routes["prowlarr"]; ok {
+		t.Fatal("un service public sans nom reçoit une route")
+	}
+}

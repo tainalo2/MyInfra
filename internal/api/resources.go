@@ -898,6 +898,8 @@ func (a *API) createApplication(w http.ResponseWriter, r *http.Request) {
 }
 
 type domainView struct {
+	// Service is the public service the name leads to; empty is the main.
+	Service  string `json:"service,omitempty"`
 	Hostname string `json:"hostname"`
 	Kind     string `json:"kind"`
 	Status   string `json:"status"`
@@ -1001,23 +1003,24 @@ func toApp(app store.Application) appView {
 		RunStatus: app.RunStatus, Rollout: app.Rollout, RolloutDetail: app.RolloutDetail, RunDetail: app.RunDetail, Failover: app.Failover,
 		Paused: app.Paused, Logo: market.Logo(logoImages(app)...), Address: publicHost(app),
 	}
-	var defaultHost string
-	customs := 0
+	// Each public service shows its own names, or else the one MyInfra gave.
+	defaultHost := map[string]string{}
+	customs := map[string]int{}
 	for _, d := range app.Domains {
 		if d.Kind == "default" {
-			defaultHost = d.Hostname
+			defaultHost[d.Service] = d.Hostname
 		}
 		if d.Kind == "custom" {
-			customs++
+			customs[d.Service]++
 		}
 	}
 	for _, d := range app.Domains {
-		if d.Kind == "default" && customs > 0 {
+		if d.Kind == "default" && customs[d.Service] > 0 {
 			continue
 		}
-		item := domainView{Hostname: d.Hostname, Kind: d.Kind, Status: d.Status, Zone: d.Zone, Detail: d.Detail}
-		if d.Kind == "custom" && d.Zone == "" && d.Status == "pending_dns" && defaultHost != "" {
-			item.Record = "CNAME " + d.Hostname + " " + defaultHost
+		item := domainView{Hostname: d.Hostname, Kind: d.Kind, Status: d.Status, Zone: d.Zone, Detail: d.Detail, Service: d.Service}
+		if d.Kind == "custom" && d.Zone == "" && d.Status == "pending_dns" && defaultHost[d.Service] != "" {
+			item.Record = "CNAME " + d.Hostname + " " + defaultHost[d.Service]
 		}
 		view.Domains = append(view.Domains, item)
 	}

@@ -31,6 +31,10 @@ func (a *API) clusterServices(ctx context.Context, host deploy.Host, owner, clus
 			Name: svc.Name, Image: svc.Image, Published: svc.Published, Disk: svc.Disk, Replicas: svc.Replicas,
 			DiskPath: svc.DiskPath, DiskGi: svc.DiskGi, Listen: svc.Listen, Args: svc.Args, Spec: svc.Spec,
 		}
+		if svc.Published && app.ServiceHosts != nil {
+			// Each public service gets its own names, none when it has none.
+			out.Hosts = append([]string{}, app.ServiceHosts[svc.Name]...)
+		}
 		switch {
 		case svc.Database != "":
 			if err := a.serviceDatabase(ctx, host, owner, clusterID, app.ID, svc, &out, &parts); err != nil {

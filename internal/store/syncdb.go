@@ -426,7 +426,7 @@ func loadServices(ctx context.Context, q querier, doc *SyncDoc) error {
 
 func loadDomains(ctx context.Context, q querier, doc *SyncDoc) error {
 	rows, err := q.Query(ctx, `
-		SELECT id, application_id, hostname, kind, status, zone, secret_id, detail, created_at, sync_seq, sync_origin
+		SELECT id, application_id, hostname, kind, status, zone, secret_id, detail, service, created_at, sync_seq, sync_origin
 		FROM domains`)
 	if err != nil {
 		return err
@@ -434,7 +434,7 @@ func loadDomains(ctx context.Context, q querier, doc *SyncDoc) error {
 	defer rows.Close()
 	for rows.Next() {
 		var row syncDomain
-		if err := rows.Scan(&row.ID, &row.ApplicationID, &row.Hostname, &row.Kind, &row.Status, &row.Zone, &row.SecretID, &row.Detail, &row.CreatedAt, &row.Seq, &row.Origin); err != nil {
+		if err := rows.Scan(&row.ID, &row.ApplicationID, &row.Hostname, &row.Kind, &row.Status, &row.Zone, &row.SecretID, &row.Detail, &row.Service, &row.CreatedAt, &row.Seq, &row.Origin); err != nil {
 			return err
 		}
 		doc.Domains = append(doc.Domains, row)
@@ -732,13 +732,13 @@ func replaceSync(ctx context.Context, q querier, doc SyncDoc) error {
 	}
 	for _, row := range doc.Domains {
 		if _, err := q.Exec(ctx, `
-			INSERT INTO domains (id, application_id, hostname, kind, status, zone, secret_id, detail, created_at, sync_seq, sync_origin)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+			INSERT INTO domains (id, application_id, hostname, kind, status, zone, secret_id, detail, service, created_at, sync_seq, sync_origin)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
 			ON CONFLICT (id) DO UPDATE SET
 				application_id = EXCLUDED.application_id, hostname = EXCLUDED.hostname, kind = EXCLUDED.kind, status = EXCLUDED.status,
-				zone = EXCLUDED.zone, secret_id = EXCLUDED.secret_id, detail = EXCLUDED.detail, created_at = EXCLUDED.created_at,
-				sync_seq = EXCLUDED.sync_seq, sync_origin = EXCLUDED.sync_origin`,
-			row.ID, row.ApplicationID, row.Hostname, row.Kind, row.Status, row.Zone, row.SecretID, row.Detail, row.CreatedAt, row.Seq, row.Origin); err != nil {
+				zone = EXCLUDED.zone, secret_id = EXCLUDED.secret_id, detail = EXCLUDED.detail, service = EXCLUDED.service,
+				created_at = EXCLUDED.created_at, sync_seq = EXCLUDED.sync_seq, sync_origin = EXCLUDED.sync_origin`,
+			row.ID, row.ApplicationID, row.Hostname, row.Kind, row.Status, row.Zone, row.SecretID, row.Detail, row.Service, row.CreatedAt, row.Seq, row.Origin); err != nil {
 			return err
 		}
 	}

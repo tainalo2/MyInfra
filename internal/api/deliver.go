@@ -178,8 +178,8 @@ func (a *API) deliverCluster(ctx context.Context, leader store.ClusterLeader) {
 			keep[manifest.Namespace(app.ID)] = true
 			continue
 		}
-		if address, err := a.Store.Address(ctx, app.ID); err == nil {
-			withAddress(&spec, address)
+		if hosts, err := a.addresses(ctx, app.ID, publishedOf(app.Services)); err == nil {
+			withAddress(&spec, hosts)
 		}
 		if refusal := manifest.Refusal(spec); refusal != "" {
 			_ = a.Store.SetRunStatus(ctx, app.ID, "failed")

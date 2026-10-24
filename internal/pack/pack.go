@@ -72,7 +72,8 @@ const maxDisks = 8
 type Service struct {
 	Name  string `json:"name"`
 	Image string `json:"image"`
-	// Public is the one service the application's domain leads to.
+	// Public services get a domain each; the first is the main one, the
+	// application's address.
 	Public bool `json:"public,omitempty"`
 	// Port is where the service answers: the domain for the public one, the
 	// other services for all.
@@ -251,9 +252,10 @@ func Check(p Package) []Problem {
 		}
 	}
 	checkDisks(p, add)
-	if len(p.Services) > 0 && public != 1 {
-		add("services", "Un seul service est public : celui qui reçoit le domaine.")
+	if len(p.Services) > 0 && public == 0 {
+		add("services", "Au moins un service est public : celui qui reçoit le domaine.")
 	}
+	checkAddresses(p, add)
 	if cycle := dependencyLoop(p.Services); cycle != "" {
 		add("services", "Les services s'attendent les uns les autres : %s.", cycle)
 	}
@@ -423,6 +425,45 @@ func checkDisks(p Package, add func(path, format string, args ...any)) {
 			add(fmt.Sprintf("disks[%d].name", i), "Aucun service ne monte le disque %s.", disk.Name)
 		}
 	}
+}
+
+// checkAddresses checks that {{url:service}} and {{host:service}} name a
+// public service of the package.
+func checkAddresses(p Package, add func(path, format string, args ...any)) {
+	public := map[string]bool{}
+	for _, svc := range p.Services {
+		if svc.Public {
+			public[svc.Name] = true
+		}
+	}
+	check := func(path, value string) {
+		for _, name := range addressRefs(value) {
+			if !public[name] {
+				add(path, "{{url:%s}} et {{host:%s}} nomment un service public du paquet.", name, name)
+			}
+		}
+	}
+	for _, key := range sortedKeys(p.Env) {
+		check("env."+key, p.Env[key])
+	}
+	for i, svc := range p.Services {
+		for _, key := range sortedKeys(svc.Env) {
+			check(fmt.Sprintf("services[%d].env.%s", i, key), svc.Env[key])
+		}
+		for j, file := range svc.Files {
+			check(fmt.Sprintf("services[%d].files[%d].content", i, j), file.Content)
+		}
+	}
+}
+
+// Main is the main public service: the first one.
+func (p Package) Main() string {
+	for _, svc := range p.Services {
+		if svc.Public {
+			return svc.Name
+		}
+	}
+	return ""
 }
 
 // diskSizes gives each shared disk its size, declared or carried.

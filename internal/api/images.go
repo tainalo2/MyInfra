@@ -342,11 +342,11 @@ func (a *API) applyRollout(ctx context.Context, app store.RolloutApp) error {
 	if err := a.attachShared(ctx, app.OwnerID, found.ID, &spec); err != nil {
 		return err
 	}
-	address, err := a.Store.Address(ctx, found.ID)
+	hosts, err := a.addresses(ctx, found.ID, publishedOf(found.Services))
 	if err != nil {
 		return err
 	}
-	withAddress(&spec, address)
+	withAddress(&spec, hosts)
 	if !manifest.Deployable(spec) {
 		return fmt.Errorf("manifeste refusé")
 	}

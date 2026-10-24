@@ -13,8 +13,9 @@ var (
 	// tokenPattern is a value MyInfra fills in: {{url}}, {{host}},
 	// {{input:key}}, {{secret:name}} or {{encoded:name}}.
 	tokenPattern = regexp.MustCompile(`\{\{([a-z]+)(?::([A-Za-z0-9_-]+))?\}\}`)
-	// addressPattern is what is left at installation for each delivery.
-	addressPattern = regexp.MustCompile(`\{\{(url|host)\}\}`)
+	// addressPattern is what is left at installation for each delivery:
+	// the main service's address, or a named public service's.
+	addressPattern = regexp.MustCompile(`\{\{(url|host)(?::([a-z][a-z0-9-]{0,30}))?\}\}`)
 	inputKey       = regexp.MustCompile(`^[a-z][a-z0-9-]{0,40}$`)
 )
 
@@ -57,11 +58,38 @@ func fill(value string, inputs, secrets map[string]string) (string, error) {
 // FillAddress puts the name an application answers on in place of {{url}}
 // and {{host}}, at each delivery: a new name reaches every value.
 func FillAddress(value, host string) string {
-	if host == "" || !strings.Contains(value, "{{") {
+	return FillAddresses(value, map[string]string{"": host})
+}
+
+// FillAddresses puts the names of the public services in place of {{url}},
+// {{host}} ("" in hosts, the main one), {{url:service}} and
+// {{host:service}}. A service without a name yet keeps its token.
+func FillAddresses(value string, hosts map[string]string) string {
+	if !strings.Contains(value, "{{") {
 		return value
 	}
-	value = strings.ReplaceAll(value, "{{url}}", "https://"+host)
-	return strings.ReplaceAll(value, "{{host}}", host)
+	return addressPattern.ReplaceAllStringFunc(value, func(token string) string {
+		parts := addressPattern.FindStringSubmatch(token)
+		host := hosts[parts[2]]
+		if host == "" {
+			return token
+		}
+		if parts[1] == "url" {
+			return "https://" + host
+		}
+		return host
+	})
+}
+
+// addressRefs lists the services a value names in {{url:…}} or {{host:…}}.
+func addressRefs(value string) []string {
+	var out []string
+	for _, parts := range addressPattern.FindAllStringSubmatch(value, -1) {
+		if parts[2] != "" {
+			out = append(out, parts[2])
+		}
+	}
+	return out
 }
 
 func remember(secrets map[string]string, name string, encoded bool) string {

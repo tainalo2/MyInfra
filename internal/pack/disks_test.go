@@ -112,3 +112,19 @@ volumes:
 		t.Fatal(problems)
 	}
 }
+
+func TestAddressesOfEachPublicService(t *testing.T) {
+	value := "{{url}} {{host:sonarr}} {{url:sonarr}} {{host:radarr}}"
+	got := FillAddresses(value, map[string]string{"": "media.example.org", "sonarr": "series.example.org"})
+	if got != "https://media.example.org series.example.org https://series.example.org {{host:radarr}}" {
+		t.Fatal(got)
+	}
+	text := strings.Replace(mediaPackage, "    port: 8989\n", "    port: 8989\n    public: true\n    env:\n      JELLYFIN: \"{{url:jellyfin}}\"\n", 1)
+	if _, problems := Parse([]byte(text)); len(problems) > 0 {
+		t.Fatal(problems)
+	}
+	bad := strings.Replace(text, "{{url:jellyfin}}", "{{url:nope}}", 1)
+	if _, problems := Parse([]byte(bad)); len(problems) == 0 {
+		t.Fatal("service inconnu accepté")
+	}
+}

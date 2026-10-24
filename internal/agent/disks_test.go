@@ -25,3 +25,24 @@ func TestSharedDiskIsOneVolume(t *testing.T) {
 		t.Fatal("volume propre pour un disque partagé")
 	}
 }
+
+// Two public services of one application have routers of their own.
+func TestPublicServicesHaveTheirOwnRouters(t *testing.T) {
+	script, err := Sync("http://127.0.0.1:8080", "tok_en", []Workload{
+		{ID: specApp, Service: "jellyseerr", Image: "fallenbagel/jellyseerr:2.7.3", Published: true, Listen: 5055, Hosts: []string{"media.example.org"}},
+		{ID: specApp, Service: "sonarr", Image: "linuxserver/sonarr:4.0.20", Published: true, Listen: 8989, Hosts: []string{"series.example.org"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := routerName(specApp + "jellyseerr" + "le")
+	routers := map[string]bool{}
+	for _, line := range strings.Split(script, "traefik.http.routers.") {
+		if name, _, ok := strings.Cut(line, "."); ok && strings.HasPrefix(name, "app") && !strings.HasSuffix(name, "-http") {
+			routers[name] = true
+		}
+	}
+	if len(routers) != 2 {
+		t.Fatalf("%d routeurs : %v (%s)", len(routers), routers, first)
+	}
+}

@@ -152,6 +152,7 @@ type syncDomain struct {
 	Zone          string    `json:"zone"`
 	SecretID      string    `json:"secretId"`
 	Detail        string    `json:"detail"`
+	Service       string    `json:"service,omitempty"`
 	CreatedAt     time.Time `json:"createdAt"`
 	Seq           int64     `json:"seq"`
 	Origin        string    `json:"origin"`

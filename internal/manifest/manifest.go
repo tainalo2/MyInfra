@@ -141,12 +141,15 @@ type Service struct {
 	Name      string
 	Image     string
 	Published bool
-	Disk      bool
-	DiskPath  string
-	DiskGi    int
-	Listen    int
-	Args      []string
-	Replicas  int
+	// Hosts are the names that lead to this public service. Nil reads the
+	// application's: one public service, all its names.
+	Hosts    []string
+	Disk     bool
+	DiskPath string
+	DiskGi   int
+	Listen   int
+	Args     []string
+	Replicas int
 	// Backup copies the SQLite files of a single writer to the cluster's
 	// object store, so that its one copy can start again on any node.
 	Backup *Backup
@@ -400,6 +403,7 @@ func Render(app App) string {
 	sum := configSum(app)
 	ports := servicePorts(app)
 	disks, sizes := sharedDisks(app)
+	redirect, paused := false, false
 	for _, name := range disks {
 		fmt.Fprintf(&b, "---\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: %s\n  namespace: %s\n  labels:\n    myinfra.io/shared-disk: %q\nspec:\n  accessModes: [ReadWriteOnce]\n  resources:\n    requests:\n      storage: %dGi\n", SharedClaim(name), ns, name, sizes[name])
 	}
@@ -486,8 +490,16 @@ spec:
   ports:
 %s`, svc.Name, ns, svc.Name, servicePortLines(svc))
 		}
-		if svc.Published && len(app.Hosts) > 0 {
-			fmt.Fprintf(&b, `---
+		hosts := svc.Hosts
+		if hosts == nil {
+			hosts = app.Hosts
+		}
+		if svc.Published && len(hosts) > 0 {
+			// The redirection and the pause page serve every public service:
+			// written once for the application.
+			if !redirect {
+				redirect = true
+				fmt.Fprintf(&b, `---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -498,13 +510,17 @@ spec:
     scheme: https
     permanent: true
 `, ns)
+			}
 			target, port := svc.Name, listenOf(svc)
 			if app.Paused {
 				// A paused application shows a page instead of a proxy error.
-				writePausePage(&b, ns)
+				if !paused {
+					paused = true
+					writePausePage(&b, ns)
+				}
 				target, port = "paused", pause.Port
 			}
-			for _, group := range hostGroups(app.Hosts, app.Zones) {
+			for _, group := range hostGroups(hosts, app.Zones) {
 				suffix := "-" + cert.Resolver(group.zone)
 				match := hostMatch(group.hosts)
 				fmt.Fprintf(&b, `---

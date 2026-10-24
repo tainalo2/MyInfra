@@ -16,38 +16,86 @@ import (
 	"myinfra/internal/store"
 )
 
-// withAddress fills {{url}} and {{host}} with the name the application
-// answers on now, in its variables and in each service's own variables and
-// files: a new name reaches them at the next delivery, and the copies
-// restart with it.
-func withAddress(app *manifest.App, address string) {
-	app.Env = fillMap(app.Env, address)
+// withAddress fills {{url}}, {{host}} and their {{…:service}} forms with
+// the names the public services answer on now, in the application's
+// variables and in each service's own variables and files: a new name
+// reaches them at the next delivery, and the copies restart with it.
+func withAddress(app *manifest.App, hosts map[string]string) {
+	app.Env = fillMap(app.Env, hosts)
 	for i := range app.Services {
-		app.Services[i].Spec = specAt(app.Services[i].Spec, address)
+		app.Services[i].Spec = specAt(app.Services[i].Spec, hosts)
 	}
 }
 
-// specAt is a service's spec with its address filled in; the stored one
+// specAt is a service's spec with its addresses filled in; the stored one
 // keeps its tokens.
-func specAt(s spec.Service, address string) spec.Service {
-	s.Env = fillMap(s.Env, address)
+func specAt(s spec.Service, hosts map[string]string) spec.Service {
+	s.Env = fillMap(s.Env, hosts)
 	if len(s.Files) > 0 {
 		files := make([]spec.File, len(s.Files))
 		for i, file := range s.Files {
-			files[i] = spec.File{Path: file.Path, Content: pack.FillAddress(file.Content, address)}
+			files[i] = spec.File{Path: file.Path, Content: pack.FillAddresses(file.Content, hosts)}
 		}
 		s.Files = files
 	}
 	return s
 }
 
-func fillMap(values map[string]string, address string) map[string]string {
+func fillMap(values map[string]string, hosts map[string]string) map[string]string {
 	if len(values) == 0 {
 		return values
 	}
 	out := make(map[string]string, len(values))
 	for key, value := range values {
-		out[key] = pack.FillAddress(value, address)
+		out[key] = pack.FillAddresses(value, hosts)
+	}
+	return out
+}
+
+// addresses are the names an application's public services answer on now,
+// by service, and "" for the main one, which is also under its own name.
+func (a *API) addresses(ctx context.Context, appID string, published []string) (map[string]string, error) {
+	hosts, err := a.Store.Addresses(ctx, appID)
+	if err != nil {
+		return nil, err
+	}
+	named := map[string]bool{}
+	for service := range hosts {
+		if service != "" {
+			named[service] = true
+		}
+	}
+	if main := store.MainService(published, named); main != "" && hosts[main] == "" {
+		hosts[main] = hosts[""]
+	}
+	return hosts, nil
+}
+
+func publishedOf(services []store.Service) []string {
+	var out []string
+	for _, svc := range services {
+		if svc.Published {
+			out = append(out, svc.Name)
+		}
+	}
+	return out
+}
+
+// domainAddresses are the names the public services answer on, as
+// Store.Addresses reads them: "" for the main one.
+func domainAddresses(app store.Application) map[string]string {
+	out := map[string]string{}
+	custom := map[string]bool{}
+	for _, domain := range app.Domains {
+		switch {
+		case domain.Kind == "custom" && domain.Status == "ready" && !custom[domain.Service]:
+			out[domain.Service], custom[domain.Service] = domain.Hostname, true
+		case domain.Kind == "default" && out[domain.Service] == "":
+			out[domain.Service] = domain.Hostname
+		}
+	}
+	if out[""] == "" && app.Hostname != "" {
+		out[""] = app.Hostname
 	}
 	return out
 }
@@ -57,6 +105,9 @@ func fillMap(values map[string]string, address string) map[string]string {
 func publicHost(app store.Application) string {
 	fallback := ""
 	for _, domain := range app.Domains {
+		if domain.Service != "" {
+			continue
+		}
 		if domain.Kind == "custom" && domain.Status == "ready" {
 			return domain.Hostname
 		}
@@ -74,13 +125,24 @@ func publicHost(app store.Application) string {
 // its address becomes {{url}} and {{host}} again, and each secret value a
 // {{secret:…}} drawn anew at the next installation.
 func appPackage(app store.Application) pack.Package {
-	host := publicHost(app)
-	general := func(value string) string {
-		if host == "" {
-			return value
+	// Each public service's address becomes its token again, the longest
+	// first: sonarr.media.example.org before media.example.org.
+	type address struct{ host, url, token string }
+	var known []address
+	for service, host := range domainAddresses(app) {
+		suffix := ""
+		if service != "" {
+			suffix = ":" + service
 		}
-		value = strings.ReplaceAll(value, "https://"+host, "{{url}}")
-		return strings.ReplaceAll(value, host, "{{host}}")
+		known = append(known, address{host, "{{url" + suffix + "}}", "{{host" + suffix + "}}"})
+	}
+	sort.Slice(known, func(i, j int) bool { return len(known[i].host) > len(known[j].host) })
+	general := func(value string) string {
+		for _, item := range known {
+			value = strings.ReplaceAll(value, "https://"+item.host, item.url)
+			value = strings.ReplaceAll(value, item.host, item.token)
+		}
+		return value
 	}
 	p := pack.Package{Type: pack.Type, Version: pack.Version, Name: app.Name}
 	shared := shareableVars(app.Variables)
@@ -241,6 +303,7 @@ func (a *API) setServices(w http.ResponseWriter, r *http.Request) {
 	for _, svc := range next {
 		if svc.Published {
 			source = svc.Image
+			break
 		}
 	}
 	if err := a.Store.ReplaceServices(r.Context(), owner, app.ID, source, next); err != nil {

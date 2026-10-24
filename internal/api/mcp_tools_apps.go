@@ -79,6 +79,37 @@ func (c *mcpCall) updateFromReleases(app named, base string, refusal error) (str
 	return "Mise à jour de " + app.Name + " lancée.\n - " + strings.Join(moved, "\n - ") + "\n" + asJSON(out), nil
 }
 
+var serviceDomainsArg = map[string]any{
+	"type":                 "object",
+	"description":          "Noms des autres services publics, par service : {\"sonarr\": [\"series.mondomaine.fr\"]}. Ceux de domains vont au service principal.",
+	"additionalProperties": list("", text("")),
+}
+
+// allNames gives the main service its domains, and each other public
+// service those named for it.
+func (c *mcpCall) allNames(domains []string, byService map[string][]string) ([]nameBody, error) {
+	names, err := c.domainNames(domains)
+	if err != nil {
+		return nil, err
+	}
+	services := make([]string, 0, len(byService))
+	for service := range byService {
+		services = append(services, service)
+	}
+	sort.Strings(services)
+	for _, service := range services {
+		more, err := c.domainNames(byService[service])
+		if err != nil {
+			return nil, err
+		}
+		for i := range more {
+			more[i].Service = service
+		}
+		names = append(names, more...)
+	}
+	return names, nil
+}
+
 // domainNames splits full names into subdomain and zone, by the zones of the
 // DNS accounts.
 func (c *mcpCall) domainNames(domains []string) ([]nameBody, error) {
@@ -209,16 +240,17 @@ func mcpAppTools() []mcpTool {
 			Name: "install", Title: "Installer une application", Role: store.RoleDeploy, Write: true,
 			Description: "Installe un article du catalogue ou un paquet enregistré sur un cluster ou une machine, avec ses domaines, les réponses à ses questions et un nombre de copies. Avec copies > 1, le résultat dit service par service ce qui est vraiment redondé ; si une partie reste à une copie, ou si un domaine porte déjà des enregistrements DNS étrangers à MyInfra, le premier appel rend un récapitulatif et un code à renvoyer après l'accord de l'utilisateur.",
 			Schema: object(nil, map[string]any{
-				"article":      text("Article du catalogue (search_catalogue), par exemple nextcloud."),
-				"package":      text("Paquet enregistré (list_packages)."),
-				"name":         text("Nom de l'application ; celui de l'article ou du paquet par défaut."),
-				"cluster":      text("Cluster où installer."),
-				"server":       text("Machine seule où installer."),
-				"domains":      list("Noms complets de l'application, par exemple cloud.moydomain.name ; le premier est l'adresse principale.", text("")),
-				"inputs":       textMap("Réponses aux questions de l'article ou du paquet, par clé."),
-				"copies":       whole("Copies voulues, sur un cluster (1 par défaut).", 1, 10),
-				"version":      text("Version (étiquette d'image) du service public, sinon celle de l'article."),
-				"confirmation": confirmationArg,
+				"article":         text("Article du catalogue (search_catalogue), par exemple nextcloud."),
+				"package":         text("Paquet enregistré (list_packages)."),
+				"name":            text("Nom de l'application ; celui de l'article ou du paquet par défaut."),
+				"cluster":         text("Cluster où installer."),
+				"server":          text("Machine seule où installer."),
+				"domains":         list("Noms complets du service principal (le premier service public), par exemple cloud.moydomain.name ; le premier est l'adresse de l'application.", text("")),
+				"service_domains": serviceDomainsArg,
+				"inputs":          textMap("Réponses aux questions de l'article ou du paquet, par clé."),
+				"copies":          whole("Copies voulues, sur un cluster (1 par défaut).", 1, 10),
+				"version":         text("Version (étiquette d'image) du service public, sinon celle de l'article."),
+				"confirmation":    confirmationArg,
 			}),
 			Routes: []string{
 				"GET /api/catalogue", "GET /api/packages", "GET /api/clusters", "GET /api/servers", "GET /api/dns/zones",
@@ -387,9 +419,10 @@ func mcpAppTools() []mcpTool {
 			Name: "set_domains", Title: "Changer les domaines d'une application", Role: store.RoleDeploy, Write: true,
 			Description: "Donne à une application exactement ces noms de domaine (la liste remplace l'actuelle ; vide, il ne reste que l'adresse par défaut). MyInfra écrit le DNS et le certificat. Si un nouveau nom porte déjà des enregistrements étrangers à MyInfra, le premier appel rend le récapitulatif et un code.",
 			Schema: object([]string{"application", "domains"}, map[string]any{
-				"application":  appArg,
-				"domains":      list("Noms complets voulus.", text("")),
-				"confirmation": confirmationArg,
+				"application":     appArg,
+				"domains":         list("Noms complets voulus pour le service principal.", text("")),
+				"service_domains": serviceDomainsArg,
+				"confirmation":    confirmationArg,
 			}),
 			Routes: []string{"GET /api/applications", "GET /api/applications/{id}", "GET /api/dns/zones", "GET /api/dns/zones/{zone}/records", "PUT /api/applications/{id}/names"},
 			Run:    runSetDomains,
@@ -591,16 +624,17 @@ func (c *mcpCall) previewBody(article, pkg, cluster string) (map[string]any, err
 }
 
 type installArgs struct {
-	Article      string            `json:"article"`
-	Package      string            `json:"package"`
-	Name         string            `json:"name"`
-	Cluster      string            `json:"cluster"`
-	Server       string            `json:"server"`
-	Domains      []string          `json:"domains"`
-	Inputs       map[string]string `json:"inputs"`
-	Copies       int               `json:"copies"`
-	Version      string            `json:"version"`
-	Confirmation string            `json:"confirmation"`
+	Article        string              `json:"article"`
+	Package        string              `json:"package"`
+	Name           string              `json:"name"`
+	Cluster        string              `json:"cluster"`
+	Server         string              `json:"server"`
+	Domains        []string            `json:"domains"`
+	ServiceDomains map[string][]string `json:"service_domains"`
+	Inputs         map[string]string   `json:"inputs"`
+	Copies         int                 `json:"copies"`
+	Version        string              `json:"version"`
+	Confirmation   string              `json:"confirmation"`
 }
 
 func runInstall(c *mcpCall, raw json.RawMessage) (string, error) {
@@ -633,7 +667,7 @@ func runInstall(c *mcpCall, raw json.RawMessage) (string, error) {
 	if copies > 1 && dest.kind != "cluster" {
 		return "", failf("Des copies se répartissent sur un cluster : une machine seule n'en porte qu'une.")
 	}
-	names, err := c.domainNames(args.Domains)
+	names, err := c.allNames(args.Domains, args.ServiceDomains)
 	if err != nil {
 		return "", err
 	}
@@ -781,9 +815,10 @@ func runGitApp(c *mcpCall, raw json.RawMessage) (string, error) {
 
 func runSetDomains(c *mcpCall, raw json.RawMessage) (string, error) {
 	args, err := decodeArgs[struct {
-		Application  string   `json:"application"`
-		Domains      []string `json:"domains"`
-		Confirmation string   `json:"confirmation"`
+		Application    string              `json:"application"`
+		Domains        []string            `json:"domains"`
+		ServiceDomains map[string][]string `json:"service_domains"`
+		Confirmation   string              `json:"confirmation"`
 	}](raw)
 	if err != nil {
 		return "", err
@@ -800,7 +835,7 @@ func runSetDomains(c *mcpCall, raw json.RawMessage) (string, error) {
 	for _, d := range view.Domains {
 		own[strings.ToLower(d.Hostname)] = true
 	}
-	names, err := c.domainNames(args.Domains)
+	names, err := c.allNames(args.Domains, args.ServiceDomains)
 	if err != nil {
 		return "", err
 	}

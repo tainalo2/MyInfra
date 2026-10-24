@@ -13,9 +13,9 @@ Vérifiez toujours le texte avec `check_package` avant de l'enregistrer : chaque
 
 Un service fait tourner une image : le site, sa base de données, un cache, une tâche de fond. De 1 à 12 services. Chaque service a un nom en minuscules, avec des tirets, par lequel les autres le joignent sur le réseau de l'application (`db`, `cache`).
 
-## Le service public
+## Les services publics
 
-Un seul service, et exactement un, porte `public: true` : il reçoit le domaine et le certificat HTTPS. Indiquez dans `port` le port où il répond (80, 3000…). Les autres restent privés à l'application. Une tâche qui n'écoute rien porte `noPort: true`.
+Un service qui porte `public: true` reçoit un domaine et son certificat HTTPS. Indiquez dans `port` le port où il répond (80, 3000…). Il en faut au moins un ; le premier est le **service principal**, celui de l'adresse de l'application. Les autres services publics reçoivent chacun leurs propres noms à l'installation (et, sans nom, une adresse donnée par MyInfra). Les services non publics restent privés à l'application. Une tâche qui n'écoute rien porte `noPort: true`.
 
 ## Les disques
 
@@ -58,8 +58,9 @@ Les variables communes (`env` en haut du paquet) vont à tous les services et so
 
 ## Ce que MyInfra remplit pour vous
 
-- `{{url}}` : l'adresse de l'application, `https://…` ; elle suit le domaine.
+- `{{url}}` : l'adresse de l'application (son service principal), `https://…` ; elle suit le domaine.
 - `{{host}}` : son nom de domaine seul ; il suit le domaine.
+- `{{url:service}}`, `{{host:service}}` : l'adresse et le nom d'un autre service public, par exemple `{{url:jellyfin}}`.
 - `{{secret:nom}}` : un mot de passe aléatoire tiré à l'installation, le même partout où « nom » revient. Variables communes seulement.
 - `{{encoded:nom}}` : le même, encodé en base64, pour les applications qui l'attendent ainsi.
 - `{{input:clé}}` : la réponse à une question posée à l'installation, déclarée dans `inputs`.
@@ -70,7 +71,7 @@ Les variables communes (`env` en haut du paquet) vont à tous les services et so
 - `inputs` : les questions posées à l'installation, `{key, label}` ; `key` est en minuscules, lu par `{{input:key}}`.
 - `env` : les variables communes à tous les services, chiffrées.
 - `services[].name`, `services[].image` : le nom du service et son image, par exemple `postgres:16`.
-- `services[].public`, `services[].port` : `public: true` pour le seul service qui reçoit le domaine ; `port`, celui où le service répond.
+- `services[].public`, `services[].port` : `public: true` pour un service qui reçoit un domaine (le premier est le principal) ; `port`, celui où le service répond.
 - `services[].noPort` : `true` pour une tâche de fond qui n'écoute aucun port.
 - `services[].replicas` : le nombre de copies, de 1 à 10 (0 pour un service arrêté).
 - `services[].command`, `services[].args` : `command` remplace le point d'entrée de l'image ; `args` le suit, un mot par élément.
