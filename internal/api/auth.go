@@ -189,6 +189,17 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("POST /api/webhooks/git/{id}", a.gitWebhook)
 	mux.HandleFunc("POST /api/webhooks/git/{id}/{secret}", a.gitWebhook)
 
+	mux.HandleFunc("GET /api/mcp", a.auth(a.mcpInfo))
+	mux.HandleFunc("GET /api/mcp/tokens", a.personOnly(a.listAPITokens))
+	mux.HandleFunc("POST /api/mcp/tokens", a.personOnly(a.steady(a.createAPIToken)))
+	mux.HandleFunc("DELETE /api/mcp/tokens/{id}", a.personOnly(a.steady(a.deleteAPIToken)))
+
+	mux.HandleFunc("GET /api/costs", a.auth(a.listCosts))
+	mux.HandleFunc("POST /api/offers/search", a.auth(a.offerSearch))
+	mux.HandleFunc("GET /api/servers/{id}/delete/impact", a.auth(a.deleteImpact("server")))
+	mux.HandleFunc("GET /api/clusters/{id}/delete/impact", a.auth(a.deleteImpact("cluster")))
+	mux.HandleFunc("GET /api/applications/{id}/delete/impact", a.auth(a.deleteImpact("application")))
+
 	mux.HandleFunc("GET /api/tools", a.auth(a.hostTools))
 	mux.HandleFunc("POST /api/tools/{name}", a.deployAuth(a.installTool))
 
@@ -202,6 +213,10 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("GET /api/secrets/{id}/zones", a.auth(a.secretZones))
 	mux.HandleFunc("GET /api/dns/zones", a.auth(a.listZones))
 	mux.HandleFunc("GET /api/dns/records", a.auth(a.listDNSRecords))
+	mux.HandleFunc("GET /api/dns/zones/{zone}/records", a.auth(a.listZoneEntries))
+	mux.HandleFunc("POST /api/dns/records/plan", a.auth(a.planDNSChange))
+	mux.HandleFunc("PUT /api/dns/records", a.adminAuth(a.steady(a.applyDNSChange)))
+	mux.HandleFunc("DELETE /api/dns/records", a.adminAuth(a.steady(a.applyDNSChange)))
 	mux.HandleFunc("POST /api/dns/records/drop", a.adminAuth(a.steady(a.dropDNSName)))
 	mux.HandleFunc("POST /api/dns/records/publish", a.adminAuth(a.steady(a.publishDNSName)))
 	mux.HandleFunc("GET /api/dns/{host}/tofu", a.auth(a.dnsTofu))
@@ -344,6 +359,13 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("GET /agent/{token}/sync", a.agentSync)
 	mux.HandleFunc("POST /api/agent", a.agentReport)
 	mux.HandleFunc("POST /api/agent/{token}", a.agentReport)
+
+	// The MCP server calls the routes above through this same router.
+	mcp := a.mcpServer(mux)
+	mux.HandleFunc("POST /mcp", mcp)
+	mux.HandleFunc("GET /mcp", mcp)
+	mux.HandleFunc("DELETE /mcp", mcp)
+	a.router = mux
 
 	deploy.UseHostKeys(
 		func(address string) (string, error) { return a.Store.SSHHostKey(context.Background(), address) },
@@ -707,21 +729,33 @@ func (a *API) startSession(w http.ResponseWriter, r *http.Request, userID string
 
 func (a *API) auth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		cookie, err := r.Cookie(sessionCookie)
-		if err != nil {
-			writeError(w, http.StatusUnauthorized, "Connexion requise.")
-			return
+		ctx := r.Context()
+		var userID string
+		if bearer, ok := bearerToken(r); ok {
+			token, err := a.Store.UserByAPIToken(ctx, hashToken(bearer))
+			if err != nil {
+				writeError(w, http.StatusUnauthorized, "Jeton d'accès invalide ou expiré.")
+				return
+			}
+			userID = token.UserID
+			ctx = withToken(ctx, token)
+		} else {
+			cookie, err := r.Cookie(sessionCookie)
+			if err != nil {
+				writeError(w, http.StatusUnauthorized, "Connexion requise.")
+				return
+			}
+			userID, err = a.Store.UserBySession(ctx, hashToken(cookie.Value))
+			if err != nil {
+				writeError(w, http.StatusUnauthorized, "Connexion requise.")
+				return
+			}
 		}
-		userID, err := a.Store.UserBySession(r.Context(), hashToken(cookie.Value))
-		if err != nil {
-			writeError(w, http.StatusUnauthorized, "Connexion requise.")
-			return
-		}
-		owner, err := a.Store.InfrastructureOwner(r.Context())
+		owner, err := a.Store.InfrastructureOwner(ctx)
 		if err != nil {
 			owner = userID
 		}
-		ctx := withOwner(withUser(r.Context(), userID), owner)
+		ctx = withOwner(withUser(ctx, userID), owner)
 		next(w, r.WithContext(ctx))
 	}
 }

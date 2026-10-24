@@ -17,11 +17,17 @@ func (a *API) workloads(ctx context.Context, token string) ([]agent.Workload, er
 		return nil, err
 	}
 	work := make([]agent.Workload, 0, len(apps))
-	addresses := map[string]string{}
+	published := map[string][]string{}
+	for _, app := range apps {
+		if app.Published {
+			published[app.ID] = append(published[app.ID], app.Service)
+		}
+	}
+	addresses := map[string]map[string]string{}
 	for _, app := range apps {
 		address, seen := addresses[app.ID]
 		if !seen {
-			if address, err = a.Store.Address(ctx, app.ID); err != nil {
+			if address, err = a.addresses(ctx, app.ID, published[app.ID]); err != nil {
 				return nil, err
 			}
 			addresses[app.ID] = address

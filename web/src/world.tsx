@@ -18,23 +18,24 @@ export function HistoryPage() {
   );
 }
 
-function eventQuery(server?: string, cluster?: string) {
+function eventQuery(server?: string, cluster?: string, source?: string) {
   const query = new URLSearchParams();
   if (server) query.set("server", server);
   if (cluster) query.set("cluster", cluster);
+  if (source) query.set("source", source);
   return query.toString() ? `?${query}` : "";
 }
 
-export function EventList({ server, cluster, limit }: { server?: string; cluster?: string; limit?: number }) {
-  const [rows, setRows] = useState<InfraEvent[] | null>(() => peek<InfraEvent[]>(`/api/events${eventQuery(server, cluster)}`));
+export function EventList({ server, cluster, source, limit }: { server?: string; cluster?: string; source?: "mcp"; limit?: number }) {
+  const [rows, setRows] = useState<InfraEvent[] | null>(() => peek<InfraEvent[]>(`/api/events${eventQuery(server, cluster, source)}`));
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const suffix = eventQuery(server, cluster);
+    const suffix = eventQuery(server, cluster, source);
     api<InfraEvent[]>(`/api/events${suffix}`)
       .then(setRows)
       .catch((err) => setError(err instanceof Error ? err.message : text("common.error")));
-  }, [server, cluster]);
+  }, [server, cluster, source]);
 
   if (error) return <ErrorText>{error}</ErrorText>;
   if (!rows) return <LoadingLines lines={4} label={text("nav.history")} />;
@@ -49,6 +50,12 @@ export function EventList({ server, cluster, limit }: { server?: string; cluster
           </div>
           <p className="mt-1 flex items-center gap-2 text-muted">
             <Icon icon={event.serverId ? History : Earth} />
+            {event.source === "mcp" || event.source === "api" ? (
+              <span className="rounded border border-line px-1.5 text-[12px]" title={text("mcp.badgeHint")}>
+                {event.source === "mcp" ? text("mcp.badge") : text("mcp.badgeApi")}
+                {event.actor ? ` · ${event.actor}` : ""}
+              </span>
+            ) : null}
             {event.serverId ? (
               <Link to={`/serveurs/${event.serverId}`} className="underline">{event.serverName || "Serveur"}</Link>
             ) : null}

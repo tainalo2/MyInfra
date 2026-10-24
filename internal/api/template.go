@@ -895,6 +895,7 @@ func (a *API) createRunApp(ctx context.Context, owner string, run *blueprint.Run
 		for _, svc := range stored {
 			if svc.Published {
 				source = svc.Image
+				break
 			}
 		}
 	}
@@ -942,6 +943,9 @@ func (a *API) createRunApp(ctx context.Context, owner string, run *blueprint.Run
 			accounts[zone] = secretID
 		}
 		in.Names = append(in.Names, store.Name{ID: newID(), Hostname: host, Zone: zone, SecretID: secretID})
+	}
+	if _, err := servicesNames(&in, stored, name); err != nil {
+		return err
 	}
 	sealed, err := a.sealVars(in.Variables)
 	if err != nil {

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRightLeft, Cloud, Container, Globe, HardDrive, KeyRound, ListTree, Power, Settings, Shield, Users, Waypoints, type LucideIcon } from "lucide-react";
+import { ArrowRightLeft, Bot, Cloud, Container, Globe, HardDrive, KeyRound, ListTree, Power, Settings, Shield, Users, Waypoints, type LucideIcon } from "lucide-react";
 import { api } from "./api";
 import { text, type MsgKey } from "./i18n";
 import { Spinner } from "./kit";
@@ -20,6 +20,7 @@ const groups: { title: MsgKey; entries: Entry[] }[] = [
       { to: "/dns/enregistrements", label: "nav.dnsRecords", hint: "settings.dnsRecordsHint", icon: ListTree, deployOnly: true },
       { to: "/registres", label: "nav.registries", hint: "settings.registriesHint", icon: Container, deployOnly: true },
       { to: "/images", label: "nav.images", hint: "settings.imagesHint", icon: HardDrive, deployOnly: true },
+      { to: "/assistants", label: "nav.mcp", hint: "settings.mcpHint", icon: Bot },
     ],
   },
   {

@@ -90,7 +90,7 @@ func TestParsePointsAtTheLine(t *testing.T) {
 	}{
 		{"image", "image: postgres:16", "image: 'postgres 16'", "services[1].image", "image: 'postgres 16'"},
 		{"loop", "    port: 5432\n", "    port: 5432\n    dependsOn: [web]\n", "services", "services:"},
-		{"public", "    port: 5432\n", "    port: 5432\n    public: true\n", "services", "services:"},
+		{"address", "      LOG: debug", "      LOG: \"{{host:db}}\"", "services[0].env.LOG", "LOG:"},
 		{"secret", "      LOG: debug", "      LOG: \"{{secret:x}}\"", "services[0].env.LOG", "LOG:"},
 		{"input", "{{input:admin-email}}", "{{input:other}}", "env.ADMIN_EMAIL", "ADMIN_EMAIL:"},
 		{"unknown", "    port: 5432\n", "    port: 5432\n    replica: 2\n", "replica", "replica: 2"},

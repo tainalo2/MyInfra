@@ -14,6 +14,7 @@ import (
 	"myinfra/internal/manifest"
 	"myinfra/internal/market"
 	"myinfra/internal/registry"
+	"myinfra/internal/spec"
 	"myinfra/internal/store"
 	"myinfra/internal/usage"
 )
@@ -341,11 +342,11 @@ func (a *API) applyRollout(ctx context.Context, app store.RolloutApp) error {
 	if err := a.attachShared(ctx, app.OwnerID, found.ID, &spec); err != nil {
 		return err
 	}
-	address, err := a.Store.Address(ctx, found.ID)
+	hosts, err := a.addresses(ctx, found.ID, publishedOf(found.Services))
 	if err != nil {
 		return err
 	}
-	withAddress(&spec, address)
+	withAddress(&spec, hosts)
 	if !manifest.Deployable(spec) {
 		return fmt.Errorf("manifeste refusé")
 	}
@@ -596,7 +597,7 @@ func (a *API) inspectImages(ctx context.Context, host deploy.Host, names []strin
 
 func rolloutContainers(appID string, svc store.Service) []string {
 	replicas := svc.Replicas
-	if svc.Disk || replicas < 1 {
+	if svc.Disk || replicas < 1 || spec.Shares(svc.Spec) {
 		replicas = 1
 	}
 	base := "myinfra-" + strings.ReplaceAll(appID, "-", "") + "-" + svc.Name

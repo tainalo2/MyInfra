@@ -54,7 +54,7 @@ func (a *API) listApplicationBackups(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) backupSources(app store.Application, svc store.Service) []backupSourceView {
-	profile := market.ProfileOf(svc.Image, svc.Disk)
+	profile := profileOf(svc)
 	var out []backupSourceView
 	add := func(id, label, detail string, available bool) {
 		if !available {
@@ -180,7 +180,7 @@ var backupServiceName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
 
 func (a *API) backupCommand(ctx context.Context, owner string, app store.Application, svc store.Service, source string) (filename, command string, host deploy.Host, contentType string, err error) {
 	contentType = "application/gzip"
-	profile := market.ProfileOf(svc.Image, svc.Disk)
+	profile := profileOf(svc)
 	switch {
 	case app.ClusterID != "":
 		host, err = a.clusterHost(ctx, owner, app.ClusterID)

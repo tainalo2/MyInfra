@@ -204,6 +204,10 @@ ALTER TABLE domains ADD COLUMN IF NOT EXISTS secret_id text NOT NULL DEFAULT '';
 
 ALTER TABLE domains ADD COLUMN IF NOT EXISTS detail text NOT NULL DEFAULT '';
 
+-- The public service a name leads to, empty for the main one: the only one
+-- before applications could publish several.
+ALTER TABLE domains ADD COLUMN IF NOT EXISTS service text NOT NULL DEFAULT '';
+
 CREATE UNIQUE INDEX IF NOT EXISTS domains_hostname_key ON domains (hostname);
 
 CREATE TABLE IF NOT EXISTS templates (
@@ -290,6 +294,11 @@ ALTER TABLE events DROP CONSTRAINT IF EXISTS events_level_check;
 ALTER TABLE events ADD CONSTRAINT events_level_check CHECK (level IN ('info', 'ok', 'warn', 'bad'));
 
 CREATE INDEX IF NOT EXISTS events_owner_at ON events (owner_id, at DESC);
+
+-- Where the request of an event came from (ui, api for an access token, mcp for
+-- the MCP server) and, for a token, its name.
+ALTER TABLE events ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'ui';
+ALTER TABLE events ADD COLUMN IF NOT EXISTS actor text NOT NULL DEFAULT '';
 
 ALTER TABLE applications ADD COLUMN IF NOT EXISTS run_detail text NOT NULL DEFAULT '';
 ALTER TABLE applications ADD COLUMN IF NOT EXISTS preparing_since timestamptz;
@@ -422,3 +431,39 @@ CREATE TABLE IF NOT EXISTS packages (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS packages_owner_name_key ON packages (owner_id, lower(btrim(name)));
+
+-- Personal access tokens a person makes for a program, such as an MCP
+-- client. Like sessions, each copy keeps its own: they are never synced.
+CREATE TABLE IF NOT EXISTS api_tokens (
+    id text PRIMARY KEY,
+    user_id text NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    name text NOT NULL,
+    token_hash text NOT NULL UNIQUE,
+    role text NOT NULL CHECK (role IN ('read', 'deploy', 'admin')),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    last_used_at timestamptz,
+    expires_at timestamptz
+);
+
+CREATE INDEX IF NOT EXISTS api_tokens_user ON api_tokens (user_id);
+
+-- Codes the MCP server gives with the recap of a purchase or a destruction:
+-- the action runs only when the same token brings the code back, for the
+-- same tool and arguments, before it expires and only once.
+CREATE TABLE IF NOT EXISTS mcp_confirmations (
+    code_hash text PRIMARY KEY,
+    token_id text NOT NULL,
+    tool text NOT NULL,
+    args_hash text NOT NULL,
+    fingerprint text NOT NULL DEFAULT '',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    expires_at timestamptz NOT NULL,
+    used_at timestamptz
+);
+
+-- An install from the catalogue with copies, and a change of redundancy,
+-- left the copies asked at 1: an application asked at least as many as its
+-- most copied service has.
+UPDATE applications a SET replicas = s.most
+FROM (SELECT application_id, max(replicas) AS most FROM application_services GROUP BY application_id) s
+WHERE s.application_id = a.id AND a.replicas < s.most;

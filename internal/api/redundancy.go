@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,6 +13,8 @@ import (
 	"myinfra/internal/deploy"
 	"myinfra/internal/manifest"
 	"myinfra/internal/market"
+	"myinfra/internal/pack"
+	"myinfra/internal/spec"
 	"myinfra/internal/store"
 )
 
@@ -30,10 +33,20 @@ type redundancy struct {
 	Alone []string `json:"alone"`
 }
 
+// profileOf is what MyInfra knows of a service's data. One that mounts a
+// disk shared with other services stays where that disk is, whatever its
+// image: no copies, no replicated SQLite, no move to PostgreSQL.
+func profileOf(svc store.Service) market.Profile {
+	if spec.Shares(svc.Spec) {
+		return market.Profile{Kind: market.Unknown}
+	}
+	return market.ProfileOf(svc.Image, svc.Disk)
+}
+
 func redundancyPlan(services []store.Service) redundancy {
 	plan := redundancy{Scaled: []string{}, Failover: []string{}, Database: []string{}, Alone: []string{}}
 	for _, svc := range services {
-		switch market.ProfileOf(svc.Image, svc.Disk).Kind {
+		switch profileOf(svc).Kind {
 		case market.Stateless:
 			plan.Scaled = append(plan.Scaled, svc.Name)
 		case market.SingleWriter:
@@ -120,6 +133,12 @@ func (a *API) setRedundancy(w http.ResponseWriter, r *http.Request) {
 	if len(plan.Failover)+len(plan.Database) > 0 && nodes < storageNodes {
 		writeError(w, http.StatusConflict, errStorageNodes.Error())
 		return
+	}
+	if body.Copies >= 2 && body.Copies <= nodes {
+		if err := a.Store.SetApplicationReplicas(r.Context(), app.ID, body.Copies); err != nil {
+			a.mapErr(w, err)
+			return
+		}
 	}
 	scaled := map[string]int{}
 	for _, name := range plan.Scaled {
@@ -270,7 +289,7 @@ func shapeServices(services []store.Service, copies, nodes int) error {
 		return errStorageNodes
 	}
 	for i := range services {
-		switch market.ProfileOf(services[i].Image, services[i].Disk).Kind {
+		switch profileOf(services[i]).Kind {
 		case market.Stateless:
 			services[i].Replicas = copies
 		case market.SingleWriter:
@@ -293,13 +312,29 @@ func (a *API) redundancyPreview(w http.ResponseWriter, r *http.Request) {
 		ClusterID string `json:"clusterId"`
 		Image     string `json:"image"`
 		Article   string `json:"article"`
+		// Package is a saved package, by its id.
+		Package string `json:"package"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
 		return
 	}
 	var services []store.Service
-	if body.Article != "" {
+	if body.Package != "" {
+		row, err := a.Store.Package(r.Context(), ownerID(r.Context()), body.Package)
+		if err != nil {
+			a.mapErr(w, err)
+			return
+		}
+		var p pack.Package
+		if err := json.Unmarshal(row.Body, &p); err != nil {
+			a.mapErr(w, err)
+			return
+		}
+		for _, svc := range p.Services {
+			services = append(services, store.Service{Name: svc.Name, Image: svc.Image, Disk: len(svc.Volumes) > 0})
+		}
+	} else if body.Article != "" {
 		p, ok := market.PackageOf(body.Article)
 		if !ok {
 			writeError(w, http.StatusNotFound, "Cet article est introuvable.")

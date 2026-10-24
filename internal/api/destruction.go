@@ -195,6 +195,8 @@ func (a *API) startDestruction(ctx context.Context, owner, kind, target, name st
 	} else if kind == "cluster" {
 		a.stopUpdateJobs(ctx, owner, "", target)
 		a.note(ctx, owner, newID(), "cluster.delete", "warn", "Suppression demandée.", "", target)
+	} else if kind == "application" {
+		a.note(ctx, owner, newID(), "app.delete", "warn", "Suppression de l'application "+name+" demandée.", "", "")
 	}
 	go a.kickDestruction(id, owner)
 	return a.Store.Destruction(ctx, owner, id)

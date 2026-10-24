@@ -212,6 +212,22 @@ func (s *Store) SetServiceReplicas(ctx context.Context, applicationID string, co
 	return tx.Commit(ctx)
 }
 
+// SetApplicationReplicas records the copies asked for an application; each
+// service has those it can really have.
+func (s *Store) SetApplicationReplicas(ctx context.Context, applicationID string, copies int) error {
+	if copies < 1 || copies > 10 {
+		return ErrNotFound
+	}
+	tag, err := s.pool.Exec(ctx, `UPDATE applications SET replicas = $2 WHERE id = $1`, applicationID, copies)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // SetServiceBackup moves a service between its node disk and the copy of its
 // SQLite files in the cluster's object store.
 func (s *Store) SetServiceBackup(ctx context.Context, applicationID, name, state string) error {

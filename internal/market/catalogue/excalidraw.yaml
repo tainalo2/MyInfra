@@ -5,7 +5,8 @@ summary: Un tableau blanc.
 category: Collaboration
 services:
   - name: excalidraw
-    image: excalidraw/excalidraw:v0.18.0
+    # Le projet ne publie plus de version numérotée : latest est la seule à jour.
+    image: excalidraw/excalidraw:latest
     public: true
     port: 80
 about:

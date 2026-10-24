@@ -26,6 +26,8 @@ type eventView struct {
 	ServerName  string    `json:"serverName,omitempty"`
 	ClusterID   string    `json:"clusterId,omitempty"`
 	ClusterName string    `json:"clusterName,omitempty"`
+	Source      string    `json:"source"`
+	Actor       string    `json:"actor,omitempty"`
 }
 
 func (a *API) listEvents(w http.ResponseWriter, r *http.Request) {
@@ -34,7 +36,10 @@ func (a *API) listEvents(w http.ResponseWriter, r *http.Request) {
 		a.mapErr(w, err)
 		return
 	}
-	rows, err := a.Store.ListEvents(r.Context(), owner, r.URL.Query().Get("server"), r.URL.Query().Get("cluster"))
+	query := r.URL.Query()
+	rows, err := a.Store.ListEvents(r.Context(), owner, store.EventFilter{
+		ServerID: query.Get("server"), ClusterID: query.Get("cluster"), Source: query.Get("source"),
+	})
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -44,6 +49,7 @@ func (a *API) listEvents(w http.ResponseWriter, r *http.Request) {
 		out = append(out, eventView{
 			ID: row.ID, At: row.At, Kind: row.Kind, Level: row.Level, Message: row.Message,
 			ServerID: row.ServerID, ServerName: row.ServerName, ClusterID: row.ClusterID, ClusterName: row.ClusterName,
+			Source: row.Source, Actor: row.Actor,
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -65,6 +71,7 @@ func (a *API) note(ctx context.Context, owner, id, kind, level, message, serverI
 	_ = a.Store.AddEvent(ctx, store.Event{
 		ID: id, OwnerID: owner, Kind: kind, Level: level, Message: message,
 		ServerID: serverID, ClusterID: clusterID,
+		Source: sourceOf(ctx), Actor: actorOf(ctx),
 	})
 }
 
