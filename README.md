@@ -85,6 +85,7 @@ On a phone, the same application, laid out for the thumb:
 - **DNS records.** Every record of your zones next to what MyInfra expects, to republish a name or remove one left behind.
 - **Transfer.** Move MyInfra itself to a new machine or into a pod of the cluster, and follow the steps.
 - **Careful destruction.** Deleting an application, a machine or a cluster asks you to type its name again.
+- **AI assistants (MCP).** Claude, Cursor, VS Code or any MCP client drives MyInfra in plain words with a personal access token and its role: find and buy machines within a budget and a region, install applications, change DNS. Purchases, deletions and DNS changes that touch existing records show a recap and wait for your agreement; each action is in the history. See [docs/mcp.md](docs/mcp.md).
 - **Mobile.** Bottom tabs, step-by-step forms, a full-screen terminal with an Esc/Tab/Ctrl key bar.
 - **One file.** One executable contains the interface and its PostgreSQL, for Linux, macOS and Windows.
 
