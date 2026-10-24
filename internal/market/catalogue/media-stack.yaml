@@ -1,0 +1,271 @@
+type: myinfra-package
+version: 1
+name: Pile média
+summary: Jellyfin, Jellyseerr, Sonarr, Radarr, Prowlarr et qBittorrent, déjà reliés.
+category: Médias
+inputs:
+  - key: admin
+    label: Nom de l'administrateur des applications
+env:
+  TZ: Europe/Paris
+  PUID: "1000"
+  PGID: "1000"
+  ADMIN_USER: '{{input:admin}}'
+  ADMIN_PASSWORD: '{{secret:ADMIN_PASSWORD}}'
+  SONARR__AUTH__APIKEY: '{{secret:SONARR_KEY}}'
+  SONARR__AUTH__METHOD: Forms
+  SONARR__AUTH__REQUIRED: Enabled
+  RADARR__AUTH__APIKEY: '{{secret:RADARR_KEY}}'
+  RADARR__AUTH__METHOD: Forms
+  RADARR__AUTH__REQUIRED: Enabled
+  PROWLARR__AUTH__APIKEY: '{{secret:PROWLARR_KEY}}'
+  PROWLARR__AUTH__METHOD: Forms
+  PROWLARR__AUTH__REQUIRED: Enabled
+disks:
+  - name: media
+    sizeGi: 20
+services:
+  - name: jellyseerr
+    image: fallenbagel/jellyseerr:2.7.3
+    public: true
+    port: 5055
+    volumes:
+      - path: /app/config
+        sizeGi: 2
+  - name: jellyfin
+    image: jellyfin/jellyfin:10.10.7
+    public: true
+    port: 8096
+    env:
+      JELLYFIN_PublishedServerUrl: '{{url:jellyfin}}'
+    volumes:
+      - path: /config
+        sizeGi: 8
+      - path: /data
+        disk: media
+  - name: sonarr
+    image: linuxserver/sonarr:4.0.20
+    public: true
+    port: 8989
+    volumes:
+      - path: /config
+        sizeGi: 2
+      - path: /data
+        disk: media
+  - name: radarr
+    image: linuxserver/radarr:5.28.0
+    public: true
+    port: 7878
+    volumes:
+      - path: /config
+        sizeGi: 2
+      - path: /data
+        disk: media
+  - name: prowlarr
+    image: linuxserver/prowlarr:1.32.2
+    public: true
+    port: 9696
+    volumes:
+      - path: /config
+        sizeGi: 1
+  - name: qbittorrent
+    image: linuxserver/qbittorrent:5.1.2
+    public: true
+    port: 8080
+    env:
+      WEBUI_PORT: "8080"
+    volumes:
+      - path: /config
+        sizeGi: 1
+      - path: /data
+        disk: media
+    files:
+      - path: /defaults/qBittorrent.conf
+        content: |
+          [BitTorrent]
+          Session\DefaultSavePath=/data/torrents
+          Session\TempPathEnabled=false
+
+          [LegalNotice]
+          Accepted=true
+
+          [Preferences]
+          WebUI\Address=*
+          WebUI\Port=8080
+          WebUI\HostHeaderValidation=false
+          WebUI\AuthSubnetWhitelistEnabled=true
+          WebUI\AuthSubnetWhitelist=10.42.0.0/16, 172.16.0.0/12
+          WebUI\ReverseProxySupportEnabled=true
+          WebUI\TrustedReverseProxiesList=10.42.0.0/16, 172.16.0.0/12
+  - name: setup
+    image: alpine:3.20
+    noPort: true
+    command: [sh, /setup/run.sh]
+    dependsOn: [jellyseerr, jellyfin, sonarr, radarr, prowlarr, qbittorrent]
+    volumes:
+      - path: /data
+        disk: media
+    files:
+      - path: /setup/run.sh
+        content: |
+          #!/bin/sh
+          # Relie les applications de la pile média entre elles, puis recommence
+          # toutes les cinq minutes : chaque étape vérifie avant d'agir, et l'échec
+          # de l'une n'empêche pas les autres.
+          set -u
+          apk add --no-cache curl jq >/dev/null 2>&1 || true
+
+          log() { echo "[setup] $*"; }
+          ADMIN="${ADMIN_USER}"
+          PASS="${ADMIN_PASSWORD}"
+          SONARR="http://sonarr:8989"
+          RADARR="http://radarr:7878"
+          PROWLARR="http://prowlarr:9696"
+          QBIT="http://qbittorrent:8080"
+          JELLYFIN="http://jellyfin:8096"
+          SEERR="http://jellyseerr:5055"
+
+          up() { curl -fsS -m 10 -o /dev/null "$1" 2>/dev/null; }
+          arr() { # arr GET|POST|PUT url key [body]
+            if [ $# -ge 4 ]; then
+              curl -fsS -m 30 -X "$1" -H "X-Api-Key: $3" -H 'Content-Type: application/json' -d "$4" "$2"
+            else
+              curl -fsS -m 30 -X "$1" -H "X-Api-Key: $3" "$2"
+            fi
+          }
+
+          folders() {
+            mkdir -p /data/torrents/tv /data/torrents/movies /data/media/tv /data/media/movies
+            chown -R "${PUID:-1000}:${PGID:-1000}" /data/torrents /data/media 2>/dev/null || true
+          }
+
+          # The sign-in of a Servarr application: forms, with the administrator.
+          login() { # login base api key
+            host=$(arr GET "$1/api/$2/config/host" "$3") || { log "$1 : réglages illisibles"; return; }
+            if [ "$(echo "$host" | jq -r '.username // ""')" = "$ADMIN" ]; then return; fi
+            body=$(echo "$host" | jq --arg u "$ADMIN" --arg p "$PASS" '.authenticationMethod="forms" | .authenticationRequired="enabled" | .username=$u | .password=$p | .passwordConfirmation=$p')
+            arr PUT "$1/api/$2/config/host/$(echo "$host" | jq -r .id)" "$3" "$body" >/dev/null && log "$1 : connexion par $ADMIN" || log "$1 : connexion non réglée"
+          }
+
+          rootfolder() { # rootfolder base key path
+            if arr GET "$1/api/v3/rootfolder" "$2" | jq -e --arg p "$3" 'any(.[]; .path==$p)' >/dev/null; then return; fi
+            arr POST "$1/api/v3/rootfolder" "$2" "{\"path\":\"$3\"}" >/dev/null && log "$1 : dossier $3" || log "$1 : dossier $3 refusé"
+          }
+
+          # qBittorrent as the download client of a Servarr application, built from
+          # the application's own schema so that every field it expects is there.
+          client() { # client base key category-field category
+            if arr GET "$1/api/v3/downloadclient" "$2" | jq -e 'any(.[]; .implementation=="QBittorrent")' >/dev/null; then return; fi
+            body=$(arr GET "$1/api/v3/downloadclient/schema" "$2" | jq --arg u "$ADMIN" --arg p "$PASS" --arg cf "$3" --arg c "$4" '
+              first(.[] | select(.implementation=="QBittorrent"))
+              | .name="qBittorrent" | .enable=true
+              | .fields |= map(if .name=="host" then .value="qbittorrent"
+                  elif .name=="port" then .value=8080
+                  elif .name=="username" then .value=$u
+                  elif .name=="password" then .value=$p
+                  elif .name==$cf then .value=$c else . end)') || return
+            arr POST "$1/api/v3/downloadclient" "$2" "$body" >/dev/null && log "$1 : client qBittorrent" || log "$1 : client qBittorrent refusé"
+          }
+
+          # Sonarr and Radarr as applications of Prowlarr, which sends them the indexers.
+          application() { # application Implementation base key
+            if arr GET "$PROWLARR/api/v1/applications" "$PROWLARR__AUTH__APIKEY" | jq -e --arg i "$1" 'any(.[]; .implementation==$i)' >/dev/null; then return; fi
+            body=$(arr GET "$PROWLARR/api/v1/applications/schema" "$PROWLARR__AUTH__APIKEY" | jq --arg i "$1" --arg b "$2" --arg k "$3" '
+              first(.[] | select(.implementation==$i))
+              | .name=$i | .syncLevel="fullSync"
+              | .fields |= map(if .name=="prowlarrUrl" then .value="http://prowlarr:9696"
+                  elif .name=="baseUrl" then .value=$b
+                  elif .name=="apiKey" then .value=$k else . end)') || return
+            arr POST "$PROWLARR/api/v1/applications" "$PROWLARR__AUTH__APIKEY" "$body" >/dev/null && log "prowlarr : $1 relié" || log "prowlarr : $1 refusé"
+          }
+
+          qbittorrent() {
+            # Reached from the pods' network, qBittorrent asks no password: the
+            # preferences are set once, the password for visitors among them.
+            prefs=$(jq -n --arg u "$ADMIN" --arg p "$PASS" '{web_ui_username:$u, web_ui_password:$p, save_path:"/data/torrents", temp_path_enabled:false}')
+            if curl -fsS -m 10 "$QBIT/api/v2/app/preferences" | jq -e --arg u "$ADMIN" '.web_ui_username==$u and .save_path=="/data/torrents"' >/dev/null; then return; fi
+            curl -fsS -m 10 -X POST --data-urlencode "json=$prefs" "$QBIT/api/v2/app/setPreferences" >/dev/null && log "qbittorrent : réglé" || log "qbittorrent : réglages refusés"
+          }
+
+          jellyfin() {
+            info=$(curl -fsS -m 10 "$JELLYFIN/System/Info/Public") || return
+            if [ "$(echo "$info" | jq -r .StartupWizardCompleted)" != "true" ]; then
+              curl -fsS -m 30 -X POST -H 'Content-Type: application/json' -d '{"UICulture":"fr-FR","MetadataCountryCode":"FR","PreferredMetadataLanguage":"fr"}' "$JELLYFIN/Startup/Configuration" >/dev/null
+              curl -fsS -m 30 "$JELLYFIN/Startup/User" >/dev/null
+              curl -fsS -m 30 -X POST -H 'Content-Type: application/json' -d "$(jq -n --arg u "$ADMIN" --arg p "$PASS" '{Name:$u, Password:$p}')" "$JELLYFIN/Startup/User" >/dev/null
+              curl -fsS -m 30 -X POST -H 'Content-Type: application/json' -d '{"EnableRemoteAccess":true,"EnableAutomaticPortMapping":false}' "$JELLYFIN/Startup/RemoteAccess" >/dev/null
+              curl -fsS -m 30 -X POST "$JELLYFIN/Startup/Complete" >/dev/null && log "jellyfin : premier démarrage passé" || { log "jellyfin : premier démarrage refusé"; return; }
+            fi
+            auth='MediaBrowser Client="MyInfra", Device="setup", DeviceId="myinfra-setup", Version="1"'
+            token=$(curl -fsS -m 30 -X POST -H 'Content-Type: application/json' -H "Authorization: $auth" -d "$(jq -n --arg u "$ADMIN" --arg p "$PASS" '{Username:$u, Pw:$p}')" "$JELLYFIN/Users/AuthenticateByName" | jq -r .AccessToken) || { log "jellyfin : connexion refusée"; return; }
+            libraries=$(curl -fsS -m 30 -H "Authorization: $auth, Token=\"$token\"" "$JELLYFIN/Library/VirtualFolders") || return
+            for pair in "Films:movies:/data/media/movies" "Séries:tvshows:/data/media/tv"; do
+              name=${pair%%:*}; rest=${pair#*:}; kind=${rest%%:*}; path=${rest#*:}
+              if echo "$libraries" | jq -e --arg p "$path" 'any(.[]; any(.Locations[]?; .==$p))' >/dev/null; then continue; fi
+              curl -fsS -m 30 -X POST -H "Authorization: $auth, Token=\"$token\"" -H 'Content-Type: application/json' \
+                -d "{ \"LibraryOptions\": { \"PathInfos\": [ { \"Path\": \"$path\" } ] } }" \
+                "$JELLYFIN/Library/VirtualFolders?name=$(printf %s "$name" | jq -sRr @uri)&collectionType=$kind&refreshLibrary=true" >/dev/null && log "jellyfin : bibliothèque $name" || log "jellyfin : bibliothèque $name refusée"
+            done
+          }
+
+          # Jellyseerr: signed in once with the Jellyfin administrator, it knows
+          # Jellyfin's libraries, Sonarr and Radarr.
+          jellyseerr() {
+            if curl -fsS -m 10 "$SEERR/api/v1/settings/public" | jq -e '.initialized==true' >/dev/null; then return; fi
+            jar=/tmp/seerr.cookies
+            rm -f "$jar"
+            curl -fsS -m 60 -c "$jar" -X POST -H 'Content-Type: application/json' \
+              -d "$(jq -n --arg u "$ADMIN" --arg p "$PASS" '{username:$u, password:$p, hostname:"jellyfin", port:8096, useSsl:false, urlBase:"", email:($u+"@media.lan"), serverType:2}')" \
+              "$SEERR/api/v1/auth/jellyfin" >/dev/null || { log "jellyseerr : connexion à Jellyfin refusée (à faire dans son assistant)"; return; }
+            ids=$(curl -fsS -m 60 -b "$jar" "$SEERR/api/v1/settings/jellyfin/library?sync=true" | jq -r '[.[].id] | join(",")')
+            [ -n "$ids" ] && curl -fsS -m 60 -b "$jar" "$SEERR/api/v1/settings/jellyfin/library?enable=$ids" >/dev/null
+            for app in sonarr radarr; do
+              if [ "$app" = sonarr ]; then base=$SONARR; key=$SONARR__AUTH__APIKEY; port=8989; dir=/data/media/tv; else base=$RADARR; key=$RADARR__AUTH__APIKEY; port=7878; dir=/data/media/movies; fi
+              profile=$(arr GET "$base/api/v3/qualityprofile" "$key" | jq -c 'first(.[])') || continue
+              body=$(jq -n --arg n "$app" --arg k "$key" --argjson port "$port" --arg d "$dir" --argjson p "$profile" '{
+                name:$n, hostname:$n, port:$port, apiKey:$k, useSsl:false, baseUrl:"",
+                activeProfileId:$p.id, activeProfileName:$p.name, activeDirectory:$d,
+                is4k:false, isDefault:true, externalUrl:"", syncEnabled:true, preventSearch:false,
+                minimumAvailability:"released", enableSeasonFolders:true, tags:[], animeTags:[]}')
+              curl -fsS -m 30 -b "$jar" -X POST -H 'Content-Type: application/json' -d "$body" "$SEERR/api/v1/settings/$app" >/dev/null && log "jellyseerr : $app relié" || log "jellyseerr : $app refusé"
+            done
+            curl -fsS -m 30 -b "$jar" -X POST "$SEERR/api/v1/settings/initialize" >/dev/null && log "jellyseerr : prêt" || log "jellyseerr : initialisation refusée"
+          }
+
+          while true; do
+            folders
+            for base in "$SONARR" "$RADARR" "$PROWLARR" "$QBIT" "$JELLYFIN" "$SEERR"; do
+              until up "$base"; do sleep 10; done
+            done
+            login "$SONARR" v3 "$SONARR__AUTH__APIKEY"
+            login "$RADARR" v3 "$RADARR__AUTH__APIKEY"
+            login "$PROWLARR" v1 "$PROWLARR__AUTH__APIKEY"
+            rootfolder "$SONARR" "$SONARR__AUTH__APIKEY" /data/media/tv
+            rootfolder "$RADARR" "$RADARR__AUTH__APIKEY" /data/media/movies
+            qbittorrent
+            client "$SONARR" "$SONARR__AUTH__APIKEY" tvCategory tv
+            client "$RADARR" "$RADARR__AUTH__APIKEY" movieCategory movies
+            application Sonarr "$SONARR" "$SONARR__AUTH__APIKEY"
+            application Radarr "$RADARR" "$RADARR__AUTH__APIKEY"
+            jellyfin
+            jellyseerr
+            log "tour terminé"
+            sleep 300
+          done
+about:
+  site: https://jellyfin.org
+  logo: jellyfin
+  description: "Une médiathèque complète en une installation : Jellyfin lit, Jellyseerr reçoit les demandes, Sonarr et Radarr suivent séries et films, Prowlarr cherche, qBittorrent télécharge. Les clés API sont tirées et les applications reliées toutes seules ; le disque media est partagé."
+  translations:
+    en:
+      summary: Jellyfin, Jellyseerr, Sonarr, Radarr, Prowlarr and qBittorrent, already linked.
+      description: "A whole media library in one installation: Jellyfin plays, Jellyseerr takes requests, Sonarr and Radarr follow series and films, Prowlarr searches, qBittorrent downloads. API keys are drawn and the applications linked on their own; the media disk is shared."
+    pt:
+      summary: Jellyfin, Jellyseerr, Sonarr, Radarr, Prowlarr e qBittorrent, já ligados.
+      description: "Uma mediateca completa numa só instalação: o Jellyfin reproduz, o Jellyseerr recebe pedidos, o Sonarr e o Radarr seguem séries e filmes, o Prowlarr procura, o qBittorrent transfere. As chaves API são geradas e as aplicações ligadas sozinhas; o disco media é partilhado."
+    it:
+      summary: Jellyfin, Jellyseerr, Sonarr, Radarr, Prowlarr e qBittorrent, già collegati.
+      description: "Una mediateca completa in un'unica installazione: Jellyfin riproduce, Jellyseerr riceve le richieste, Sonarr e Radarr seguono serie e film, Prowlarr cerca, qBittorrent scarica. Le chiavi API sono generate e le applicazioni collegate da sole; il disco media è condiviso."
+    de:
+      summary: Jellyfin, Jellyseerr, Sonarr, Radarr, Prowlarr und qBittorrent, bereits verbunden.
+      description: "Eine ganze Mediathek in einer Installation: Jellyfin spielt ab, Jellyseerr nimmt Wünsche an, Sonarr und Radarr verfolgen Serien und Filme, Prowlarr sucht, qBittorrent lädt herunter. API-Schlüssel werden gezogen und die Anwendungen selbst verbunden; die Festplatte media wird geteilt."
