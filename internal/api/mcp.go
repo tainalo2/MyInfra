@@ -32,7 +32,9 @@ Règles :
 - Les modifications DNS qui touchent un enregistrement existant suivent la même règle.
 - La redondance réelle est celle que rapporte l'outil, service par service : n'en promettez pas davantage.
 - Quand une demande est impossible, présentez les alternatives proposées par l'outil.
-- Pour écrire un paquet, lisez la ressource myinfra://guide/packages et vérifiez le texte avec check_package avant de l'enregistrer.
+- Pour écrire un paquet, lisez la ressource myinfra://guide/packages et vérifiez le texte avec check_package avant de l'enregistrer. Un paquet de l'utilisateur s'enregistre avec create_package ; le catalogue n'est pas modifié par ici.
+- Un paquet peut avoir plusieurs services publics : le premier est le principal (domains), les autres reçoivent leurs noms par service_domains, sinon une adresse donnée par MyInfra.
+- Les services qui montent un disque partagé tournent en une copie, sur un même nœud : à l'installation sur un cluster, choisissez ce nœud avec disk_node d'après la place libre (get_cluster_usage).
 - Les identifiants (comptes provider, DNS, mots de passe) ne passent jamais par ici : renvoyez l'utilisateur vers l'interface.`
 
 type rpcMessage struct {

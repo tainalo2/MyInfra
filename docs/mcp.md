@@ -81,6 +81,20 @@ La recherche respecte le provider, le pays, le continent, le lieu, le processeur
 - « Transforme ce docker-compose en paquet. » · « Importe le chart Helm bitnami/wordpress. » · « Convertis ces manifests Kubernetes. »
 - « Écris un paquet Gitea avec PostgreSQL, un disque de 20 Gi, sur le port 3000. » L'assistant lit le guide `myinfra://guide/packages` et vérifie le paquet avant de l'enregistrer.
 
+### Paquets à plusieurs services
+
+Un paquet peut réunir plusieurs applications qui travaillent ensemble, par exemple la pile média de l'utilisateur (paquet « Pile média » : Jellyseerr, Jellyfin, Sonarr, Radarr, Prowlarr, qBittorrent).
+
+- **Plusieurs services publics.** Le premier service `public: true` est le principal : il reçoit `domains` et donne l'adresse de l'application. Les autres reçoivent leurs noms par `service_domains`, par exemple `{"sonarr": ["sonarr.mondomaine.fr"]}`, sinon `<service>-<application>.<domaine des apps>`. `set_domains` change ensuite les noms de chaque service. Dans un paquet, `{{url:service}}` et `{{host:service}}` donnent l'adresse d'un autre service public.
+- **Disques partagés.** `disks: [{name: media, sizeGi: 20}]` déclare un disque une fois ; un service le monte par `volumes: [{path: /data, disk: media}]`. Tous les services qui le montent voient les mêmes fichiers, tournent en une copie et vivent sur le même nœud, celui du disque.
+- **Choisir ce nœud.** Le disque partagé vit sur le disque local d'une machine du cluster. À l'installation, `disk_node` nomme cette machine. Choisissez-la d'après `get_cluster_usage` : sans ce choix, le cluster prend la première venue, qui peut manquer de place. Le choix reste quand les services changent ; un paquet exporté n'en garde pas.
+- **Ce qui reste à une copie.** La redondance, la bascule et la sauvegarde automatique ne s'appliquent pas aux services d'un disque partagé ; l'aperçu de suppression cite le disque, qui part avec l'application.
+- **Relier les applications.** Les secrets tirés à l'installation (`{{secret:…}}`) sont communs à tous les services : une clé API tirée une fois peut être donnée à l'application qui l'utilise et à celles qui l'appellent. Un service sans port (`noPort: true`) peut faire le câblage par les API des autres, comme le service `setup` de la pile média.
+
+Exemples :
+- « Enregistre ce paquet docker-compose de ma pile média. » Un volume monté par plusieurs services devient un disque partagé.
+- « Installe le paquet Pile média sur SW, disques sur SW4, avec media.mondomaine.fr et un nom par service. »
+
 ### Déployer
 
 - « Déploie un Nextcloud redondé sur SW avec cloud.mondomaine.fr. » L'assistant dit service par service ce qui est vraiment redondé. Aujourd'hui seul Redis l'est : Nextcloud et MariaDB restent à une copie. Il demande votre accord avant d'installer.

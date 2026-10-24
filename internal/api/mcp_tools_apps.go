@@ -238,7 +238,7 @@ func mcpAppTools() []mcpTool {
 	return []mcpTool{
 		{
 			Name: "install", Title: "Installer une application", Role: store.RoleDeploy, Write: true,
-			Description: "Installe un article du catalogue ou un paquet enregistré sur un cluster ou une machine, avec ses domaines, les réponses à ses questions et un nombre de copies. Avec copies > 1, le résultat dit service par service ce qui est vraiment redondé ; si une partie reste à une copie, ou si un domaine porte déjà des enregistrements DNS étrangers à MyInfra, le premier appel rend un récapitulatif et un code à renvoyer après l'accord de l'utilisateur.",
+			Description: "Installe un article du catalogue ou un paquet enregistré sur un cluster ou une machine, avec ses domaines (domains pour le service principal, service_domains pour les autres services publics), les réponses à ses questions, un nombre de copies et, s'il a des disques partagés, la machine qui les porte (disk_node). Avec copies > 1, le résultat dit service par service ce qui est vraiment redondé ; si une partie reste à une copie, ou si un domaine porte déjà des enregistrements DNS étrangers à MyInfra, le premier appel rend un récapitulatif et un code à renvoyer après l'accord de l'utilisateur.",
 			Schema: object(nil, map[string]any{
 				"article":         text("Article du catalogue (search_catalogue), par exemple nextcloud."),
 				"package":         text("Paquet enregistré (list_packages)."),
