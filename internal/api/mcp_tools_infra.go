@@ -173,7 +173,9 @@ func deletionTool(kind, name, title, description string) mcpTool {
 			}
 			target, err := c.deletionTarget(kind, args.Name)
 			if err != nil {
-				return "", err
+				// A code sent again once the deletion ran finds its target gone:
+				// say the code is spent rather than the name unknown.
+				return "", c.spentCode(args.Confirmation, err)
 			}
 			if target.ID == selfAppID {
 				return "", failf("MyInfra ne se supprime pas par l'assistant : faites-le depuis l'interface, avec la phrase de confirmation.")

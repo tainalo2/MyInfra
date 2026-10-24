@@ -65,7 +65,7 @@ func (c *mcpCall) confirmed(raw json.RawMessage, code string, recap func() (stri
 	}
 	taken, err := a.Store.TakeConfirmation(c.ctx, hashToken(normalCode(code)))
 	if errors.Is(err, store.ErrNotFound) {
-		return "", failf("Code de confirmation inconnu, expiré ou déjà utilisé : relancez sans code pour obtenir un nouveau récapitulatif.")
+		return "", failf(spentCodeText)
 	}
 	if err != nil {
 		return "", err
@@ -82,6 +82,21 @@ func (c *mcpCall) confirmed(raw json.RawMessage, code string, recap func() (stri
 			"La situation a changé depuis le récapitulatif (prix, disponibilité ou enregistrements) : rien n'a été fait. Voici le nouveau récapitulatif.\n\n")
 	}
 	return act()
+}
+
+const spentCodeText = "Code de confirmation inconnu, expiré ou déjà utilisé : relancez sans code pour obtenir un nouveau récapitulatif."
+
+// spentCode is the refusal for a request whose target cannot be found: when
+// it came with a code that can no longer be taken, that is what to say.
+func (c *mcpCall) spentCode(code string, refusal error) error {
+	if code == "" {
+		return refusal
+	}
+	live, err := c.api().Store.ConfirmationLive(c.ctx, hashToken(normalCode(code)))
+	if err != nil || live {
+		return refusal
+	}
+	return failf(spentCodeText)
 }
 
 func (c *mcpCall) offer(token store.APIToken, raw json.RawMessage, recap func() (string, string, error), lead string) (string, error) {

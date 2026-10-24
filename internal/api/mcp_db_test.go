@@ -203,6 +203,15 @@ func TestMCPDeletionAsksFirst(t *testing.T) {
 	if text, failed := mcpCallTool(t, h, deploy, "delete_application", map[string]any{"name": "demo", "confirmation": code}); !failed || !strings.Contains(text, "déjà utilisé") {
 		t.Fatal(text)
 	}
+	// Once the deletion is over the name is gone, and the code still says
+	// it was used.
+	_ = a.Store.DeleteApplication(ctx, "owner", "app-demo")
+	if text, failed := mcpCallTool(t, h, deploy, "delete_application", map[string]any{"name": "demo", "confirmation": code}); !failed || !strings.Contains(text, "déjà utilisé") {
+		t.Fatal(text)
+	}
+	if text, failed := mcpCallTool(t, h, deploy, "delete_application", map[string]any{"name": "demo"}); !failed || !strings.Contains(text, "« demo »") {
+		t.Fatal(text)
+	}
 	rec := call(t, h, http.MethodGet, "/api/events?source=mcp", "", "sess-owner", nil)
 	body := rec.Body.String()
 	for _, want := range []string{`"kind":"app.delete"`, `"kind":"mcp.call"`, `"kind":"mcp.refused"`} {

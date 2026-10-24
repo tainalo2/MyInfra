@@ -43,3 +43,12 @@ func (s *Store) TakeConfirmation(ctx context.Context, codeHash string) (Confirma
 	}
 	return c, err
 }
+
+// ConfirmationLive says whether a code can still be taken, without taking it.
+func (s *Store) ConfirmationLive(ctx context.Context, codeHash string) (bool, error) {
+	var live bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM mcp_confirmations WHERE code_hash = $1 AND used_at IS NULL AND expires_at > now())`, codeHash).
+		Scan(&live)
+	return live, err
+}
