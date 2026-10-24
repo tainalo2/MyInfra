@@ -34,60 +34,80 @@ func EnvOK(env map[string]string) bool {
 }
 
 func Deployable(app App) bool {
-	if app.ID == "" || !EnvOK(app.Env) {
-		return false
+	return Refusal(app) == ""
+}
+
+// Refusal says why an application cannot be rendered, or "" when it can.
+func Refusal(app App) string {
+	if app.ID == "" {
+		return "L'application n'a pas d'identifiant."
+	}
+	if !EnvOK(app.Env) {
+		return "Une variable de l'application a un nom ou une valeur refusés."
 	}
 	for _, shared := range app.Shared {
 		if !sharedName.MatchString(shared.Name) || len(shared.Data) == 0 || !EnvOK(shared.Data) {
-			return false
+			return "Le secret partagé " + shared.Name + " est vide ou mal formé."
 		}
 	}
 	for _, host := range app.Hosts {
 		if host == "" || strings.ContainsAny(host, "\r\n '\"\\") {
-			return false
+			return fmt.Sprintf("Le nom %q est refusé.", host)
 		}
 	}
 	for _, svc := range app.Services {
-		if !deployService.MatchString(svc.Name) || !deployImage.MatchString(svc.Image) || strings.Contains(svc.Image, "..") {
-			return false
+		if !deployService.MatchString(svc.Name) {
+			return fmt.Sprintf("Le nom de service %q est refusé.", svc.Name)
 		}
-		if svc.Listen < 0 || svc.Listen > 65535 || svc.DiskGi < 0 || svc.DiskGi > 1024 || svc.Replicas < 0 || svc.Replicas > 10 {
-			return false
+		if !deployImage.MatchString(svc.Image) || strings.Contains(svc.Image, "..") {
+			return fmt.Sprintf("L'image %q du service %s est refusée.", svc.Image, svc.Name)
+		}
+		if svc.Listen < 0 || svc.Listen > 65535 {
+			return fmt.Sprintf("Le port %d du service %s est hors limites.", svc.Listen, svc.Name)
+		}
+		if svc.DiskGi < 0 || svc.DiskGi > 1024 {
+			return fmt.Sprintf("Le disque de %d Gio du service %s est hors limites.", svc.DiskGi, svc.Name)
+		}
+		if svc.Replicas < 0 || svc.Replicas > 10 {
+			return fmt.Sprintf("Les %d copies du service %s sont hors limites.", svc.Replicas, svc.Name)
 		}
 		if svc.Disk {
 			path := diskPathOf(svc)
 			if !deployPath.MatchString(path) || strings.Contains(path, "..") {
-				return false
+				return fmt.Sprintf("Le chemin du disque %q du service %s est refusé.", path, svc.Name)
 			}
 		}
 		for _, arg := range svc.Args {
 			if !deployArg.MatchString(arg) {
-				return false
+				return fmt.Sprintf("Un argument du service %s contient des caractères refusés.", svc.Name)
 			}
 		}
 		if svc.Backup != nil && !backupOK(svc) {
-			return false
+			return "La sauvegarde du service " + svc.Name + " est mal réglée."
 		}
-		if !EnvOK(svc.Env) || !specOK(app, svc) {
-			return false
+		if !EnvOK(svc.Env) {
+			return "Une variable du service " + svc.Name + " a un nom ou une valeur refusés."
+		}
+		if !specOK(app, svc) {
+			return "La description du service " + svc.Name + " est incohérente."
 		}
 		for key, ref := range svc.SecretEnv {
 			if !deployEnv.MatchString(key) || !objectName.MatchString(ref.Secret) || !deployEnv.MatchString(ref.Key) {
-				return false
+				return "La variable secrète " + key + " du service " + svc.Name + " est mal formée."
 			}
 		}
 	}
 	for _, db := range app.Databases {
 		if !objectName.MatchString(db.Name) || !deployEnv.MatchString(db.Database) || db.Instances > 5 || db.SizeGi > 1024 {
-			return false
+			return "La base " + db.Name + " est mal réglée."
 		}
 	}
 	for _, secret := range app.Secrets {
 		if !objectName.MatchString(secret.Name) || !EnvOK(secret.Data) {
-			return false
+			return "Le secret " + secret.Name + " est mal formé."
 		}
 	}
-	return true
+	return ""
 }
 
 // objectName is a Kubernetes object MyInfra names itself.

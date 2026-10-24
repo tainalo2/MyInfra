@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -157,6 +158,7 @@ func (a *API) deliverCluster(ctx context.Context, leader store.ClusterLeader) {
 		if err != nil {
 			slog.Info("variables", "app", app.ID, "err", "lecture impossible")
 			_ = a.Store.SetRunStatus(ctx, app.ID, "failed")
+			_ = a.Store.SetRunDetail(ctx, app.ID, "Les variables de l'application n'ont pas pu être déchiffrées.")
 			keep[manifest.Namespace(app.ID)] = true
 			continue
 		}
@@ -172,14 +174,16 @@ func (a *API) deliverCluster(ctx context.Context, leader store.ClusterLeader) {
 		if err := a.attachShared(ctx, leader.OwnerID, app.ID, &spec); err != nil {
 			slog.Info("secrets", "app", app.ID, "err", "lecture impossible")
 			_ = a.Store.SetRunStatus(ctx, app.ID, "failed")
+			_ = a.Store.SetRunDetail(ctx, app.ID, "Les secrets partagés de l'application n'ont pas pu être lus.")
 			keep[manifest.Namespace(app.ID)] = true
 			continue
 		}
 		if address, err := a.Store.Address(ctx, app.ID); err == nil {
 			withAddress(&spec, address)
 		}
-		if !manifest.Deployable(spec) {
+		if refusal := manifest.Refusal(spec); refusal != "" {
 			_ = a.Store.SetRunStatus(ctx, app.ID, "failed")
+			_ = a.Store.SetRunDetail(ctx, app.ID, refusal)
 			keep[manifest.Namespace(app.ID)] = true
 			continue
 		}
@@ -198,6 +202,7 @@ func (a *API) deliverCluster(ctx context.Context, leader store.ClusterLeader) {
 					return
 				}
 				slog.Info("apply", "app", app.ID, "err", err)
+				_ = a.Store.SetRunDetail(ctx, app.ID, "Kubernetes a refusé l'application : "+kubectlError(err.Error()))
 				continue
 			}
 			changed = true
@@ -206,6 +211,10 @@ func (a *API) deliverCluster(ctx context.Context, leader store.ClusterLeader) {
 				a.pruneShared(ctx, host, manifest.Namespace(app.ID), raw)
 				if !app.Paused {
 					_, _ = deploy.SSH(ctx, host, "k3s kubectl -n "+manifest.Namespace(app.ID)+" delete deploy,svc paused --ignore-not-found --wait=false")
+				}
+				if app.RunStatus == "failed" {
+					// What made the previous version fail no longer holds.
+					_ = a.Store.SetRunDetail(ctx, app.ID, "")
 				}
 				if app.Paused {
 					app.RunStatus = "paused"
@@ -352,6 +361,11 @@ func (a *API) checkHealth(ctx context.Context, host deploy.Host, clusterID strin
 		}
 		if !since.IsZero() && time.Since(since) > startupLimit {
 			verdict = "failed"
+			_ = a.Store.SetRunDetail(ctx, app.ID, fmt.Sprintf("L'application n'est pas prête après %s.", startupLimit))
+		}
+	} else if verdict == "failed" {
+		if detail := stuckDetail(stuckReason(waiting)); detail != "" {
+			_ = a.Store.SetRunDetail(ctx, app.ID, detail)
 		}
 	}
 	if verdict != app.RunStatus {
@@ -383,13 +397,34 @@ func (a *API) namesAnswer(ctx context.Context, appID string) bool {
 	return true
 }
 
-// healthOf reads the ready copies ("1/1 0/1 ") and the waiting reasons of the containers.
-func healthOf(replicas, waiting string) string {
+// stuckReason is the first waiting reason that keeps a container from starting.
+func stuckReason(waiting string) string {
 	for _, reason := range strings.Fields(waiting) {
 		switch reason {
 		case "CrashLoopBackOff", "ImagePullBackOff", "ErrImagePull", "InvalidImageName", "CreateContainerConfigError":
-			return "failed"
+			return reason
 		}
+	}
+	return ""
+}
+
+// stuckDetail says what a waiting reason means and where to look next.
+func stuckDetail(reason string) string {
+	switch reason {
+	case "":
+		return ""
+	case "ImagePullBackOff", "ErrImagePull", "InvalidImageName":
+		return "L'image ne peut pas être téléchargée (" + reason + ") : sa version n'existe pas, ou son registre la refuse."
+	case "CreateContainerConfigError":
+		return "Le conteneur ne peut pas être créé (" + reason + ") : une variable ou un secret qu'il attend manque."
+	}
+	return "Le conteneur redémarre en boucle (" + reason + ") : ses journaux disent pourquoi."
+}
+
+// healthOf reads the ready copies ("1/1 0/1 ") and the waiting reasons of the containers.
+func healthOf(replicas, waiting string) string {
+	if stuckReason(waiting) != "" {
+		return "failed"
 	}
 	fields := strings.Fields(replicas)
 	if len(fields) == 0 {
@@ -478,6 +513,26 @@ func appRejected(err error) bool {
 		}
 	}
 	return true
+}
+
+// kubectlError keeps the lines where kubectl says what it refused, the
+// rest being what it applied without trouble.
+func kubectlError(text string) string {
+	var kept []string
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "Error") || strings.Contains(line, "is invalid") || strings.Contains(line, "error:") {
+			kept = append(kept, line)
+		}
+	}
+	out := strings.Join(kept, " ")
+	if out == "" {
+		out = lastLine(text)
+	}
+	if len(out) > 600 {
+		out = out[:600] + "…"
+	}
+	return out
 }
 
 func (a *API) pruneShared(ctx context.Context, host deploy.Host, namespace, raw string) {
