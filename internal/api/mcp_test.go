@@ -132,6 +132,13 @@ func TestMCPRefusesWithoutToken(t *testing.T) {
 	if got.Code != http.StatusMethodNotAllowed {
 		t.Fatal(got.Code)
 	}
+	req = httptest.NewRequest(http.MethodGet, "/mcp", nil)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml")
+	got = httptest.NewRecorder()
+	h.ServeHTTP(got, req)
+	if got.Code != http.StatusFound || got.Header().Get("Location") != "/assistants" {
+		t.Fatal(got.Code, got.Header())
+	}
 	req = httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader("{}"))
 	req.Header.Set("Origin", "https://evil.example")
 	got = httptest.NewRecorder()

@@ -64,6 +64,11 @@ const (
 // mcpServer answers POST /mcp; inner is the router the tools call through.
 func (a *API) mcpServer(inner http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.Contains(r.Header.Get("Accept"), "text/html") {
+			// A person who opens the address finds how to use it.
+			http.Redirect(w, r, "/assistants", http.StatusFound)
+			return
+		}
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost)
 			writeError(w, http.StatusMethodNotAllowed, "Le serveur MCP répond en POST, sans flux.")
@@ -76,7 +81,7 @@ func (a *API) mcpServer(inner http.Handler) http.HandlerFunc {
 		bearer, ok := bearerToken(r)
 		if !ok {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="MyInfra"`)
-			writeError(w, http.StatusUnauthorized, "Jeton d'accès requis : créez-en un dans Réglages › MCP.")
+			writeError(w, http.StatusUnauthorized, "Jeton d'accès requis : créez-en un dans Réglages › Assistants IA (MCP).")
 			return
 		}
 		token, err := a.Store.UserByAPIToken(r.Context(), hashToken(bearer))

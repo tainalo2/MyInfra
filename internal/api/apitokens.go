@@ -132,3 +132,29 @@ func (a *API) deleteAPIToken(w http.ResponseWriter, r *http.Request) {
 	a.note(r.Context(), ownerID(r.Context()), newID(), "token.revoked", "warn", "Jeton d'accès révoqué.", "", "")
 	w.WriteHeader(http.StatusNoContent)
 }
+
+type mcpToolView struct {
+	Name        string `json:"name"`
+	Title       string `json:"title"`
+	Role        string `json:"role"`
+	Write       bool   `json:"write"`
+	Destructive bool   `json:"destructive"`
+}
+
+// mcpInfo gives the settings page the address of the MCP server and what
+// it offers.
+func (a *API) mcpInfo(w http.ResponseWriter, r *http.Request) {
+	base := strings.TrimRight(strings.TrimSpace(a.PublicURL), "/")
+	if base == "" {
+		scheme := "http"
+		if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+			scheme = "https"
+		}
+		base = scheme + "://" + r.Host
+	}
+	tools := []mcpToolView{}
+	for _, tool := range a.mcpTools() {
+		tools = append(tools, mcpToolView{Name: tool.Name, Title: tool.Title, Role: tool.Role, Write: tool.Write, Destructive: tool.Destructive})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"url": base + "/mcp", "tools": tools})
+}

@@ -210,6 +210,27 @@ export type InfraEvent = {
   serverName?: string;
   clusterId?: string;
   clusterName?: string;
+  source?: "ui" | "api" | "mcp";
+  actor?: string;
+};
+
+// ApiToken is a personal access token, for an MCP client or another program.
+// Its secret, token, comes only in the answer that creates it.
+export type ApiToken = {
+  id: string;
+  name: string;
+  role: "read" | "deploy" | "admin";
+  user?: string;
+  mine: boolean;
+  createdAt: string;
+  lastUsedAt?: string;
+  expiresAt?: string;
+  token?: string;
+};
+
+export type McpInfo = {
+  url: string;
+  tools: { name: string; title: string; role: "read" | "deploy" | "admin"; write: boolean; destructive: boolean }[];
 };
 
 export type DeployStep = {

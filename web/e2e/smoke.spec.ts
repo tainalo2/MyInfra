@@ -37,7 +37,7 @@ test.describe.serial("MyInfra", () => {
   test("every main screen opens", async ({ page }) => {
     const problems = watch(page);
     await signIn(page);
-    for (const path of ["/", "/applications", "/nouveau", "/clusters", "/templates", "/templates/nouveau", "/applications/paquets", "/applications/paquets/nouveau", "/deploiements", "/cles", "/providers", "/dns", "/git", "/secrets", "/compte", "/copies", "/historique", "/monde", "/suppressions", "/transfert"]) {
+    for (const path of ["/", "/applications", "/nouveau", "/clusters", "/templates", "/templates/nouveau", "/applications/paquets", "/applications/paquets/nouveau", "/deploiements", "/cles", "/assistants", "/providers", "/dns", "/git", "/secrets", "/compte", "/copies", "/historique", "/monde", "/suppressions", "/transfert"]) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       await expect(page.locator("main")).toBeVisible();
@@ -127,6 +127,43 @@ test.describe.serial("MyInfra", () => {
     await dialog.getByRole("combobox").fill("templ");
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/\/templates$/);
+  });
+
+  test("an access token for an assistant is shown once, plugs in, and is revoked", async ({ page }) => {
+    const problems = watch(page);
+    await signIn(page);
+    await page.goto("/assistants");
+    await expect(page.getByRole("heading", { name: "Assistants IA (MCP)" })).toBeVisible();
+    await expect(page.locator("code").filter({ hasText: /\/mcp$/ })).toBeVisible();
+    await page.getByRole("button", { name: "Nouveau jeton" }).click();
+    await page.getByLabel("Nom du jeton").fill("e2e portable");
+    await page.getByRole("button", { name: "Créer le jeton" }).click();
+    const secret = page.getByTestId("mcp-secret");
+    await expect(secret).toHaveText(/^myi_/);
+    const token = (await secret.textContent()) ?? "";
+    const ask = () => page.request.post("/mcp", { headers: { Authorization: `Bearer ${token}` }, data: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    const listed = await ask();
+    expect(listed.status()).toBe(200);
+    expect((await listed.json()).result.tools.length).toBeGreaterThan(10);
+
+    await page.getByRole("button", { name: "Brancher mon assistant" }).click();
+    const guide = page.getByRole("dialog", { name: "Brancher un assistant IA" });
+    await expect(guide).toContainText("claude mcp add --transport http myinfra");
+    await expect(guide).toContainText(token);
+    await guide.getByRole("tab", { name: "Cursor" }).click();
+    await expect(guide).toContainText("mcpServers");
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Je l'ai copié" }).click();
+    await expect(secret).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByText("e2e portable")).toBeVisible();
+    await expect(page.getByText(token)).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Révoquer" }).first().click();
+    await page.getByRole("dialog").getByRole("button", { name: "Révoquer" }).click();
+    await expect(page.getByText("e2e portable")).toHaveCount(0);
+    expect((await ask()).status()).toBe(401);
+    expect(problems).toEqual([]);
   });
 });
 

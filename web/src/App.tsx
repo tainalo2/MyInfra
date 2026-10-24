@@ -24,6 +24,7 @@ const ServerPage = page(() => import("./servers"), "ServerPage");
 const PodTerminal = page(() => import("./terminal"), "PodTerminal");
 const ServerTerminal = page(() => import("./terminal"), "ServerTerminal");
 const Keys = page(() => import("./keys"), "Keys");
+const McpPage = page(() => import("./mcp"), "McpPage");
 const Secrets = page(() => import("./secrets"), "Secrets");
 const SecretPage = page(() => import("./secrets"), "SecretPage");
 const Providers = page(() => import("./accounts"), "Providers");
@@ -266,6 +267,7 @@ export function App() {
         <Route path="/applications/:id/services" element={<AppServices />} />
         <Route path="/applications/:id/terminal/:pod" element={<RequireDeploy><PodTerminal /></RequireDeploy>} />
         <Route path="/cles" element={<Keys />} />
+        <Route path="/assistants" element={<McpPage />} />
         <Route path="/secrets" element={<Secrets />} />
         <Route path="/secrets/:id" element={<SecretPage />} />
         <Route path="/providers" element={<Providers />} />

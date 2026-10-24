@@ -189,6 +189,7 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("POST /api/webhooks/git/{id}", a.gitWebhook)
 	mux.HandleFunc("POST /api/webhooks/git/{id}/{secret}", a.gitWebhook)
 
+	mux.HandleFunc("GET /api/mcp", a.auth(a.mcpInfo))
 	mux.HandleFunc("GET /api/mcp/tokens", a.personOnly(a.listAPITokens))
 	mux.HandleFunc("POST /api/mcp/tokens", a.personOnly(a.steady(a.createAPIToken)))
 	mux.HandleFunc("DELETE /api/mcp/tokens/{id}", a.personOnly(a.steady(a.deleteAPIToken)))

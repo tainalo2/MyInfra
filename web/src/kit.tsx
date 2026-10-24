@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { Check, Copy } from "lucide-react";
 import { text } from "./i18n";
-import { Button, ErrorText, Field, Input, TextButton, podFailed, statusLabel } from "./ui";
+import { Button, ErrorText, Field, IconButton, Input, TextButton, podFailed, statusLabel } from "./ui";
 
 const focusable = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -382,5 +383,30 @@ export function AppsTabs({ active }: { active: "apps" | "packages" }) {
         { to: "/applications/paquets", label: text("nav.packages"), active: active === "packages" },
       ]}
     />
+  );
+}
+
+// CopyButton copies a value to the clipboard and says so for a moment.
+export function CopyButton({ value, label }: { value: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 2000);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+  return (
+    <span className="inline-flex items-center gap-2">
+      <IconButton
+        type="button"
+        icon={copied ? Check : Copy}
+        label={label ?? text("common.copy")}
+        onClick={() => {
+          void navigator.clipboard?.writeText(value).then(() => setCopied(true));
+        }}
+      />
+      <span className="text-[13px] text-muted" aria-live="polite">
+        {copied ? text("common.copied") : ""}
+      </span>
+    </span>
   );
 }

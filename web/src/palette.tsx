@@ -24,6 +24,7 @@ const pages: { label: MsgKey; to: string; deployOnly?: boolean; adminOnly?: bool
   { label: "nav.registries", to: "/registres", deployOnly: true },
   { label: "nav.images", to: "/images", deployOnly: true },
   { label: "nav.ssh", to: "/cles", deployOnly: true },
+  { label: "nav.mcp", to: "/assistants" },
   { label: "nav.secrets", to: "/secrets", deployOnly: true },
   { label: "nav.transfer", to: "/transfert", adminOnly: true },
   { label: "nav.copies", to: "/copies", adminOnly: true },
