@@ -185,3 +185,41 @@ func TestMCPDNSAsksWhenItTouchesSomething(t *testing.T) {
 		t.Fatal(rec.Body.String())
 	}
 }
+
+// Installing tells beforehand what copies really give and which foreign
+// records a domain would replace, and waits for agreement. The install
+// itself is left out: it would publish DNS through OpenTofu.
+func TestMCPInstallTellsTheTruthFirst(t *testing.T) {
+	a, h, _ := dnsFixture(t)
+	ctx := t.Context()
+	rec := call(t, h, http.MethodPost, "/api/clusters", "", "sess-owner", map[string]string{"name": "SW"})
+	var cluster clusterView
+	_ = json.Unmarshal(rec.Body.Bytes(), &cluster)
+	for i := 1; i <= 3; i++ {
+		id := fmt.Sprintf("n%d", i)
+		if err := a.Store.CreateServer(ctx, "owner", id, "sw-"+id, "tok-"+id+"-123456", "", cluster.ID, "linked", nil, nil, nil, i == 1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	deploy := makeToken(t, h, "sess-owner", store.RoleDeploy, 0).Token
+	text, failed := mcpCallTool(t, h, deploy, "install", map[string]any{"article": "nextcloud", "cluster": "SW", "domains": []string{"www.moydomain.name"}, "copies": 3})
+	for _, want := range []string{"RESTENT À UNE SEULE COPIE", "pas entièrement redondante", "www.moydomain.name A 203.0.113.1", `confirmation="`} {
+		if failed || !strings.Contains(text, want) {
+			t.Fatalf("%q absent :\n%s", want, text)
+		}
+	}
+	apps, _ := a.Store.ListApplications(ctx, "owner")
+	if len(apps) != 1 {
+		t.Fatal("installée avant l'accord")
+	}
+	if text, failed := mcpCallTool(t, h, deploy, "install", map[string]any{"article": "nextcloud", "cluster": "SW", "domains": []string{"cloud.moydomain.name"}}); !failed || !strings.Contains(text, "sert déjà") {
+		t.Fatal(text)
+	}
+	if text, failed := mcpCallTool(t, h, deploy, "install", map[string]any{"article": "nextcloud", "server": "solo", "copies": 2}); !failed || !strings.Contains(text, "cluster") {
+		t.Fatal(text)
+	}
+	text, failed = mcpCallTool(t, h, deploy, "preview_redundancy", map[string]any{"article": "nextcloud", "cluster": "SW", "copies": 3})
+	if failed || !strings.Contains(text, "répliqués en 3 copies : redis") {
+		t.Fatal(text)
+	}
+}

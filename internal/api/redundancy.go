@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"myinfra/internal/deploy"
 	"myinfra/internal/manifest"
 	"myinfra/internal/market"
+	"myinfra/internal/pack"
 	"myinfra/internal/store"
 )
 
@@ -293,13 +295,29 @@ func (a *API) redundancyPreview(w http.ResponseWriter, r *http.Request) {
 		ClusterID string `json:"clusterId"`
 		Image     string `json:"image"`
 		Article   string `json:"article"`
+		// Package is a saved package, by its id.
+		Package string `json:"package"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
 		return
 	}
 	var services []store.Service
-	if body.Article != "" {
+	if body.Package != "" {
+		row, err := a.Store.Package(r.Context(), ownerID(r.Context()), body.Package)
+		if err != nil {
+			a.mapErr(w, err)
+			return
+		}
+		var p pack.Package
+		if err := json.Unmarshal(row.Body, &p); err != nil {
+			a.mapErr(w, err)
+			return
+		}
+		for _, svc := range p.Services {
+			services = append(services, store.Service{Name: svc.Name, Image: svc.Image, Disk: len(svc.Volumes) > 0})
+		}
+	} else if body.Article != "" {
 		p, ok := market.PackageOf(body.Article)
 		if !ok {
 			writeError(w, http.StatusNotFound, "Cet article est introuvable.")
