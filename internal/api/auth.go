@@ -349,6 +349,13 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("POST /api/agent", a.agentReport)
 	mux.HandleFunc("POST /api/agent/{token}", a.agentReport)
 
+	// The MCP server calls the routes above through this same router.
+	mcp := a.mcpServer(mux)
+	mux.HandleFunc("POST /mcp", mcp)
+	mux.HandleFunc("GET /mcp", mcp)
+	mux.HandleFunc("DELETE /mcp", mcp)
+	a.router = mux
+
 	deploy.UseHostKeys(
 		func(address string) (string, error) { return a.Store.SSHHostKey(context.Background(), address) },
 		func(address, key string) error { return a.Store.SaveSSHHostKey(context.Background(), address, key) },

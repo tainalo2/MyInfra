@@ -66,6 +66,8 @@ type API struct {
 	destructionBusy    map[string]bool
 	authGates          gateSet
 	alerts             *alertState
+	// router is the last router built, kept for the tests to look routes up.
+	router *http.ServeMux
 }
 
 func (a *API) Handler() http.Handler { return a.routes() }
