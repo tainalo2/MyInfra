@@ -154,3 +154,59 @@ func TestMCPToolsFollowRoles(t *testing.T) {
 		}
 	}
 }
+
+var confirmCode = regexp.MustCompile(`confirmation="([A-Z0-9]{3}-[A-Z0-9]{3})"`)
+
+// A deletion through MCP shows what goes first, and runs only with the
+// code the same token got, for the same arguments, once.
+func TestMCPDeletionAsksFirst(t *testing.T) {
+	a, h := tokenFixture(t)
+	ctx := t.Context()
+	if err := a.Store.CreateServer(ctx, "owner", "s1", "solo", "tok-solo-123", "", "", "linked", nil, nil, nil, false); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"demo", "other"} {
+		if err := a.Store.CreateApplication(ctx, store.NewApplication{
+			ID: "app-" + name, OwnerID: "owner", Name: name, SourceKind: "image", Source: "nginx:1",
+			DestinationKind: "server", ServerID: "s1", Replicas: 1, DefaultID: "d-" + name, DefaultHost: name + ".apps.test",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	deploy := makeToken(t, h, "sess-owner", store.RoleDeploy, 0).Token
+	other := makeToken(t, h, "sess-owner", store.RoleDeploy, 0).Token
+
+	text, failed := mcpCallTool(t, h, deploy, "delete_application", map[string]any{"name": "demo"})
+	match := confirmCode.FindStringSubmatch(text)
+	if failed || match == nil || !strings.Contains(text, "Applications supprimées : demo") {
+		t.Fatal(text)
+	}
+	if _, err := a.Store.Application(ctx, "owner", "app-demo"); err != nil {
+		t.Fatal("supprimée avant l'accord", err)
+	}
+	// Another token, or other arguments, cannot use the code.
+	if text, failed := mcpCallTool(t, h, other, "delete_application", map[string]any{"name": "demo", "confirmation": match[1]}); !failed || !strings.Contains(text, "ne correspond pas") {
+		t.Fatal(text)
+	}
+	text, _ = mcpCallTool(t, h, deploy, "delete_application", map[string]any{"name": "demo"})
+	code := confirmCode.FindStringSubmatch(text)[1]
+	if text, failed := mcpCallTool(t, h, deploy, "delete_application", map[string]any{"name": "other", "confirmation": code}); !failed || !strings.Contains(text, "ne correspond pas") {
+		t.Fatal(text)
+	}
+	text, _ = mcpCallTool(t, h, deploy, "delete_application", map[string]any{"name": "demo"})
+	code = confirmCode.FindStringSubmatch(text)[1]
+	text, failed = mcpCallTool(t, h, deploy, "delete_application", map[string]any{"name": "demo", "confirmation": strings.ToLower(code)})
+	if failed || !strings.Contains(text, "Suppression de « demo » lancée") {
+		t.Fatal(text)
+	}
+	if text, failed := mcpCallTool(t, h, deploy, "delete_application", map[string]any{"name": "demo", "confirmation": code}); !failed || !strings.Contains(text, "déjà utilisé") {
+		t.Fatal(text)
+	}
+	rec := call(t, h, http.MethodGet, "/api/events?source=mcp", "", "sess-owner", nil)
+	body := rec.Body.String()
+	for _, want := range []string{`"kind":"app.delete"`, `"kind":"mcp.call"`, `"kind":"mcp.refused"`} {
+		if !strings.Contains(body, want) {
+			t.Fatal(want, body)
+		}
+	}
+}

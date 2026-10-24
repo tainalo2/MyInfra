@@ -442,3 +442,17 @@ CREATE TABLE IF NOT EXISTS api_tokens (
 );
 
 CREATE INDEX IF NOT EXISTS api_tokens_user ON api_tokens (user_id);
+
+-- Codes the MCP server gives with the recap of a purchase or a destruction:
+-- the action runs only when the same token brings the code back, for the
+-- same tool and arguments, before it expires and only once.
+CREATE TABLE IF NOT EXISTS mcp_confirmations (
+    code_hash text PRIMARY KEY,
+    token_id text NOT NULL,
+    tool text NOT NULL,
+    args_hash text NOT NULL,
+    fingerprint text NOT NULL DEFAULT '',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    expires_at timestamptz NOT NULL,
+    used_at timestamptz
+);
