@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -43,6 +44,39 @@ func (d destination) body(body map[string]any) map[string]any {
 		body["serverId"] = d.id
 	}
 	return body
+}
+
+// updateFromReleases moves the services that have a newer version to it, as
+// the releases of the application suggest; with none, the refusal stands.
+func (c *mcpCall) updateFromReleases(app named, base string, refusal error) (string, error) {
+	var releases struct {
+		Services []struct{ Name, Image, Update string }
+	}
+	if err := c.get(base+"/releases", &releases); err != nil {
+		return "", refusal
+	}
+	type image struct {
+		Name  string `json:"name"`
+		Image string `json:"image"`
+	}
+	body := make([]image, 0, len(releases.Services))
+	var moved []string
+	for _, svc := range releases.Services {
+		next := svc.Image
+		if svc.Update != "" && svc.Update != svc.Image {
+			next = svc.Update
+			moved = append(moved, svc.Name+" : "+svc.Image+" → "+svc.Update)
+		}
+		body = append(body, image{svc.Name, next})
+	}
+	if len(moved) == 0 {
+		return "", refusal
+	}
+	var out any
+	if err := c.send(http.MethodPost, base+"/images", map[string]any{"services": body}, &out); err != nil {
+		return "", err
+	}
+	return "Mise à jour de " + app.Name + " lancée.\n - " + strings.Join(moved, "\n - ") + "\n" + asJSON(out), nil
 }
 
 // domainNames splits full names into subdomain and zone, by the zones of the
@@ -453,7 +487,7 @@ func mcpAppTools() []mcpTool {
 			Name: "update_application", Title: "Mettre à jour une application", Role: store.RoleDeploy, Write: true,
 			Description: "Applique la mise à jour disponible d'une application (get_update_impact la décrit). Une version qui ne démarre pas laisse l'ancienne en place.",
 			Schema:      object([]string{"application"}, map[string]any{"application": appArg}),
-			Routes:      []string{"GET /api/applications", "POST /api/applications/{id}/update"},
+			Routes:      []string{"GET /api/applications", "POST /api/applications/{id}/update", "GET /api/applications/{id}/releases", "POST /api/applications/{id}/images"},
 			Run: func(c *mcpCall, raw json.RawMessage) (string, error) {
 				args, err := decodeArgs[struct{ Application string }](raw)
 				if err != nil {
@@ -463,8 +497,16 @@ func mcpAppTools() []mcpTool {
 				if err != nil {
 					return "", err
 				}
+				base := "/api/applications/" + url.PathEscape(app.ID)
 				var out any
-				if err := c.send(http.MethodPost, "/api/applications/"+url.PathEscape(app.ID)+"/update", map[string]any{}, &out); err != nil {
+				err = c.send(http.MethodPost, base+"/update", map[string]any{}, &out)
+				var refused *toolError
+				if errors.As(err, &refused) && errorCodes[refused.Message] == "update_none" {
+					// The periodic search has not run since the install: the
+					// versions read now say what get_application shows.
+					return c.updateFromReleases(app, base, err)
+				}
+				if err != nil {
 					return "", err
 				}
 				return "Mise à jour de " + app.Name + " lancée.\n" + asJSON(out), nil
