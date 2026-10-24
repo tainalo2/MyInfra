@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -122,6 +123,21 @@ func appPackage(app store.Application) pack.Package {
 			out.Files = append(out.Files, spec.File{Path: file.Path, Content: general(file.Content)})
 		}
 		p.Services = append(p.Services, out)
+	}
+	// Shared disks are declared once, with their size, as one writes them.
+	sizes := map[string]int{}
+	for i := range p.Services {
+		for j := range p.Services[i].Volumes {
+			volume := &p.Services[i].Volumes[j]
+			if volume.Disk == "" {
+				continue
+			}
+			if _, seen := sizes[volume.Disk]; !seen {
+				p.Disks = append(p.Disks, pack.SharedDisk{Name: volume.Disk, SizeGi: sizeGi(volume.SizeGi)})
+			}
+			sizes[volume.Disk] = volume.SizeGi
+			volume.SizeGi = 0
+		}
 	}
 	return p
 }
@@ -296,11 +312,17 @@ func planServices(current, next []store.Service, asked []pack.Service) (serviceC
 		// without the next ones taking its data.
 		for j, old := range prev.Spec.Volumes {
 			if j >= len(svc.Spec.Volumes) {
-				change.lost = append(change.lost, svc.Name+" ("+old.Path+")")
-				change.claims = append(change.claims, extraClaim(prev.Name, j, stateful))
+				// A shared disk goes only once no service mounts it: below.
+				if old.Disk == "" {
+					change.lost = append(change.lost, svc.Name+" ("+old.Path+")")
+					change.claims = append(change.claims, extraClaim(prev.Name, j, stateful))
+				}
 				continue
 			}
 			now := svc.Spec.Volumes[j]
+			if now.Disk != old.Disk {
+				return change, fmt.Errorf("Le disque %s de %s ne passe pas d'un disque à un autre : retirez-le, puis ajoutez le nouveau.", old.Path, svc.Name)
+			}
 			if now.Path != old.Path {
 				for k, other := range prev.Spec.Volumes {
 					if k != j && other.Path == now.Path {
@@ -327,11 +349,43 @@ func planServices(current, next []store.Service, asked []pack.Service) (serviceC
 			change.claims = append(change.claims, mainClaim(prev.Name, stateful))
 		}
 		for j, old := range prev.Spec.Volumes {
+			if old.Disk != "" {
+				continue
+			}
 			change.lost = append(change.lost, prev.Name+" ("+old.Path+")")
 			change.claims = append(change.claims, extraClaim(prev.Name, j, stateful))
 		}
 	}
+	// A shared disk is erased with the last service that mounts it.
+	after := sharedNames(next)
+	for _, name := range sortedSet(sharedNames(current)) {
+		if !after[name] {
+			change.lost = append(change.lost, "disque partagé "+name)
+			change.claims = append(change.claims, claimGone{name: manifest.SharedClaim(name)})
+		}
+	}
 	return change, nil
+}
+
+func sharedNames(services []store.Service) map[string]bool {
+	out := map[string]bool{}
+	for _, svc := range services {
+		for _, volume := range svc.Spec.Volumes {
+			if volume.Disk != "" {
+				out[volume.Disk] = true
+			}
+		}
+	}
+	return out
+}
+
+func sortedSet(set map[string]bool) []string {
+	out := make([]string, 0, len(set))
+	for key := range set {
+		out = append(out, key)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func sizeGi(n int) int {

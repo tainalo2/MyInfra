@@ -28,6 +28,9 @@ type Package struct {
 	Inputs   []Input           `json:"inputs,omitempty"`
 	Env      map[string]string `json:"env,omitempty"`
 	Services []Service         `json:"services"`
+	// Disks are shared by the services that mount them with
+	// volumes[].disk: the same files, for each of them.
+	Disks []SharedDisk `json:"disks,omitempty"`
 	// About presents the package: where it comes from, its logo, and its
 	// words in each language.
 	About *About `json:"about,omitempty"`
@@ -56,6 +59,14 @@ type Input struct {
 	Key   string `json:"key"`
 	Label string `json:"label"`
 }
+
+// SharedDisk is a disk several services of the package mount.
+type SharedDisk struct {
+	Name   string `json:"name"`
+	SizeGi int    `json:"sizeGi"`
+}
+
+const maxDisks = 8
 
 // Service runs one image. The first of its volumes is its disk.
 type Service struct {
@@ -239,6 +250,7 @@ func Check(p Package) []Problem {
 			}
 		}
 	}
+	checkDisks(p, add)
 	if len(p.Services) > 0 && public != 1 {
 		add("services", "Un seul service est public : celui qui reçoit le domaine.")
 	}
@@ -344,16 +356,89 @@ func dependencyLoop(services []Service) string {
 	return ""
 }
 
-// Disk splits a service as a store keeps it: its first volume is its disk,
-// the others stay in its spec.
+// Disk splits a service as a store keeps it: its first volume of its own is
+// its disk, the others stay in its spec, with the shared ones.
 func (s Service) Disk() (*spec.Volume, spec.Service) {
 	rest := s.Service
-	if len(s.Volumes) == 0 {
-		return nil, rest
+	rest.Volumes = nil
+	var first *spec.Volume
+	for _, volume := range s.Volumes {
+		if first == nil && volume.Disk == "" {
+			copied := volume
+			first = &copied
+			continue
+		}
+		rest.Volumes = append(rest.Volumes, volume)
 	}
-	first := s.Volumes[0]
-	rest.Volumes = append([]spec.Volume(nil), s.Volumes[1:]...)
-	return &first, rest
+	return first, rest
+}
+
+// checkDisks checks the shared disks: declared once with a size, mounted
+// by name, by services that run one copy. A package rebuilt from a running
+// application carries the size on each volume instead of a declaration.
+func checkDisks(p Package, add func(path, format string, args ...any)) {
+	if len(p.Disks) > maxDisks {
+		add("disks", "Un paquet partage au plus %d disques.", maxDisks)
+	}
+	sizes := map[string]int{}
+	used := map[string]bool{}
+	for i, disk := range p.Disks {
+		at := fmt.Sprintf("disks[%d]", i)
+		if !spec.DiskName.MatchString(disk.Name) {
+			add(at+".name", "Le nom d'un disque partagé est en minuscules, par exemple media.")
+		} else if _, twice := sizes[disk.Name]; twice {
+			add(at+".name", "Le disque %s est déjà déclaré.", disk.Name)
+		}
+		if disk.SizeGi < 1 || disk.SizeGi > 1024 {
+			add(at+".sizeGi", "Un disque fait de 1 à 1024 Gio.")
+		}
+		sizes[disk.Name] = disk.SizeGi
+	}
+	for i, svc := range p.Services {
+		at := fmt.Sprintf("services[%d]", i)
+		shares := false
+		for j, volume := range svc.Volumes {
+			if volume.Disk == "" {
+				continue
+			}
+			shares = true
+			used[volume.Disk] = true
+			vat := fmt.Sprintf("%s.volumes[%d]", at, j)
+			declared, ok := sizes[volume.Disk]
+			switch {
+			case !ok && volume.SizeGi > 0:
+				sizes[volume.Disk] = volume.SizeGi
+			case !ok:
+				add(vat+".disk", "Le disque %s n'est pas déclaré dans disks.", volume.Disk)
+			case volume.SizeGi > 0 && volume.SizeGi != declared:
+				add(vat+".sizeGi", "La taille d'un disque partagé se donne une fois, dans disks.")
+			}
+		}
+		if shares && svc.Replicas > 1 {
+			add(at+".replicas", "Un service qui monte un disque partagé tourne en une seule copie.")
+		}
+	}
+	for i, disk := range p.Disks {
+		if !used[disk.Name] {
+			add(fmt.Sprintf("disks[%d].name", i), "Aucun service ne monte le disque %s.", disk.Name)
+		}
+	}
+}
+
+// diskSizes gives each shared disk its size, declared or carried.
+func diskSizes(p Package) map[string]int {
+	out := map[string]int{}
+	for _, disk := range p.Disks {
+		out[disk.Name] = disk.SizeGi
+	}
+	for _, svc := range p.Services {
+		for _, volume := range svc.Volumes {
+			if volume.Disk != "" && out[volume.Disk] == 0 {
+				out[volume.Disk] = volume.SizeGi
+			}
+		}
+	}
+	return out
 }
 
 func sortedKeys(m map[string]string) []string {

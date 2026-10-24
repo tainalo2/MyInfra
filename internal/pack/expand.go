@@ -21,6 +21,7 @@ func Expand(p Package, host string, inputs map[string]string) ([]Service, map[st
 	if err != nil {
 		return nil, nil, err
 	}
+	sizes := diskSizes(p)
 	out := make([]Service, len(p.Services))
 	for i, svc := range p.Services {
 		next := svc
@@ -28,6 +29,13 @@ func Expand(p Package, host string, inputs map[string]string) ([]Service, map[st
 		next.Command = append([]string(nil), svc.Command...)
 		next.Ports = append([]spec.Port(nil), svc.Ports...)
 		next.Volumes = append([]spec.Volume(nil), svc.Volumes...)
+		// A shared volume carries its disk's size from here on: the store
+		// keeps it with the service, and every renderer reads it there.
+		for j := range next.Volumes {
+			if name := next.Volumes[j].Disk; name != "" {
+				next.Volumes[j].SizeGi = sizes[name]
+			}
+		}
 		next.DependsOn = append([]string(nil), svc.DependsOn...)
 		if svc.Resources != nil {
 			copied := *svc.Resources

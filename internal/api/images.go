@@ -14,6 +14,7 @@ import (
 	"myinfra/internal/manifest"
 	"myinfra/internal/market"
 	"myinfra/internal/registry"
+	"myinfra/internal/spec"
 	"myinfra/internal/store"
 	"myinfra/internal/usage"
 )
@@ -596,7 +597,7 @@ func (a *API) inspectImages(ctx context.Context, host deploy.Host, names []strin
 
 func rolloutContainers(appID string, svc store.Service) []string {
 	replicas := svc.Replicas
-	if svc.Disk || replicas < 1 {
+	if svc.Disk || replicas < 1 || spec.Shares(svc.Spec) {
 		replicas = 1
 	}
 	base := "myinfra-" + strings.ReplaceAll(appID, "-", "") + "-" + svc.Name

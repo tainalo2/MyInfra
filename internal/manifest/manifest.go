@@ -399,12 +399,21 @@ func Render(app App) string {
 	refs := envRefs(app)
 	sum := configSum(app)
 	ports := servicePorts(app)
+	disks, sizes := sharedDisks(app)
+	for _, name := range disks {
+		fmt.Fprintf(&b, "---\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: %s\n  namespace: %s\n  labels:\n    myinfra.io/shared-disk: %q\nspec:\n  accessModes: [ReadWriteOnce]\n  resources:\n    requests:\n      storage: %dGi\n", SharedClaim(name), ns, name, sizes[name])
+	}
 	for _, svc := range app.Services {
 		svc.configSum = withFiles(sum, svc)
 		writeFiles(&b, ns, svc)
 		replicas := svc.Replicas
 		if replicas < 1 {
 			replicas = 1
+		}
+		// A service on a shared disk runs one copy, as a Deployment beside
+		// the others on that disk: no StatefulSet, no replicated SQLite.
+		if spec.Shares(svc.Spec) {
+			replicas, svc.Replicas, svc.Backup = 1, 1, nil
 		}
 		if app.Paused || svc.Stopped {
 			replicas = 0
@@ -447,11 +456,12 @@ spec:
     metadata:
       labels:
         myinfra.io/service: %s
-%s    spec:
-`, svc.Name, ns, app.ID, replicas, strategy, rolling(strategy), svc.Name, svc.Name, configAnnotation(svc, true))
+%s%s    spec:
+`, svc.Name, ns, app.ID, replicas, strategy, rolling(strategy), svc.Name, svc.Name, sharedLabels(svc), configAnnotation(svc, true))
 			if replicas > 1 {
 				b.WriteString(spread(svc.Name))
 			}
+			b.WriteString(sharedAffinity(svc))
 			b.WriteString(moveAway())
 			b.WriteString(waitFor(svc, ports))
 			b.WriteString("      containers:\n")

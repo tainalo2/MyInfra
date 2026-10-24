@@ -789,7 +789,7 @@ func (s *Store) desired(ctx context.Context, query, id string) ([]DesiredApp, er
 		if app.Replicas < 1 {
 			app.Replicas = 1
 		}
-		if app.Disk {
+		if app.Disk || spec.Shares(app.Spec) {
 			app.Replicas = 1
 		}
 		out = append(out, app)
@@ -1364,8 +1364,9 @@ func (s *Store) ClusterApps(ctx context.Context, clusterID string) ([]ClusterApp
 			byID[appID] = app
 			order = append(order, appID)
 		}
-		// A disk holds one copy, unless the data moved to PostgreSQL.
-		if (svc.Disk && svc.Database != "ready") || svc.Replicas < 1 {
+		// A disk holds one copy, unless the data moved to PostgreSQL; a
+		// shared disk always.
+		if (svc.Disk && svc.Database != "ready") || svc.Replicas < 1 || spec.Shares(svc.Spec) {
 			svc.Replicas = 1
 		}
 		app.Services = append(app.Services, svc)

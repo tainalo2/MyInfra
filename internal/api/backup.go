@@ -7,7 +7,6 @@ import (
 
 	"myinfra/internal/deploy"
 	"myinfra/internal/manifest"
-	"myinfra/internal/market"
 	"myinfra/internal/store"
 )
 
@@ -55,7 +54,7 @@ func (a *API) clusterServices(ctx context.Context, host deploy.Host, owner, clus
 }
 
 func (a *API) serviceBackup(ctx context.Context, host deploy.Host, owner, clusterID, appID string, svc store.Service) (*manifest.Backup, error) {
-	profile := market.ProfileOf(svc.Image, svc.Disk)
+	profile := profileOf(svc)
 	if len(profile.SQLite) == 0 {
 		return nil, errNoBackup
 	}

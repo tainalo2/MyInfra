@@ -14,6 +14,7 @@ import (
 	"myinfra/internal/manifest"
 	"myinfra/internal/market"
 	"myinfra/internal/pack"
+	"myinfra/internal/spec"
 	"myinfra/internal/store"
 )
 
@@ -32,10 +33,20 @@ type redundancy struct {
 	Alone []string `json:"alone"`
 }
 
+// profileOf is what MyInfra knows of a service's data. One that mounts a
+// disk shared with other services stays where that disk is, whatever its
+// image: no copies, no replicated SQLite, no move to PostgreSQL.
+func profileOf(svc store.Service) market.Profile {
+	if spec.Shares(svc.Spec) {
+		return market.Profile{Kind: market.Unknown}
+	}
+	return market.ProfileOf(svc.Image, svc.Disk)
+}
+
 func redundancyPlan(services []store.Service) redundancy {
 	plan := redundancy{Scaled: []string{}, Failover: []string{}, Database: []string{}, Alone: []string{}}
 	for _, svc := range services {
-		switch market.ProfileOf(svc.Image, svc.Disk).Kind {
+		switch profileOf(svc).Kind {
 		case market.Stateless:
 			plan.Scaled = append(plan.Scaled, svc.Name)
 		case market.SingleWriter:
@@ -278,7 +289,7 @@ func shapeServices(services []store.Service, copies, nodes int) error {
 		return errStorageNodes
 	}
 	for i := range services {
-		switch market.ProfileOf(services[i].Image, services[i].Disk).Kind {
+		switch profileOf(services[i]).Kind {
 		case market.Stateless:
 			services[i].Replicas = copies
 		case market.SingleWriter:

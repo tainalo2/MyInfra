@@ -21,6 +21,25 @@ Un seul service, et exactement un, porte `public: true` : il reçoit le domaine 
 
 Ce qu'un service écrit hors de ses disques disparaît au redémarrage. Donnez-lui un disque (`volumes`) sur le dossier de ses données, avec une taille en Gio (`sizeGi`). Le premier disque est sauvegardé comme celui de toute application.
 
+## Les disques partagés
+
+Quand plusieurs services doivent lire et écrire les mêmes fichiers (un client de téléchargement et une médiathèque, par exemple), déclarez un disque partagé une fois, avec sa taille, et montez-le par son nom dans chaque service :
+
+```yaml
+disks:
+  - name: media
+    sizeGi: 200
+services:
+  - name: jellyfin
+    volumes:
+      - path: /config
+        sizeGi: 8
+      - path: /data
+        disk: media
+```
+
+Un volume qui cite un disque partagé n'a pas de taille : c'est celle du disque. Les services qui montent un disque partagé tournent en une seule copie, tous sur le même nœud, celui qui porte le disque. Le disque reste tant qu'un service le monte.
+
 ## Les fichiers de configuration
 
 Un fichier (`files`) est posé en lecture seule dans le conteneur, au chemin indiqué. Changer un fichier redémarre les copies du service.
@@ -56,7 +75,8 @@ Les variables communes (`env` en haut du paquet) vont à tous les services et so
 - `services[].replicas` : le nombre de copies, de 1 à 10 (0 pour un service arrêté).
 - `services[].command`, `services[].args` : `command` remplace le point d'entrée de l'image ; `args` le suit, un mot par élément.
 - `services[].ports` : des ports de plus, `{name, port}`, ouverts aux autres services seulement.
-- `services[].volumes` : les disques, `{path, sizeGi}` ; le premier est le disque principal.
+- `disks` : les disques partagés, `{name, sizeGi}`.
+- `services[].volumes` : les disques, `{path, sizeGi}` ; le premier est le disque principal. `{path, disk}` monte un disque partagé.
 - `services[].files` : les fichiers posés en lecture seule, `{path, content}`.
 - `services[].env` : les variables de ce service seul, sans secret.
 - `services[].health` : `{http, port}`.

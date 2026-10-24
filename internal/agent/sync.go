@@ -688,6 +688,12 @@ func writeFiles(b *strings.Builder, app Workload) {
 
 // specFlags are the docker run options of a service's spec: entrypoint,
 // disks besides the first, files, variables and reservations.
+// SharedVolume names the Docker volume of a disk the services of an
+// application share.
+func SharedVolume(appID, disk string) string {
+	return "myinfra-data-" + compact(appID) + "-disk-" + disk
+}
+
 func specFlags(app Workload, copy, replicas int) string {
 	var b strings.Builder
 	if len(app.Spec.Command) > 0 {
@@ -695,7 +701,10 @@ func specFlags(app Workload, copy, replicas int) string {
 	}
 	for i, volume := range app.Spec.Volumes {
 		name := fmt.Sprintf("myinfra-data-%s-%s-v%d", compact(app.ID), app.Service, i+1)
-		if replicas > 1 {
+		if volume.Disk != "" {
+			// One volume for the application, whichever service mounts it.
+			name = SharedVolume(app.ID, volume.Disk)
+		} else if replicas > 1 {
 			name = fmt.Sprintf("%s-%d", name, copy)
 		}
 		fmt.Fprintf(&b, " -v '%s:%s'", name, volume.Path)
