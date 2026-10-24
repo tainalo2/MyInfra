@@ -456,3 +456,10 @@ CREATE TABLE IF NOT EXISTS mcp_confirmations (
     expires_at timestamptz NOT NULL,
     used_at timestamptz
 );
+
+-- An install from the catalogue with copies, and a change of redundancy,
+-- left the copies asked at 1: an application asked at least as many as its
+-- most copied service has.
+UPDATE applications a SET replicas = s.most
+FROM (SELECT application_id, max(replicas) AS most FROM application_services GROUP BY application_id) s
+WHERE s.application_id = a.id AND a.replicas < s.most;

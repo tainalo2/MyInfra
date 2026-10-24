@@ -169,19 +169,24 @@ func (a *API) installFrom(w http.ResponseWriter, r *http.Request, expand expandF
 		return
 	}
 	in.Variables = env
-	in.Replicas = 1
-	for _, svc := range services {
-		if svc.Published {
-			in.Source = svc.Image
-			in.Replicas = svc.Replicas
-		}
-	}
 	in.Services = services
 	if body.Copies > 1 {
 		if err := a.shapeRedundancy(r.Context(), in.OwnerID, in.ClusterID, in.Services, body.Copies); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+	}
+	// The application keeps the copies asked, as an install by hand does;
+	// without, those of the article's published service.
+	in.Replicas = 1
+	for _, svc := range in.Services {
+		if svc.Published {
+			in.Source = svc.Image
+			in.Replicas = svc.Replicas
+		}
+	}
+	if body.Copies > 1 {
+		in.Replicas = body.Copies
 	}
 	sealed, err := a.sealVars(in.Variables)
 	if err != nil {

@@ -223,3 +223,46 @@ func TestMCPInstallTellsTheTruthFirst(t *testing.T) {
 		t.Fatal(text)
 	}
 }
+
+// The application counts the copies of its published service, from the
+// install with copies and after a change of redundancy.
+func TestMCPCopiesReachTheApplication(t *testing.T) {
+	a, h, _ := dnsFixture(t)
+	ctx := t.Context()
+	rec := call(t, h, http.MethodPost, "/api/clusters", "", "sess-owner", map[string]string{"name": "SW"})
+	var cluster clusterView
+	_ = json.Unmarshal(rec.Body.Bytes(), &cluster)
+	for i := 1; i <= 3; i++ {
+		id := fmt.Sprintf("n%d", i)
+		if err := a.Store.CreateServer(ctx, "owner", id, "sw-"+id, "tok-"+id+"-123456", "", cluster.ID, "linked", nil, nil, nil, i == 1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	deploy := makeToken(t, h, "sess-owner", store.RoleDeploy, 0).Token
+	copies := func() int {
+		apps, _ := a.Store.ListApplications(ctx, "owner")
+		for _, app := range apps {
+			if app.Name == "excalidraw" {
+				full, err := a.Store.Application(ctx, "owner", app.ID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return full.Replicas
+			}
+		}
+		t.Fatal("excalidraw absente")
+		return 0
+	}
+	if text, failed := mcpCallTool(t, h, deploy, "install", map[string]any{"article": "excalidraw", "cluster": "SW", "copies": 3}); failed {
+		t.Fatal(text)
+	}
+	if got := copies(); got != 3 {
+		t.Fatalf("installée avec %d copies", got)
+	}
+	if text, failed := mcpCallTool(t, h, deploy, "set_redundancy", map[string]any{"application": "excalidraw", "copies": 2}); failed {
+		t.Fatal(text)
+	}
+	if got := copies(); got != 2 {
+		t.Fatalf("%d copies après le changement", got)
+	}
+}

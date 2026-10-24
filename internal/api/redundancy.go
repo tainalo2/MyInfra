@@ -123,6 +123,12 @@ func (a *API) setRedundancy(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, errStorageNodes.Error())
 		return
 	}
+	if body.Copies >= 2 && body.Copies <= nodes {
+		if err := a.Store.SetApplicationReplicas(r.Context(), app.ID, body.Copies); err != nil {
+			a.mapErr(w, err)
+			return
+		}
+	}
 	scaled := map[string]int{}
 	for _, name := range plan.Scaled {
 		scaled[name] = body.Copies
