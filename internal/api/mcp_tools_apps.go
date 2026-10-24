@@ -249,6 +249,7 @@ func mcpAppTools() []mcpTool {
 				"service_domains": serviceDomainsArg,
 				"inputs":          textMap("Réponses aux questions de l'article ou du paquet, par clé."),
 				"copies":          whole("Copies voulues, sur un cluster (1 par défaut).", 1, 10),
+				"disk_node":       text("Machine du cluster qui porte les disques partagés de l'application, et donc les services qui les montent : choisissez-en une avec la place nécessaire (get_cluster_usage). Sans elle, le cluster choisit."),
 				"version":         text("Version (étiquette d'image) du service public, sinon celle de l'article."),
 				"confirmation":    confirmationArg,
 			}),
@@ -633,6 +634,7 @@ type installArgs struct {
 	ServiceDomains map[string][]string `json:"service_domains"`
 	Inputs         map[string]string   `json:"inputs"`
 	Copies         int                 `json:"copies"`
+	DiskNode       string              `json:"disk_node"`
 	Version        string              `json:"version"`
 	Confirmation   string              `json:"confirmation"`
 }
@@ -673,6 +675,13 @@ func runInstall(c *mcpCall, raw json.RawMessage) (string, error) {
 	}
 	name := firstNonEmpty(args.Name, label)
 	body := dest.body(map[string]any{"name": name, "names": names, "inputs": args.Inputs, "copies": copies, "tag": args.Version})
+	if args.DiskNode != "" {
+		node, err := c.server(args.DiskNode)
+		if err != nil {
+			return "", err
+		}
+		body["diskNode"] = node.ID
+	}
 	plan := func() (string, []string, bool, error) {
 		conflicts, err := c.dnsConflicts(names, nil)
 		if err != nil {

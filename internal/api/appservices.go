@@ -198,7 +198,8 @@ func appPackage(app store.Application) pack.Package {
 				p.Disks = append(p.Disks, pack.SharedDisk{Name: volume.Disk, SizeGi: sizeGi(volume.SizeGi)})
 			}
 			sizes[volume.Disk] = volume.SizeGi
-			volume.SizeGi = 0
+			// The server is this installation's: a package names none.
+			volume.SizeGi, volume.Node = 0, ""
 		}
 	}
 	return p
@@ -339,8 +340,23 @@ type claimGone struct {
 func planServices(current, next []store.Service, asked []pack.Service) (serviceChange, error) {
 	var change serviceChange
 	before := map[string]store.Service{}
+	// A shared disk stays on the server it was placed on.
+	nodes := map[string]string{}
 	for _, svc := range current {
 		before[svc.Name] = svc
+		for _, volume := range svc.Spec.Volumes {
+			if volume.Disk != "" && volume.Node != "" {
+				nodes[volume.Disk] = volume.Node
+			}
+		}
+	}
+	for i := range next {
+		for j := range next[i].Spec.Volumes {
+			volume := &next[i].Spec.Volumes[j]
+			if volume.Disk != "" && volume.Node == "" {
+				volume.Node = nodes[volume.Disk]
+			}
+		}
 	}
 	kept := map[string]bool{}
 	for i := range next {

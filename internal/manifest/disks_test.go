@@ -86,3 +86,11 @@ func TestEachPublicServiceIsRoutedOnItsNames(t *testing.T) {
 		t.Fatal("un service public sans nom reçoit une route")
 	}
 }
+
+func TestSharedDiskStaysOnItsNode(t *testing.T) {
+	app := App{ID: specApp, Services: []Service{{Name: "jellyfin", Image: "jellyfin/jellyfin:10.10.7", Listen: 8096, Node: "sw4", Spec: spec.Service{Volumes: []spec.Volume{{Path: "/data", SizeGi: 20, Disk: "media", Node: "id"}}}}}}
+	docs := documents(t, Render(app))
+	if dig(docs["Deployment/jellyfin"], "spec", "template", "spec", "nodeSelector", "kubernetes.io/hostname") != "sw4" {
+		t.Fatal(Render(app))
+	}
+}

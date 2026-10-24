@@ -62,6 +62,9 @@ func (a *API) installFrom(w http.ResponseWriter, r *http.Request, expand expandF
 		Tag             string            `json:"tag"`
 		// Copies is the redundancy asked: 0 or 1 keeps the article's own.
 		Copies int `json:"copies"`
+		// DiskNode is the server of the cluster whose disk holds the
+		// shared disks; empty lets the cluster choose.
+		DiskNode string `json:"diskNode"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
@@ -160,6 +163,12 @@ func (a *API) installFrom(w http.ResponseWriter, r *http.Request, expand expandF
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if node := strings.TrimSpace(body.DiskNode); node != "" {
+		if err := a.placeDisks(r.Context(), in.OwnerID, in.ClusterID, node, services); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
 	if tag := strings.TrimSpace(body.Tag); tag != "" {
 		for i, svc := range services {
 			if svc.Name != main {
@@ -255,4 +264,29 @@ func servicesNames(in *store.NewApplication, services []store.Service, app strin
 		}
 	}
 	return main, nil
+}
+
+// placeDisks keeps the shared disks of a new application on one server of
+// its cluster: the one with room for them, which the cluster cannot know.
+func (a *API) placeDisks(ctx context.Context, owner, clusterID, serverID string, services []store.Service) error {
+	if clusterID == "" {
+		return fmt.Errorf("Le serveur d'un disque partagé se choisit sur un cluster.")
+	}
+	server, err := a.Store.Server(ctx, owner, serverID)
+	if err != nil || server.ClusterID != clusterID {
+		return fmt.Errorf("Ce serveur n'est pas dans le cluster de l'application.")
+	}
+	placed := false
+	for i := range services {
+		for j := range services[i].Spec.Volumes {
+			if services[i].Spec.Volumes[j].Disk != "" {
+				services[i].Spec.Volumes[j].Node = server.ID
+				placed = true
+			}
+		}
+	}
+	if !placed {
+		return fmt.Errorf("Cette application n'a pas de disque partagé à placer.")
+	}
+	return nil
 }

@@ -22,6 +22,7 @@ var (
 	deployPath    = regexp.MustCompile(`^/[A-Za-z0-9._/-]+$`)
 	deployArg     = regexp.MustCompile(`^[A-Za-z0-9_.,:/=@+-]+$`)
 	sharedName    = regexp.MustCompile(`^sec[a-z0-9]{1,40}$`)
+	nodeName      = regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$`)
 )
 
 func EnvOK(env map[string]string) bool {
@@ -143,7 +144,10 @@ type Service struct {
 	Published bool
 	// Hosts are the names that lead to this public service. Nil reads the
 	// application's: one public service, all its names.
-	Hosts    []string
+	Hosts []string
+	// Node is the Kubernetes node the service runs on, the one that holds
+	// its shared disk; empty lets the cluster choose.
+	Node     string
 	Disk     bool
 	DiskPath string
 	DiskGi   int
@@ -466,6 +470,9 @@ spec:
 				b.WriteString(spread(svc.Name))
 			}
 			b.WriteString(sharedAffinity(svc))
+			if svc.Node != "" && nodeName.MatchString(svc.Node) {
+				fmt.Fprintf(&b, "      nodeSelector:\n        kubernetes.io/hostname: %q\n", svc.Node)
+			}
 			b.WriteString(moveAway())
 			b.WriteString(waitFor(svc, ports))
 			b.WriteString("      containers:\n")

@@ -67,3 +67,23 @@ func TestExportedPackageDeclaresSharedDisks(t *testing.T) {
 		t.Fatal(problems)
 	}
 }
+
+// A shared disk keeps the server it was placed on when services change, and
+// an exported package names no server.
+func TestSharedDiskKeepsItsServer(t *testing.T) {
+	placed := sharing("jellyfin")
+	placed.Spec.Volumes[0].Node = "server-4"
+	next := []store.Service{sharing("jellyfin"), sharing("sonarr")}
+	if _, err := planServices([]store.Service{placed}, next, make([]pack.Service, 2)); err != nil {
+		t.Fatal(err)
+	}
+	for _, svc := range next {
+		if svc.Spec.Volumes[0].Node != "server-4" {
+			t.Fatal(svc.Name, svc.Spec.Volumes[0])
+		}
+	}
+	p := appPackage(store.Application{Name: "media", Services: []store.Service{placed}})
+	if p.Services[0].Volumes[0].Node != "" {
+		t.Fatal("serveur exporté")
+	}
+}

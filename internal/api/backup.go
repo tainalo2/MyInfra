@@ -31,6 +31,15 @@ func (a *API) clusterServices(ctx context.Context, host deploy.Host, owner, clus
 			Name: svc.Name, Image: svc.Image, Published: svc.Published, Disk: svc.Disk, Replicas: svc.Replicas,
 			DiskPath: svc.DiskPath, DiskGi: svc.DiskGi, Listen: svc.Listen, Args: svc.Args, Spec: svc.Spec,
 		}
+		for _, volume := range svc.Spec.Volumes {
+			// A shared disk chosen on a server keeps its services there.
+			if volume.Disk != "" && volume.Node != "" {
+				if server, err := a.Store.Server(ctx, owner, volume.Node); err == nil {
+					out.Node = deploy.NodeName(server.Name)
+				}
+				break
+			}
+		}
 		if svc.Published && app.ServiceHosts != nil {
 			// Each public service gets its own names, none when it has none.
 			out.Hosts = append([]string{}, app.ServiceHosts[svc.Name]...)

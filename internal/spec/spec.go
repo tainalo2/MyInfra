@@ -41,6 +41,9 @@ type Volume struct {
 	// Disk names a disk of the application that several services mount:
 	// its size is the disk's, and its data stays when one service goes.
 	Disk string `json:"disk,omitempty"`
+	// Node is the server whose disk holds a shared disk, chosen at
+	// installation; empty lets the cluster choose.
+	Node string `json:"node,omitempty"`
 }
 
 // Shares tells whether a service mounts a disk of the application: such a
