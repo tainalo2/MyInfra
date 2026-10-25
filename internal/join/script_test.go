@@ -58,3 +58,23 @@ func TestKeysFileKeepsMyInfraKeysApart(t *testing.T) {
 		t.Fatal("clé avec apostrophe acceptée")
 	}
 }
+
+// Prepare readies root like the pasted command, without calling home: the
+// Debian line that sends root away goes, MyInfra's key comes.
+func TestPrepareWithoutCallHome(t *testing.T) {
+	script, err := Prepare([]string{"ssh-ed25519 AAAAC3 test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Please login as the user", "PermitRootLogin prohibit-password", "ssh-ed25519 AAAAC3 test", "myinfra_authorized_keys"} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("%q absent", want)
+		}
+	}
+	if strings.Contains(script, "/api/join") || strings.Contains(script, "curl") {
+		t.Fatal("Prepare calls home")
+	}
+	if out, err := exec.Command("sh", "-n", "-c", script).CombinedOutput(); err != nil {
+		t.Fatal(string(out))
+	}
+}

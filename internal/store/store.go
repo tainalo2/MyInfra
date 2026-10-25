@@ -1157,6 +1157,25 @@ func (s *Store) SetServerPlace(ctx context.Context, ownerID, id, place string) e
 	return nil
 }
 
+// SetServerSSHUser records the account that prepares root's access on a
+// machine added by hand that refuses root at first. Empty means root.
+func (s *Store) SetServerSSHUser(ctx context.Context, ownerID, id, user string) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE servers
+		SET plan = CASE WHEN $3 = ''
+			THEN (CASE WHEN jsonb_typeof(plan) = 'object' THEN plan ELSE '{}'::jsonb END) - 'sshUser'
+			ELSE jsonb_set(CASE WHEN jsonb_typeof(plan) = 'object' THEN plan ELSE '{}'::jsonb END, '{sshUser}', to_jsonb($3::text), true)
+		END
+		WHERE id = $1 AND owner_id = $2 AND provider_id = ''`, id, ownerID, user)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // SetServerHosting records who rents a machine added by hand and its price.
 func (s *Store) SetServerHosting(ctx context.Context, ownerID, id string, hosting []byte) error {
 	tag, err := s.pool.Exec(ctx, `

@@ -2,8 +2,10 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"myinfra/internal/store"
 )
@@ -132,8 +134,169 @@ func mcpInfraTools() []mcpTool {
 				return "Installation de " + row.Name + " relancée : suivez-la avec get_server.", nil
 			},
 		},
+		{
+			Name: "add_existing_server", Title: "Ajouter un serveur existant", Role: store.RoleDeploy, Write: true, Destructive: true,
+			Description: "Relie une machine que l'utilisateur a déjà, par son adresse IP : MyInfra s'y connecte lui-même en root par SSH, puis installe Docker et le proxy, ou WireGuard et Kubernetes dans un cluster. La clé publique d'une des clés choisies doit déjà être acceptée par la machine pour root, ou pour ssh_user quand root est refusé, et MyInfra doit garder sa clé privée. La commande à coller sur la machine, l'autre façon de la relier, ne se donne que dans l'interface. Deux appels : le premier rend le récapitulatif et un code ; le second, avec le code, après l'accord explicite de l'utilisateur, lance l'installation.",
+			Schema: object([]string{"name", "address"}, map[string]any{
+				"name":          text("Nom de la machine dans MyInfra."),
+				"address":       text("Adresse IP de la machine, que MyInfra joint en SSH (port 22)."),
+				"ssh_user":      text("Utilisateur de la première session, root par défaut. Pour une machine qui refuse root (images Debian : « Please login as the user debian »), cet utilisateur prépare l'accès root par sudo sans mot de passe."),
+				"cluster":       text("Cluster existant où relier la machine. Sans cluster, elle tourne seule avec Docker."),
+				"control_plane": flag("La machine pilote le cluster. Toujours vrai pour la première machine d'un cluster."),
+				"ssh_keys":      list("Clés SSH par leur nom. Par défaut toutes ; au moins une doit avoir sa clé privée dans MyInfra.", text("")),
+				"confirmation":  confirmationArg,
+			}),
+			Routes: []string{"GET /api/secrets", "GET /api/clusters", "GET /api/servers", "POST /api/servers"},
+			Run:    runAddExisting,
+		},
 	}
 	return append(tools, mcpOrderTools()...)
+}
+
+type addExistingArgs struct {
+	Name         string   `json:"name"`
+	Address      string   `json:"address"`
+	SSHUser      string   `json:"ssh_user"`
+	Cluster      string   `json:"cluster"`
+	ControlPlane bool     `json:"control_plane"`
+	SSHKeys      []string `json:"ssh_keys"`
+	Confirmation string   `json:"confirmation"`
+}
+
+// existingPlan is a machine added by hand, made ready: what the recap shows
+// and what the creation sends.
+type existingPlan struct {
+	name         string
+	address      string
+	sshUser      string
+	keys         []secretView
+	cluster      *named
+	controlPlane bool
+}
+
+func runAddExisting(c *mcpCall, raw json.RawMessage) (string, error) {
+	args, err := decodeArgs[addExistingArgs](raw)
+	if err != nil {
+		return "", err
+	}
+	var plan existingPlan
+	recap := func() (string, string, error) {
+		var err error
+		plan, err = c.planExisting(args)
+		if err != nil {
+			return "", "", err
+		}
+		return plan.recap(), fingerprintOf([]any{plan.address, plan.sshUser, plan.cluster, plan.controlPlane, plan.keys}), nil
+	}
+	return c.confirmed(raw, args.Confirmation, recap, func() (string, error) {
+		body := map[string]any{"name": plan.name, "providerId": "manual", "address": plan.address, "sshUser": plan.sshUser, "controlPlane": plan.controlPlane}
+		keyIDs := make([]string, 0, len(plan.keys))
+		for _, key := range plan.keys {
+			keyIDs = append(keyIDs, key.ID)
+		}
+		body["keyIds"] = keyIDs
+		if plan.cluster != nil {
+			body["clusterId"] = plan.cluster.ID
+		}
+		var row serverView
+		if err := c.send(http.MethodPost, "/api/servers", body, &row); err != nil {
+			return "", err
+		}
+		return "Machine " + row.Name + " ajoutée (" + row.Address + ") : l'installation passe par SSH, suivez-la avec get_server.", nil
+	})
+}
+
+func (c *mcpCall) planExisting(args addExistingArgs) (existingPlan, error) {
+	var plan existingPlan
+	name, ok := cleanName(args.Name)
+	if !ok {
+		return plan, failf("Donnez un nom à la machine.")
+	}
+	plan.name = name
+	address, problem := directAddress(args.Address)
+	if problem != "" || address == "" {
+		return plan, failf("Donnez l'adresse IP de la machine, par exemple 203.0.113.10.")
+	}
+	plan.address = address
+	user, problem := cleanSSHUser(args.SSHUser)
+	if problem != "" {
+		return plan, failf("%s", problem)
+	}
+	plan.sshUser = user
+	keys, err := c.secretsOf("ssh_key")
+	if err != nil {
+		return plan, err
+	}
+	if len(args.SSHKeys) == 0 {
+		plan.keys = keys
+	} else {
+		for _, wanted := range args.SSHKeys {
+			key, err := pick("clé SSH", wanted, keys, func(s secretView) named { return named{s.ID, s.Name} })
+			if err != nil {
+				return plan, err
+			}
+			plan.keys = append(plan.keys, key)
+		}
+	}
+	private := false
+	for _, key := range plan.keys {
+		private = private || key.HasPrivate
+	}
+	if !private {
+		return plan, failf("Aucune des clés choisies n'a sa clé privée dans MyInfra : il ne pourrait pas ouvrir la session SSH. Ajoutez la clé privée dans Réglages › Clés SSH.")
+	}
+	var servers []serverView
+	if err := c.get("/api/servers", &servers); err != nil {
+		return plan, err
+	}
+	if args.Cluster != "" {
+		cluster, err := c.cluster(args.Cluster)
+		if err != nil {
+			return plan, err
+		}
+		plan.cluster = &cluster
+		plan.controlPlane = args.ControlPlane
+	}
+	hasPlane := false
+	for _, row := range servers {
+		if strings.EqualFold(row.Name, name) {
+			return plan, failf("Une machine s'appelle déjà « %s ».", row.Name)
+		}
+		if row.Address == address {
+			return plan, failf("La machine « %s » a déjà l'adresse %s.", row.Name, address)
+		}
+		if plan.cluster != nil && row.ClusterID == plan.cluster.ID && row.ControlPlane {
+			hasPlane = true
+		}
+	}
+	if plan.cluster != nil && !hasPlane {
+		plan.controlPlane = true
+	}
+	return plan, nil
+}
+
+func (p existingPlan) recap() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Ajout de la machine existante « %s » (%s).\n", p.name, p.address)
+	names := make([]string, 0, len(p.keys))
+	for _, key := range p.keys {
+		names = append(names, key.Name)
+	}
+	if p.sshUser != "root" {
+		fmt.Fprintf(&b, "MyInfra s'y connecte en %s par SSH avec : %s, prépare l'accès root par sudo, puis continue en root.\n", p.sshUser, strings.Join(names, ", "))
+	} else {
+		fmt.Fprintf(&b, "MyInfra s'y connecte en root par SSH avec : %s.\n", strings.Join(names, ", "))
+	}
+	switch {
+	case p.cluster == nil:
+		b.WriteString("Elle tourne seule : Docker et le proxy y sont installés.\n")
+	case p.controlPlane:
+		fmt.Fprintf(&b, "Elle rejoint le cluster %s et le pilote : WireGuard et Kubernetes y sont installés.\n", p.cluster.Name)
+	default:
+		fmt.Fprintf(&b, "Elle rejoint le cluster %s : WireGuard et Kubernetes y sont installés.\n", p.cluster.Name)
+	}
+	b.WriteString("Le pare-feu, la configuration SSH et les ports 80 et 443 de la machine sont pris par MyInfra. Rien n'est acheté.\n")
+	return b.String()
 }
 
 func (c *mcpCall) deletionTarget(kind, name string) (named, error) {

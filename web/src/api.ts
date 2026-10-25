@@ -183,6 +183,7 @@ export type Server = {
   place?: string;
   // hosting is who rents a machine added by hand, and its price.
   hosting?: Hosting;
+  sshUser?: string;
 };
 
 export type Hosting = {

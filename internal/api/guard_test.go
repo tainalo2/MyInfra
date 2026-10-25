@@ -106,3 +106,34 @@ func TestClientIPTrustsOnlyLocalProxies(t *testing.T) {
 		t.Fatal("adresse")
 	}
 }
+
+func TestDirectAddress(t *testing.T) {
+	if got, problem := directAddress("  "); got != "" || problem != "" {
+		t.Fatalf("empty: %q %q", got, problem)
+	}
+	if got, problem := directAddress(" 203.0.113.10 "); got != "203.0.113.10" || problem != "" {
+		t.Fatalf("public: %q %q", got, problem)
+	}
+	if got, _ := directAddress("192.168.1.20"); got != "192.168.1.20" {
+		t.Fatalf("home network: %q", got)
+	}
+	for _, raw := range []string{"127.0.0.1", "0.0.0.0", "srv.example.com", "203.0.113.10:22", "1.2.3"} {
+		if _, problem := directAddress(raw); problem == "" {
+			t.Fatalf("%q is accepted", raw)
+		}
+	}
+}
+
+func TestCleanSSHUser(t *testing.T) {
+	if got, problem := cleanSSHUser(" "); got != "root" || problem != "" {
+		t.Fatalf("empty: %q %q", got, problem)
+	}
+	if got, problem := cleanSSHUser(" debian "); got != "debian" || problem != "" {
+		t.Fatalf("debian: %q %q", got, problem)
+	}
+	for _, raw := range []string{"Debian", "deb ian", "a;b", "-x", "$(id)"} {
+		if _, problem := cleanSSHUser(raw); problem == "" {
+			t.Fatalf("%q is accepted", raw)
+		}
+	}
+}

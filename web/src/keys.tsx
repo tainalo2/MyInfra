@@ -1,5 +1,5 @@
-import { FormEvent, useEffect, useState } from "react";
-import { Download, KeyRound, Plus, Trash2 } from "lucide-react";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { Download, FileUp, KeyRound, Plus, Trash2 } from "lucide-react";
 import { api, type Secret } from "./api";
 import { text } from "./i18n";
 import { ConfirmDialog, useToast } from "./kit";
@@ -10,7 +10,9 @@ export function Keys() {
   const [secrets, setSecrets] = useState<Secret[]>([]);
   const [keyName, setKeyName] = useState("");
   const [importName, setImportName] = useState("");
-  const [publicKey, setPublicKey] = useState("");
+  const [pastedKey, setPastedKey] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+  const kind = keyKind(pastedKey);
   const [showImport, setShowImport] = useState(false);
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
@@ -36,7 +38,7 @@ export function Keys() {
     setShowImport(false);
     setKeyName("");
     setImportName("");
-    setPublicKey("");
+    setPastedKey("");
     setError("");
   }
 
@@ -59,16 +61,27 @@ export function Keys() {
     try {
       await api("/api/secrets/ssh-keys/import", {
         method: "POST",
-        body: JSON.stringify({ name: importName, publicKey }),
+        body: JSON.stringify(kind === "private" ? { name: importName, privateKey: pastedKey } : { name: importName, publicKey: pastedKey }),
       });
       setImportName("");
-      setPublicKey("");
+      setPastedKey("");
       setShowImport(false);
       setCreating(false);
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : text("common.error"));
     }
+  }
+
+  // A key file is a few kilobytes: anything larger is not one.
+  async function readKeyFile(file: File) {
+    setError("");
+    if (file.size > 64 * 1024) {
+      setError(text("keys.fileTooBig"));
+      return;
+    }
+    setPastedKey((await file.text()).trim());
+    if (!importName.trim()) setImportName(file.name.replace(/\.pub$/, ""));
   }
 
   async function download(secret: Secret) {
@@ -135,9 +148,25 @@ export function Keys() {
               <Field label={text("field.name")}>
                 <Input value={importName} onChange={(e) => setImportName(e.target.value)} required />
               </Field>
-              <Field label={text("field.publicKey")}>
-                <TextArea value={publicKey} onChange={(e) => setPublicKey(e.target.value)} required />
+              <Field label={text("field.sshKey")} hint={kind === "private" ? text("keys.detectedPrivate") : kind === "public" ? text("keys.detectedPublic") : text("keys.keyHint")}>
+                <TextArea value={pastedKey} onChange={(e) => setPastedKey(e.target.value)} autoComplete="off" spellCheck={false} required />
               </Field>
+              <input
+                ref={fileRef}
+                type="file"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (file) void readKeyFile(file);
+                }}
+              />
+              <div>
+                <TextButton type="button" onClick={() => fileRef.current?.click()}>
+                  <Icon icon={FileUp} />
+                  {text("keys.fromFile")}
+                </TextButton>
+              </div>
               <div>
                 <Button type="submit">{text("cluster.import")}</Button>
               </div>
@@ -194,4 +223,12 @@ export function Keys() {
       ) : null}
     </>
   );
+}
+
+// keyKind tells a private key, which always opens with a PEM header, from a
+// public one on a single authorized_keys line.
+function keyKind(value: string): "private" | "public" | "" {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  return /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/.test(trimmed) ? "private" : "public";
 }

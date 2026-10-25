@@ -29,10 +29,11 @@ Ouvrir `/mcp` dans un navigateur mène à la page des réglages.
 
 ## Confirmations
 
-Acheter des machines, supprimer une machine, un cluster, une application ou un paquet, et toute modification DNS qui touche l'existant se font **en deux temps** :
+Acheter des machines, relier une machine existante par SSH, supprimer une machine, un cluster, une application ou un paquet, et toute modification DNS qui touche l'existant se font **en deux temps** :
 
 1. Le premier appel ne fait rien. Il rend un récapitulatif et un code (`ABC-DEF`) :
    - pour un achat : les machines, le provider, le lieu, le prix, le coût théorique actuel et après achat, le budget ;
+   - pour une machine existante : son adresse, les clés SSH utilisées, le cluster et ce qui y sera installé ;
    - pour une suppression : ce qui sera détruit et l'économie ;
    - pour le DNS : les enregistrements avant et après.
 2. L'assistant montre le récapitulatif et attend votre accord.
@@ -69,6 +70,7 @@ Chaque action faite par un assistant est dans **Activité**, marquée **MCP** av
 - « Trois serveurs chez Hetzner ou Scaleway, en Europe, à moins de 15 € par mois chacun, en cluster SW avec trois plans de contrôle. »
 - « Je veux exactement un CCX23 à Helsinki. » S'il n'existe pas, l'assistant propose le modèle le plus proche ou un autre lieu.
 - « Ajoute deux nœuds au cluster SW. »
+- « Ajoute mon serveur 203.0.113.10 au cluster SW. » MyInfra s'y connecte lui-même en root par SSH, avec une clé dont il garde la clé privée et que la machine accepte déjà. Si la machine refuse root, comme les images Debian (« Please login as the user debian »), précisez l'utilisateur : MyInfra prépare l'accès root par sudo, sans mot de passe. Rien n'est à coller sur la machine. La commande à coller, l'autre façon de relier une machine, ne se donne que dans l'interface, parce qu'elle contient un jeton.
 - « Un serveur seul pour un petit site, budget 5 €. » S'il n'y en a pas : « rien sous 5 € avec 2 Go ; le plus proche est … à 5,49 € ».
 
 La recherche respecte le provider, le pays, le continent, le lieu, le processeur, la mémoire, le disque (un volume est ajouté si l'offre le permet), le prix maximum et le modèle exact. Quand rien ne convient, elle rend les offres les plus proches, chacune avec ce qui lui manque, et dit pourquoi :
