@@ -1,14 +1,22 @@
 package market
 
-// A starter is a ready-made template: a cluster, its servers and a set of
-// catalogue applications that go well together. Choosing one creates a
-// template the person completes with a provider, offers, keys and names.
+import "myinfra/internal/library"
+
+// A starter is a ready-made template of the library: a cluster, its servers
+// and packages that go well together. Choosing one creates a template the
+// person completes with a provider, offers, keys and names.
 type Starter struct {
-	ID string
+	ID      string
+	Version string
+	Name    string
+	Summary string
+	Sizing  string
+	// Translations give the words in the other languages of the screens.
+	Translations map[string]library.TemplateWords
 	// Cluster is the name of the cluster it creates.
 	Cluster string
 	Servers []StarterServer
-	Apps    []string
+	Apps    []StarterApp
 }
 
 type StarterServer struct {
@@ -16,57 +24,65 @@ type StarterServer struct {
 	ControlPlane bool
 }
 
-func single(name string) []StarterServer {
-	return []StarterServer{{Name: name, ControlPlane: true}}
-}
-
-// trio is three control planes: the cluster keeps running when one server
-// stops, during an update for instance.
-func trio(prefix string) []StarterServer {
-	return []StarterServer{
-		{Name: prefix + "-1", ControlPlane: true},
-		{Name: prefix + "-2", ControlPlane: true},
-		{Name: prefix + "-3", ControlPlane: true},
-	}
-}
-
-var starters = []Starter{
-	{ID: "first-steps", Cluster: "maison", Servers: single("maison-1"), Apps: []string{"homepage", "uptime-kuma", "vaultwarden"}},
-	{ID: "website", Cluster: "site", Servers: single("site-1"), Apps: []string{"wordpress", "umami"}},
-	{ID: "team", Cluster: "equipe", Servers: trio("equipe"), Apps: []string{"nextcloud", "mattermost", "vaultwarden", "docmost"}},
-	{ID: "knowledge", Cluster: "savoir", Servers: single("savoir-1"), Apps: []string{"bookstack", "hedgedoc", "excalidraw", "drawio"}},
-	{ID: "dev", Cluster: "atelier", Servers: single("atelier-1"), Apps: []string{"forgejo", "registry", "verdaccio", "code-server"}},
-	{ID: "monitoring", Cluster: "vigie", Servers: single("vigie-1"), Apps: []string{"uptime-kuma", "healthchecks", "ntfy"}},
-	{ID: "automation", Cluster: "automates", Servers: single("automates-1"), Apps: []string{"n8n", "changedetection", "ntfy"}},
-	{ID: "paperwork", Cluster: "papiers", Servers: single("papiers-1"), Apps: []string{"paperless", "stirling-pdf", "actual", "wallos"}},
-	{ID: "media", Cluster: "medias", Servers: single("medias-1"), Apps: []string{"jellyfin", "jellyseerr", "navidrome", "audiobookshelf"}},
+type StarterApp struct {
+	// ID is the package, Subdomain the name the application gets.
+	ID        string
+	Subdomain string
 }
 
 func Starters() []Starter {
-	return append([]Starter(nil), starters...)
+	lib := library.Current()
+	out := make([]Starter, 0, len(lib.Templates))
+	for _, t := range lib.Templates {
+		out = append(out, starterOf(t))
+	}
+	return out
 }
 
 func StarterOf(id string) (Starter, bool) {
-	for _, item := range starters {
-		if item.ID == id {
-			return item, true
-		}
+	t, ok := library.Current().Template(id)
+	if !ok {
+		return Starter{}, false
 	}
-	return Starter{}, false
+	return starterOf(t), true
+}
+
+func starterOf(t library.Template) Starter {
+	b := t.Body
+	out := Starter{
+		ID: t.ID, Version: t.Version, Name: b.Name, Summary: b.Summary, Sizing: b.Sizing,
+		Translations: b.Translations, Cluster: b.Cluster,
+	}
+	for _, server := range b.Servers {
+		out.Servers = append(out.Servers, StarterServer{Name: server.Name, ControlPlane: server.ControlPlane})
+	}
+	for _, app := range b.Apps {
+		sub := app.Subdomain
+		if sub == "" {
+			sub = app.Package
+		}
+		out.Apps = append(out.Apps, StarterApp{ID: app.Package, Subdomain: sub})
+	}
+	return out
+}
+
+// StarterOrigin says where a template taken from a starter comes from.
+func StarterOrigin(s Starter) library.Origin {
+	return library.Origin{Repo: library.Repo(), Kind: "template", ID: s.ID, Version: s.Version}
 }
 
 // ArticleName is the name of a catalogue application, for a starter to show.
 func ArticleName(id string) string {
-	if item, ok := find(id); ok {
-		return item.pkg.Name
+	if item, ok := library.Current().Package(id); ok {
+		return item.Pkg.Name
 	}
 	return ""
 }
 
 // ArticleLogo is the logo of a catalogue application.
 func ArticleLogo(id string) string {
-	if item, ok := find(id); ok {
-		return item.pkg.About.Logo
+	if item, ok := library.Current().Package(id); ok {
+		return item.Pkg.About.Logo
 	}
 	return ""
 }

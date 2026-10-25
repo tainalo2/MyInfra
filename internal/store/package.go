@@ -16,6 +16,8 @@ type Package struct {
 	Body      []byte
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	// Library is the JSON of its library.Origin, {} for the person's own.
+	Library []byte
 }
 
 func (s *Store) CreatePackage(ctx context.Context, ownerID, id, name string, body []byte) error {
@@ -50,8 +52,8 @@ func (s *Store) DeletePackage(ctx context.Context, ownerID, id string) error {
 func (s *Store) Package(ctx context.Context, ownerID, id string) (Package, error) {
 	var row Package
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, name, body, created_at, updated_at FROM packages WHERE id = $1 AND owner_id = $2`, id, ownerID).
-		Scan(&row.ID, &row.Name, &row.Body, &row.CreatedAt, &row.UpdatedAt)
+		SELECT id, name, body, created_at, updated_at, library FROM packages WHERE id = $1 AND owner_id = $2`, id, ownerID).
+		Scan(&row.ID, &row.Name, &row.Body, &row.CreatedAt, &row.UpdatedAt, &row.Library)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Package{}, ErrNotFound
 	}
@@ -60,7 +62,7 @@ func (s *Store) Package(ctx context.Context, ownerID, id string) (Package, error
 
 func (s *Store) ListPackages(ctx context.Context, ownerID string) ([]Package, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, name, body, created_at, updated_at FROM packages WHERE owner_id = $1 ORDER BY lower(name)`, ownerID)
+		SELECT id, name, body, created_at, updated_at, library FROM packages WHERE owner_id = $1 ORDER BY lower(name)`, ownerID)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +70,7 @@ func (s *Store) ListPackages(ctx context.Context, ownerID string) ([]Package, er
 	var out []Package
 	for rows.Next() {
 		var row Package
-		if err := rows.Scan(&row.ID, &row.Name, &row.Body, &row.CreatedAt, &row.UpdatedAt); err != nil {
+		if err := rows.Scan(&row.ID, &row.Name, &row.Body, &row.CreatedAt, &row.UpdatedAt, &row.Library); err != nil {
 			return nil, err
 		}
 		out = append(out, row)

@@ -271,6 +271,9 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("GET /api/template-runs/{id}", a.auth(a.getTemplateRun))
 	mux.HandleFunc("POST /api/template-runs/{id}/resume", a.deployAuth(a.steady(a.resumeTemplateRun)))
 
+	mux.HandleFunc("GET /api/library", a.auth(a.libraryInfo))
+	mux.HandleFunc("GET /api/library/logos/{slug}", a.auth(a.libraryLogo))
+	mux.HandleFunc("POST /api/updates/library/{kind}/{id}", a.deployAuth(a.steady(a.updateLibraryCopy)))
 	mux.HandleFunc("GET /api/catalogue", a.auth(a.listCatalogue))
 	mux.HandleFunc("GET /api/catalogue/{id}", a.auth(a.getCatalogue))
 	mux.HandleFunc("GET /api/catalogue/{id}/versions", a.auth(a.catalogueVersions))

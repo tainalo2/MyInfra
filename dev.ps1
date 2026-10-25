@@ -142,6 +142,12 @@ if (-not $env:DATABASE_URL) {
   Write-Error "DATABASE_URL manquant. Renseignez-le dans .env."
 }
 
+# Un clone de la bibliothèque à côté : MyInfra la lit telle quelle.
+$library = Join-Path (Split-Path $PSScriptRoot -Parent) "MyInfra-templates-and-packages-library"
+if (-not $env:MYINFRA_LIBRARY_DIR -and (Test-Path $library)) {
+  $env:MYINFRA_LIBRARY_DIR = $library
+}
+
 $script:PgData = Join-Path $PSScriptRoot ".pgdata"
 $script:Backup = Join-Path (Join-Path $env:USERPROFILE ".myinfra") "dev.sql"
 $script:PgBin = ""

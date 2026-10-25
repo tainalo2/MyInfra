@@ -1,0 +1,12 @@
+- name: Sites
+  translations:
+    en: Sites
+    pt: Sites
+    it: Siti
+    de: Websites
+- name: Collaboration
+  translations:
+    en: Collaboration
+    pt: Colaboração
+    it: Collaborazione
+    de: Zusammenarbeit

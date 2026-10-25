@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"myinfra/internal/library"
 	"myinfra/internal/market"
 	"myinfra/internal/pack"
 	"myinfra/internal/store"
@@ -28,6 +29,8 @@ type packageView struct {
 	Package   *pack.Package `json:"package,omitempty"`
 	// YAML is the package as a person reads and edits it.
 	YAML string `json:"yaml,omitempty"`
+	// Library is set for a copy of a library package.
+	Library *libraryMark `json:"library,omitempty"`
 }
 
 func toPackage(row store.Package, full bool) packageView {
@@ -35,7 +38,7 @@ func toPackage(row store.Package, full bool) packageView {
 	_ = json.Unmarshal(row.Body, &p)
 	view := packageView{
 		ID: row.ID, Name: row.Name, Summary: p.Summary, Category: p.Category,
-		Services: []string{}, Inputs: p.Inputs, UpdatedAt: row.UpdatedAt,
+		Services: []string{}, Inputs: p.Inputs, UpdatedAt: row.UpdatedAt, Library: markOf(row.Library, row.Body),
 	}
 	if p.About != nil {
 		view.Logo = p.About.Logo
@@ -185,7 +188,14 @@ func (a *API) deletePackage(w http.ResponseWriter, r *http.Request) {
 // keepPackage stores a valid package. renamed finds a free name, for an
 // import or a copy, instead of refusing one already used.
 func (a *API) keepPackage(w http.ResponseWriter, r *http.Request, p pack.Package, renamed bool) {
+	a.keepPackageFrom(w, r, p, renamed, nil)
+}
+
+// keepPackageFrom stores a package and, for a copy of the library, where it
+// comes from.
+func (a *API) keepPackageFrom(w http.ResponseWriter, r *http.Request, p pack.Package, renamed bool, origin *library.Origin) {
 	owner := ownerID(r.Context())
+	var kept []byte
 	base := strings.TrimSpace(p.Name)
 	id := newID()
 	for n := 1; ; n++ {
@@ -200,9 +210,19 @@ func (a *API) keepPackage(w http.ResponseWriter, r *http.Request, p pack.Package
 		}
 		err = a.Store.CreatePackage(r.Context(), owner, id, p.Name, raw)
 		if err == nil {
+			kept = raw
 			break
 		}
 		if !renamed || !errors.Is(err, store.ErrNameTaken) || n == 20 {
+			a.mapErr(w, err)
+			return
+		}
+	}
+	if origin != nil {
+		mark := *origin
+		mark.Sum = bodySum(kept)
+		raw, _ := json.Marshal(mark)
+		if err := a.Store.SetPackageLibrary(r.Context(), owner, id, raw); err != nil {
 			a.mapErr(w, err)
 			return
 		}
@@ -398,14 +418,17 @@ func (a *API) convertPackage(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"format": format, "package": p, "yaml": string(text), "warnings": warnings, "problems": problems})
 }
 
-// copyArticle keeps a catalogue article as a package, to change it.
+// copyArticle keeps a catalogue article as a package, to change it. The copy
+// remembers its version in the library, to be offered the next ones.
 func (a *API) copyArticle(w http.ResponseWriter, r *http.Request) {
-	p, ok := market.PackageOf(r.PathValue("id"))
-	if !ok {
+	id := r.PathValue("id")
+	p, ok := market.PackageOf(id)
+	origin, found := market.Origin(id)
+	if !ok || !found {
 		writeError(w, http.StatusNotFound, "Cet article est introuvable.")
 		return
 	}
-	a.keepPackage(w, r, p, true)
+	a.keepPackageFrom(w, r, p, true, &origin)
 }
 
 // installPackage creates an application from a package, as from the catalogue.

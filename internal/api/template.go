@@ -1102,6 +1102,8 @@ type templateView struct {
 	Name      string         `json:"name"`
 	Body      blueprint.Body `json:"body"`
 	CreatedAt time.Time      `json:"createdAt"`
+	// Library is set for a template taken from the library.
+	Library *libraryMark `json:"library,omitempty"`
 }
 
 type runView struct {
@@ -1124,7 +1126,7 @@ type runStepView struct {
 
 func toTemplate(row store.Template) templateView {
 	body, _ := decodeBody(row.Body)
-	return templateView{ID: row.ID, Name: row.Name, Body: body, CreatedAt: row.CreatedAt}
+	return templateView{ID: row.ID, Name: row.Name, Body: body, CreatedAt: row.CreatedAt, Library: markOf(row.Library, row.Body)}
 }
 
 func readTemplate(w http.ResponseWriter, r *http.Request) (string, blueprint.Body, string) {

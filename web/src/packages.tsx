@@ -9,6 +9,7 @@ import { AppsTabs, ConfirmDialog, Sheet, Tabs, useToast } from "./kit";
 import { useSession } from "./session";
 import { ToolInstall } from "./tools";
 import { AppLogo } from "./app-logo";
+import { LibraryTag } from "./library-tag";
 import {
   ActionsMenu,
   Button,
@@ -207,6 +208,7 @@ export function Packages() {
                   <span className="min-w-0">
                     <span className="font-medium">{row.name}</span>
                     {row.summary ? <p className="mt-1 text-muted">{row.summary}</p> : null}
+                    <LibraryTag mark={row.library} />
                   </span>
                 </Link>
                 <ActionsMenu label={text("apps.more")}>

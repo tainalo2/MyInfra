@@ -16,6 +16,7 @@ import (
 	"myinfra/internal/api"
 	"myinfra/internal/boot"
 	"myinfra/internal/box"
+	"myinfra/internal/library"
 	"myinfra/internal/registry"
 	"myinfra/internal/store"
 	"myinfra/internal/tools"
@@ -60,6 +61,8 @@ func run() {
 // serve runs MyInfra until it is stopped. It returns true when an update
 // asked for the new executable to start in its place.
 func serve() bool {
+	// The library leaves out what asks for a newer MyInfra than this one.
+	library.Engine = version
 	rt, err := boot.Start()
 	if err != nil {
 		fatal("démarrage", "err", err)
@@ -139,6 +142,7 @@ func serve() bool {
 		}()
 	}
 	go app.Sync(ctx)
+	go app.Library(ctx)
 	go app.WatchRole(ctx)
 	go app.WatchReach(ctx)
 	go app.WatchBudget(ctx)

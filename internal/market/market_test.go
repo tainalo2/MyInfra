@@ -1,39 +1,34 @@
 package market
 
 import (
-	"strings"
 	"testing"
-	"testing/fstest"
 
 	"myinfra/internal/pack"
 )
 
+// The library built into MyInfra opens and presents every category.
 func TestCatalogueIsInstallable(t *testing.T) {
-	if _, err := load(files); err != nil {
-		t.Fatal(err)
+	groups := Groups()
+	if len(groups) < 11 {
+		t.Fatal(len(groups))
 	}
-	want := []string{Sites, Collaboration, Code, Identity, Files, Automation, Exchange, Notes, Accounts, Media, Tools}
-	seen := map[string]bool{}
-	for _, group := range Groups() {
-		seen[group.Name] = true
-		if len(group.Articles) == 0 {
-			t.Fatal(group.Name)
-		}
-	}
-	for _, name := range want {
-		if !seen[name] {
-			t.Fatal(name)
+	for _, group := range groups {
+		if len(group.Articles) == 0 || group.Translations["en"] == "" {
+			t.Fatalf("%+v", group)
 		}
 	}
 	if Logo("ghost:5-alpine") != "ghost" || Logo("lissy93/dashy:3.1.1") != "dashy" || Logo("nginx:alpine") != "" {
 		t.Fatal(Logo("ghost:5-alpine"), Logo("lissy93/dashy:3.1.1"), Logo("nginx:alpine"))
 	}
-	if len(articles) < 80 {
-		t.Fatal(len(articles))
+	if len(IDs()) < 80 {
+		t.Fatal(len(IDs()))
 	}
 	card, ok := CardOf("wordpress")
-	if !ok || card.Site != "https://wordpress.org" || card.Logo != "wordpress" || len(card.Services) != 2 || card.Description == "" {
+	if !ok || card.Site != "https://wordpress.org" || card.Logo != "wordpress" || len(card.Services) != 2 || card.Description == "" || card.Version == "" {
 		t.Fatalf("%+v", card)
+	}
+	if Release() == "" {
+		t.Fatal("release")
 	}
 }
 
@@ -70,31 +65,6 @@ func TestExpandAsksForTheContact(t *testing.T) {
 	}
 	if got := pack.FillAddress("{{host}}:{{host}}", "a.fr"); got != "a.fr:a.fr" {
 		t.Fatal(got)
-	}
-}
-
-// A catalogue that does not hold together is refused with what to fix.
-func TestLoadRefusesABrokenCatalogue(t *testing.T) {
-	good, err := files.ReadFile("catalogue/umami.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	cases := []struct {
-		name  string
-		fsys  fstest.MapFS
-		where string
-	}{
-		{"unlisted", fstest.MapFS{"catalogue/order.txt": {Data: []byte("")}, "catalogue/umami.yaml": {Data: good}}, "manque dans order.txt"},
-		{"missing", fstest.MapFS{"catalogue/order.txt": {Data: []byte("umami\nghost\n")}, "catalogue/umami.yaml": {Data: good}}, "ghost.yaml est absent"},
-		{"invalid", fstest.MapFS{"catalogue/order.txt": {Data: []byte("umami\n")}, "catalogue/umami.yaml": {Data: []byte(strings.Replace(string(good), "port: 3000", "port: 99999", 1))}}, "ligne"},
-		{"untranslated", fstest.MapFS{"catalogue/order.txt": {Data: []byte("umami\n")}, "catalogue/umami.yaml": {Data: []byte(strings.Replace(string(good), "    de:", "    xx:", 1))}}, "translations"},
-		{"unread", fstest.MapFS{"catalogue/order.txt": {Data: []byte("umami\n")}, "catalogue/umami.yaml": {Data: []byte(strings.Replace(string(good), "services:", "inputs:\n  - key: unused\n    label: Inutile\nservices:", 1))}}, "unused"},
-	}
-	for _, c := range cases {
-		_, err := load(c.fsys)
-		if err == nil || !strings.Contains(err.Error(), c.where) {
-			t.Fatalf("%s: %v", c.name, err)
-		}
 	}
 }
 

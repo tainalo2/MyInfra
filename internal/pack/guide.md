@@ -9,6 +9,8 @@ version: 1
 
 Vérifiez toujours le texte avec `check_package` avant de l'enregistrer : chaque problème est rendu avec son chemin et sa ligne.
 
+`version: 1` est la version du format, pas celle de l'application. Les paquets de la bibliothèque (le catalogue) ont ce même format. Ils sont publiés dans le dépôt `tainalo2/MyInfra-templates-and-packages-library`, chacun avec sa version dans un fichier à part.
+
 ## Les services
 
 Un service fait tourner une image : le site, sa base de données, un cache, une tâche de fond. De 1 à 12 services. Chaque service a un nom en minuscules, avec des tirets, par lequel les autres le joignent sur le réseau de l'application (`db`, `cache`).

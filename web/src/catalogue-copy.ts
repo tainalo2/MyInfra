@@ -1,5 +1,5 @@
 import type { CatalogueCard, CatalogueInput } from "./api";
-import { categoryLabel, currentLang, text } from "./i18n";
+import { currentLang, text } from "./i18n";
 
 // localizeCard gives a catalogue card in the language of the screen: each
 // application carries its own words, in its package.
@@ -18,8 +18,10 @@ function localizeInput(input: CatalogueInput): CatalogueInput {
   return input;
 }
 
-export function categoryName(name: string): string {
-  return categoryLabel(name);
+// categoryName gives a category in the language of the screen: the library
+// carries its words.
+export function categoryName(name: string, words?: Record<string, string>): string {
+  return words?.[currentLang()] || name;
 }
 
 export function cardMatches(card: CatalogueCard, needle: string): boolean {

@@ -432,6 +432,28 @@ CREATE TABLE IF NOT EXISTS packages (
 
 CREATE UNIQUE INDEX IF NOT EXISTS packages_owner_name_key ON packages (owner_id, lower(btrim(name)));
 
+-- Where a package or a template comes from when it was taken from the
+-- library: its id and version there, to offer the newer ones. An empty
+-- object: one the person wrote.
+ALTER TABLE packages ADD COLUMN IF NOT EXISTS library jsonb NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE templates ADD COLUMN IF NOT EXISTS library jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+-- The last release of the library this installation adopted, signed as it
+-- was published: every copy on this database reads it at start. Copies
+-- fetch the library each for itself: they never exchange it.
+CREATE TABLE IF NOT EXISTS library_cache (
+    repo text PRIMARY KEY,
+    release text NOT NULL,
+    archive bytea NOT NULL,
+    sums bytea NOT NULL,
+    signature bytea NOT NULL,
+    fetched_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- A copy of a library package or template can be updated too.
+ALTER TABLE updates DROP CONSTRAINT IF EXISTS updates_kind_check;
+ALTER TABLE updates ADD CONSTRAINT updates_kind_check CHECK (kind IN ('app', 'server', 'myinfra', 'library'));
+
 -- Personal access tokens a person makes for a program, such as an MCP
 -- client. Like sessions, each copy keeps its own: they are never synced.
 CREATE TABLE IF NOT EXISTS api_tokens (

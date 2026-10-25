@@ -63,6 +63,7 @@ func (a *API) checkDue(ctx context.Context, force bool) {
 		{"myinfra", myinfraEvery, a.checkMyInfra},
 		{"app", appsEvery, a.checkApps},
 		{"server", serversEvery, a.checkServers},
+		{"library", libraryEvery, a.checkLibrary},
 	}
 	var group sync.WaitGroup
 	for _, check := range checks {
@@ -220,6 +221,16 @@ func (a *API) listUpdates(w http.ResponseWriter, r *http.Request) {
 			names["server:"+server.ID] = server.Name
 		}
 	}
+	if packages, err := a.Store.ListPackages(r.Context(), owner); err == nil {
+		for _, p := range packages {
+			names["library:package:"+p.ID] = p.Name
+		}
+	}
+	if templates, err := a.Store.ListTemplates(r.Context(), owner); err == nil {
+		for _, t := range templates {
+			names["library:template:"+t.ID] = t.Name
+		}
+	}
 	out := []updateView{}
 	for _, row := range rows {
 		name := names[row.Kind+":"+row.TargetID]
@@ -267,8 +278,10 @@ func kindOrder(kind string) int {
 		return 0
 	case "app":
 		return 1
-	default:
+	case "server":
 		return 2
+	default:
+		return 3
 	}
 }
 

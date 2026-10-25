@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { SimpleIcon } from "simple-icons";
 import {
   siActualbudget,
@@ -117,51 +118,11 @@ const logos: Record<string, SimpleIcon> = {
   wordpress: siWordpress,
 };
 
-// Official logos of the projects simple-icons lacks, taken as published in
-// their own repositories (see public/logos/SOURCES.md).
-const files: Record<string, string> = {
-  activepieces: "/logos/activepieces.svg",
-  bazarr: "/logos/bazarr.png",
-  cyberchef: "/logos/cyberchef.svg",
-  dashy: "/logos/dashy.png",
-  docmost: "/logos/docmost.png",
-  docuseal: "/logos/docuseal.svg",
-  dokuwiki: "/logos/dokuwiki.svg",
-  etherpad: "/logos/etherpad.svg",
-  filebrowser: "/logos/filebrowser.svg",
-  freescout: "/logos/freescout.png",
-  gatus: "/logos/gatus.svg",
-  gotify: "/logos/gotify.png",
-  healthchecks: "/logos/healthchecks.svg",
-  homer: "/logos/homer.svg",
-  huginn: "/logos/huginn.svg",
-  "it-tools": "/logos/it-tools.png",
-  jellyseerr: "/logos/jellyseerr.svg",
-  kavita: "/logos/kavita.svg",
-  komga: "/logos/komga.svg",
-  lidarr: "/logos/lidarr.svg",
-  linkding: "/logos/linkding.svg",
-  linkwarden: "/logos/linkwarden.png",
-  memos: "/logos/memos.svg",
-  metube: "/logos/metube.png",
-  miniflux: "/logos/miniflux.svg",
-  navidrome: "/logos/navidrome.png",
-  nocodb: "/logos/nocodb.png",
-  openldap: "/logos/openldap.png",
-  photoprism: "/logos/photoprism.svg",
-  pinchflat: "/logos/pinchflat.png",
-  prowlarr: "/logos/prowlarr.svg",
-  readarr: "/logos/readarr.svg",
-  shiori: "/logos/shiori.png",
-  shlink: "/logos/shlink.svg",
-  silverbullet: "/logos/silverbullet.svg",
-  stirlingpdf: "/logos/stirlingpdf.svg",
-  typesense: "/logos/typesense.png",
-  wallos: "/logos/wallos.png",
-  wekan: "/logos/wekan.svg",
-  whisparr: "/logos/whisparr.svg",
-  whoogle: "/logos/whoogle.png",
-};
+// libraryLogo is where the library serves the logos simple-icons lacks,
+// official ones taken from the projects (see SOURCES.md in the library).
+function libraryLogo(slug: string) {
+  return `/api/library/logos/${encodeURIComponent(slug)}`;
+}
 
 function brandTile(hex: string) {
   const full = hex.length === 3 ? hex.split("").map((part) => part + part).join("") : hex;
@@ -177,8 +138,10 @@ function brandTile(hex: string) {
 export function AppLogo({ slug, name, size = 40 }: { slug: string; name: string; size?: number }) {
   const icon = logos[slug];
   const glyph = Math.round(size * 0.58);
-  const file = files[slug];
-  if (!icon && file) {
+  // A slug the library has no logo for shows the first letter.
+  const [missing, setMissing] = useState("");
+  const file = !icon && slug && missing !== slug ? libraryLogo(slug) : "";
+  if (file) {
     // Colour logos keep their own colours, on a light tile in both themes.
     return (
       <span
@@ -186,7 +149,16 @@ export function AppLogo({ slug, name, size = 40 }: { slug: string; name: string;
         style={{ width: size, height: size }}
         aria-hidden
       >
-        <img src={file} alt="" width={Math.round(size * 0.72)} height={Math.round(size * 0.72)} className="object-contain" loading="lazy" decoding="async" />
+        <img
+          src={file}
+          alt=""
+          width={Math.round(size * 0.72)}
+          height={Math.round(size * 0.72)}
+          className="object-contain"
+          loading="lazy"
+          decoding="async"
+          onError={() => setMissing(slug)}
+        />
       </span>
     );
   }

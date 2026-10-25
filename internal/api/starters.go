@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"myinfra/internal/blueprint"
+	"myinfra/internal/library"
 	"myinfra/internal/market"
 	"myinfra/internal/store"
 )
@@ -18,24 +19,32 @@ type starterApp struct {
 }
 
 type starterView struct {
-	ID            string       `json:"id"`
-	Servers       int          `json:"servers"`
-	ControlPlanes int          `json:"controlPlanes"`
-	Apps          []starterApp `json:"apps"`
+	ID            string                           `json:"id"`
+	Version       string                           `json:"version"`
+	Name          string                           `json:"name"`
+	Summary       string                           `json:"summary"`
+	Sizing        string                           `json:"sizing"`
+	Translations  map[string]library.TemplateWords `json:"translations,omitempty"`
+	Servers       int                              `json:"servers"`
+	ControlPlanes int                              `json:"controlPlanes"`
+	Apps          []starterApp                     `json:"apps"`
 }
 
 // listStarters gives the ready-made templates, for the templates page.
 func (a *API) listStarters(w http.ResponseWriter, r *http.Request) {
 	out := []starterView{}
 	for _, starter := range market.Starters() {
-		view := starterView{ID: starter.ID, Servers: len(starter.Servers), Apps: []starterApp{}}
+		view := starterView{
+			ID: starter.ID, Version: starter.Version, Name: starter.Name, Summary: starter.Summary, Sizing: starter.Sizing,
+			Translations: starter.Translations, Servers: len(starter.Servers), Apps: []starterApp{},
+		}
 		for _, server := range starter.Servers {
 			if server.ControlPlane {
 				view.ControlPlanes++
 			}
 		}
-		for _, id := range starter.Apps {
-			view.Apps = append(view.Apps, starterApp{ID: id, Name: market.ArticleName(id), Logo: market.ArticleLogo(id)})
+		for _, app := range starter.Apps {
+			view.Apps = append(view.Apps, starterApp{ID: app.ID, Name: market.ArticleName(app.ID), Logo: market.ArticleLogo(app.ID)})
 		}
 		out = append(out, view)
 	}
@@ -64,31 +73,15 @@ func (a *API) useStarter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	owner := ownerID(r.Context())
-	body := blueprint.Body{ClusterName: starter.Cluster}
-	for _, server := range starter.Servers {
-		body.Servers = append(body.Servers, blueprint.Server{Name: server.Name, ControlPlane: server.ControlPlane})
-	}
 	// With a single DNS zone, the names are ready to publish.
 	zone := ""
 	if zones := a.ownerZones(r, owner); len(zones) == 1 {
 		zone = zones[0]
 	}
-	for _, id := range starter.Apps {
-		// The template carries the application whole, as a package: it runs
-		// as the catalogue describes it, files and checks included.
-		p, ok := market.PackageOf(id)
-		if !ok {
-			writeError(w, http.StatusInternalServerError, "Cet article est introuvable.")
-			return
-		}
-		app := blueprint.App{Name: p.Name, SourceKind: "image", Replicas: 1, Package: &p, Inputs: map[string]string{},
-			Names: []blueprint.Name{{Subdomain: id, Zone: zone}}}
-		for _, svc := range p.Services {
-			if svc.Public {
-				app.Source = svc.Image
-			}
-		}
-		body.Applications = append(body.Applications, app)
+	body, err := starterBody(starter, zone)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
 	}
 	if message := blueprint.Validate(body); message != "" {
 		writeError(w, http.StatusBadRequest, message)
@@ -115,6 +108,15 @@ func (a *API) useStarter(w http.ResponseWriter, r *http.Request) {
 		a.mapErr(w, err)
 		return
 	}
+	// The template keeps where it comes from, for its newer versions.
+	origin := market.StarterOrigin(starter)
+	origin.Sum = bodySum(raw)
+	if mark, err := json.Marshal(origin); err == nil {
+		if err := a.Store.SetTemplateLibrary(r.Context(), owner, id, mark); err != nil {
+			a.mapErr(w, err)
+			return
+		}
+	}
 	row, err := a.Store.Template(r.Context(), owner, id)
 	if err != nil {
 		a.mapErr(w, err)
@@ -139,4 +141,30 @@ func (a *API) ownerZones(r *http.Request, owner string) []string {
 		}
 	}
 	return zones
+}
+
+// starterBody is the template a starter gives: its servers wait for a
+// provider, an offer and keys.
+func starterBody(starter market.Starter, zone string) (blueprint.Body, error) {
+	body := blueprint.Body{ClusterName: starter.Cluster}
+	for _, server := range starter.Servers {
+		body.Servers = append(body.Servers, blueprint.Server{Name: server.Name, ControlPlane: server.ControlPlane})
+	}
+	for _, item := range starter.Apps {
+		// The template carries the application whole, as a package: it runs
+		// as the catalogue describes it, files and checks included.
+		p, ok := market.PackageOf(item.ID)
+		if !ok {
+			return body, fmt.Errorf("Cet article est introuvable.")
+		}
+		app := blueprint.App{Name: p.Name, SourceKind: "image", Replicas: 1, Package: &p, Inputs: map[string]string{},
+			Names: []blueprint.Name{{Subdomain: item.Subdomain, Zone: zone}}}
+		for _, svc := range p.Services {
+			if svc.Public {
+				app.Source = svc.Image
+			}
+		}
+		body.Applications = append(body.Applications, app)
+	}
+	return body, nil
 }
