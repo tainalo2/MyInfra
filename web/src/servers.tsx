@@ -7,7 +7,7 @@ import { api, type Catalog, type Cost, type DeployStep, type Destruction, type P
 import { CancelDeployment } from "./deployments";
 import { UsageMeters } from "./meters";
 import { hourlyRate, money, podCpu, size, usageText } from "./measure";
-import { HostingFields, HostingMark, ServerHosting, emptyHosting, hostingLabel } from "./hosting";
+import { HostingFields, HostingMark, ServerHosting, ServerSSHUser, emptyHosting, hostingLabel } from "./hosting";
 import { OfferFields, OfferStorage, cheapestOffer, chosenStorage, formatPrice, memory } from "./offers";
 import { knownPlaces, placeLabel, placeOf } from "./places";
 import { ProviderSelect } from "./provider-select";
@@ -70,6 +70,11 @@ export function ServerForm({ clusterId }: { clusterId: string }) {
   const alone = clusterId === "";
   const [keyIds, setKeyIds] = useState<string[]>([""]);
   const [hosting, setHosting] = useState(emptyHosting);
+  // An existing server joins with a command pasted on it, or MyInfra opens SSH itself.
+  const [joinMode, setJoinMode] = useState<"script" | "ssh">("script");
+  const [address, setAddress] = useState("");
+  const [sshUser, setSshUser] = useState("");
+  const direct = providerId === "manual" && joinMode === "ssh";
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [keySheet, setKeySheet] = useState(false);
@@ -196,6 +201,8 @@ export function ServerForm({ clusterId }: { clusterId: string }) {
           storageId: storage.id,
           storageGb: storage.gb,
           hosting: providerId === "manual" ? hosting : undefined,
+          address: direct ? address.trim() : undefined,
+          sshUser: direct ? sshUser.trim() : undefined,
         }),
       });
       navigate(`/serveurs/${created.id}`);
@@ -283,8 +290,38 @@ export function ServerForm({ clusterId }: { clusterId: string }) {
               ? [
                   {
                     title: text("steps.machine"),
-                    ready: hosting.provider !== "other" || Boolean(hosting.name?.trim()),
-                    content: <HostingFields value={hosting} onChange={setHosting} />,
+                    ready: (hosting.provider !== "other" || Boolean(hosting.name?.trim())) && (!direct || address.trim() !== ""),
+                    content: (
+                      <>
+                        <Group label={text("server.joinMode")}>
+                          <div className="flex flex-wrap gap-2" role="group" aria-label={text("server.joinMode")}>
+                            {(["script", "ssh"] as const).map((mode) => (
+                              <button
+                                key={mode}
+                                type="button"
+                                aria-pressed={joinMode === mode}
+                                onClick={() => setJoinMode(mode)}
+                                className={`min-h-11 rounded-md border px-3 py-2 sm:min-h-0 ${joinMode === mode ? "border-ink bg-status" : "border-line"} ${focus}`}
+                              >
+                                {text(mode === "script" ? "server.joinScript" : "server.joinSsh")}
+                              </button>
+                            ))}
+                          </div>
+                          <p className="mt-2 text-faint">{text(direct ? "server.joinSshHint" : "server.joinScriptHint")}</p>
+                        </Group>
+                        {direct ? (
+                          <Field label={text("server.directAddress")}>
+                            <Input value={address} placeholder="203.0.113.10" required onChange={(e) => setAddress(e.target.value)} />
+                          </Field>
+                        ) : null}
+                        {direct ? (
+                          <Field label={text("server.sshUser")} hint={text("server.sshUserHint")}>
+                            <Input value={sshUser} placeholder="root" autoCapitalize="off" autoComplete="off" spellCheck={false} onChange={(e) => setSshUser(e.target.value)} />
+                          </Field>
+                        ) : null}
+                        <HostingFields value={hosting} onChange={setHosting} />
+                      </>
+                    ),
                   },
                 ]
               : [
@@ -363,7 +400,7 @@ export function ServerForm({ clusterId }: { clusterId: string }) {
                     </div>
                   )}
                   {keys.length > 0 ? (
-                    <Group label={text("nav.ssh")}>
+                    <Group label={text("nav.ssh")} hint={direct ? text("server.joinSshKeys") : undefined}>
                     <div className="flex flex-col gap-2">
                       {keyIds.map((keyId, index) => {
                         const taken = new Set(keyIds.filter((id, i) => i !== index && id));
@@ -683,6 +720,7 @@ export function ServerPage() {
             </Select>
           </Field>
           <ServerHosting server={server} onSaved={setServer} />
+          <ServerSSHUser server={server} onSaved={setServer} />
         </div>
       ) : null}
       <ReachNotice server={server} onChecked={setServer} onRemove={() => setConfirm(true)} />

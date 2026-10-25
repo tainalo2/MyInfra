@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -42,6 +43,29 @@ func ParsePublic(authorized string) (string, string, error) {
 		return "", "", fmt.Errorf("clé publique illisible")
 	}
 	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key))), ssh.FingerprintSHA256(key), nil
+}
+
+// ErrPassphrase is a private key locked by a passphrase: MyInfra opens
+// sessions alone and could not unlock it.
+var ErrPassphrase = errors.New("clé privée protégée par une phrase de passe")
+
+// ParsePrivate reads an imported private key and gives its public half.
+func ParsePrivate(private string) (Pair, error) {
+	private = strings.TrimSpace(private) + "\n"
+	signer, err := ssh.ParsePrivateKey([]byte(private))
+	if err != nil {
+		var locked *ssh.PassphraseMissingError
+		if errors.As(err, &locked) {
+			return Pair{}, ErrPassphrase
+		}
+		return Pair{}, fmt.Errorf("clé privée illisible")
+	}
+	pub := signer.PublicKey()
+	return Pair{
+		Public:      strings.TrimSpace(string(ssh.MarshalAuthorizedKey(pub))),
+		Private:     private,
+		Fingerprint: ssh.FingerprintSHA256(pub),
+	}, nil
 }
 
 func Hint(secret string) string {

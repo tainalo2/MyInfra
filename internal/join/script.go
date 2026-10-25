@@ -39,6 +39,17 @@ curl -fsS -m 20 -X POST '%s/api/join' -H 'Authorization: Bearer %s' -H 'content-
 	return b.String(), nil
 }
 
+// Prepare is what the pasted command does before it calls home: root's
+// access by key and MyInfra's keys. MyInfra runs it itself through sudo on a
+// machine that only lets another user in at first.
+func Prepare(publicKeys []string) (string, error) {
+	b, err := access("", publicKeys)
+	if err != nil {
+		return "", err
+	}
+	return b.String(), nil
+}
+
 // SSHPenalties softens the penalties OpenSSH 9.8 and later gives an address:
 // MyInfra opens many sessions, from an address that changes, and a session
 // cut during an upgrade of OpenSSH counts as a crash that shuts the address

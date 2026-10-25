@@ -298,3 +298,46 @@ func TestMCPOrderRecap(t *testing.T) {
 		t.Fatal(text)
 	}
 }
+
+// An existing server shows its recap and asks for a code before MyInfra
+// opens SSH on it. The installation itself is left out: it would reach the
+// machine.
+func TestMCPAddExistingRecap(t *testing.T) {
+	a, h := buyingFixture(t)
+	deploy := makeToken(t, h, "sess-owner", store.RoleDeploy, 0).Token
+	if rec := call(t, h, http.MethodPost, "/api/clusters", "", "sess-owner", map[string]any{"name": "SW"}); rec.Code != http.StatusCreated {
+		t.Fatal(rec.Code, rec.Body.String())
+	}
+	args := map[string]any{"name": "maison", "address": "203.0.113.10", "cluster": "SW"}
+	text, failed := mcpCallTool(t, h, deploy, "add_existing_server", args)
+	for _, want := range []string{"« maison » (203.0.113.10)", "en root par SSH avec : ma-clé", "cluster SW et le pilote", "Rien n'est acheté", `confirmation="`} {
+		if failed || !strings.Contains(text, want) {
+			t.Fatalf("%q absent :\n%s", want, text)
+		}
+	}
+	servers, _ := a.Store.ListServers(t.Context(), "owner")
+	if len(servers) != 0 {
+		t.Fatal("machine créée avant l'accord")
+	}
+	for label, bad := range map[string]map[string]any{
+		"adresse": {"name": "maison", "address": "127.0.0.1"},
+		"nom":     {"name": "maison", "address": "srv.example.com"},
+		"clé":     {"name": "maison", "address": "203.0.113.10", "ssh_keys": []string{"inconnue"}},
+		"cluster": {"name": "maison", "address": "203.0.113.10", "cluster": "nope"},
+	} {
+		if text, failed := mcpCallTool(t, h, deploy, "add_existing_server", bad); !failed {
+			t.Fatalf("%s accepté : %s", label, text)
+		}
+	}
+	text, failed = mcpCallTool(t, h, deploy, "add_existing_server", map[string]any{"name": "maison", "address": "203.0.113.10", "ssh_user": "debian"})
+	if failed || !strings.Contains(text, "en debian par SSH") || !strings.Contains(text, "par sudo") {
+		t.Fatal(text)
+	}
+	if text, failed := mcpCallTool(t, h, deploy, "add_existing_server", map[string]any{"name": "maison", "address": "203.0.113.10", "ssh_user": "a;b"}); !failed {
+		t.Fatalf("utilisateur accepté : %s", text)
+	}
+	read := makeToken(t, h, "sess-owner", store.RoleRead, 0).Token
+	if text, failed := mcpCallTool(t, h, read, "add_existing_server", args); !failed {
+		t.Fatalf("lecture seule acceptée : %s", text)
+	}
+}

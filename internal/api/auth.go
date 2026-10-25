@@ -121,6 +121,20 @@ func announcedIP(raw string) string {
 	return ip.String()
 }
 
+// directAddress is the address typed for a machine MyInfra reaches over SSH
+// itself. Empty means the machine joins with the pasted command.
+func directAddress(raw string) (string, string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", ""
+	}
+	address := announcedIP(raw)
+	if address == "" {
+		return "", "Donnez l'adresse IP du serveur, par exemple 203.0.113.10."
+	}
+	return address, ""
+}
+
 // publicClientIP is the caller when the proxy preserved a public address.
 // A pod address is not where MyInfra can open SSH.
 func publicClientIP(r *http.Request) string {
@@ -237,6 +251,7 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("GET /api/servers/{id}", a.auth(a.getServer))
 	mux.HandleFunc("PUT /api/servers/{id}/place", a.deployAuth(a.serverSteady(a.setServerPlace)))
 	mux.HandleFunc("PUT /api/servers/{id}/hosting", a.deployAuth(a.serverSteady(a.setServerHosting)))
+	mux.HandleFunc("PUT /api/servers/{id}/ssh-user", a.deployAuth(a.serverSteady(a.setServerSSHUser)))
 	mux.HandleFunc("GET /api/servers/{id}/tofu", a.auth(a.serverTofu))
 	mux.HandleFunc("PUT /api/servers/{id}/tofu", a.deployAuth(a.serverSteady(a.saveServerTofu)))
 	mux.HandleFunc("GET /api/servers/{id}/runtime", a.auth(a.serverRuntime))

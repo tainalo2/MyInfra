@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strings"
@@ -66,6 +67,9 @@ type serverView struct {
 	Place string `json:"place,omitempty"`
 	// Hosting is who rents a machine added by hand, and its price.
 	Hosting *hostingView `json:"hosting,omitempty"`
+	// SSHUser prepares root's access on a machine added by hand that
+	// refuses root at first. Empty means root.
+	SSHUser string `json:"sshUser,omitempty"`
 }
 
 func (a *API) toServer(row store.Server) serverView {
@@ -85,6 +89,7 @@ func (a *API) toServer(row store.Server) serverView {
 		CreatedAt:    row.CreatedAt,
 		Place:        manualPlace(row.Plan),
 		Hosting:      manualHosting(row.Plan),
+		SSHUser:      manualSSHUser(row.Plan),
 	}
 	if plan != nil {
 		view.Cost = billOf(plan.Hourly, plan.Monthly, plan.Currency, row.CreatedAt)
@@ -119,6 +124,23 @@ func manualPlace(raw []byte) string {
 	return strings.TrimSpace(body.Location)
 }
 
+func manualSSHUser(raw []byte) string {
+	if planOf(raw) != nil || len(raw) == 0 {
+		return ""
+	}
+	var body struct {
+		SSHUser string `json:"sshUser"`
+	}
+	if json.Unmarshal(raw, &body) != nil {
+		return ""
+	}
+	user, problem := cleanSSHUser(body.SSHUser)
+	if problem != "" || user == "root" {
+		return ""
+	}
+	return user
+}
+
 func planOf(raw []byte) *catalog.Plan {
 	if len(raw) == 0 {
 		return nil
@@ -145,6 +167,12 @@ func (a *API) createServer(w http.ResponseWriter, r *http.Request) {
 		ControlPlane bool     `json:"controlPlane"`
 		// Hosting is only read for a machine added by hand.
 		Hosting *hostingView `json:"hosting"`
+		// Address is a machine added by hand that MyInfra reaches over SSH
+		// itself, with no command to paste: for a copy the machine cannot call.
+		Address string `json:"address"`
+		// SSHUser opens the first session when the machine refuses root, as
+		// Debian cloud images do: MyInfra prepares root's access through sudo.
+		SSHUser string `json:"sshUser"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
@@ -173,6 +201,26 @@ func (a *API) createServer(w http.ResponseWriter, r *http.Request) {
 	keyIDs := uniqueIDs(body.KeyIDs)
 	if len(keyIDs) == 0 {
 		writeError(w, http.StatusBadRequest, "Choisissez au moins une clé SSH.")
+		return
+	}
+	address, problem := directAddress(body.Address)
+	if problem != "" {
+		writeError(w, http.StatusBadRequest, problem)
+		return
+	}
+	if address != "" && providerID != "" {
+		writeError(w, http.StatusBadRequest, "Une adresse ne se donne que pour un serveur existant.")
+		return
+	}
+	// MyInfra opens the first session itself: it needs a private key that
+	// the machine already accepts for root.
+	if address != "" && a.privateKey(r.Context(), ownerID(r.Context()), keyIDs) == "" {
+		writeError(w, http.StatusBadRequest, "Choisissez une clé dont MyInfra garde la clé privée : c'est elle qui ouvre la session SSH.")
+		return
+	}
+	sshUser, problem := cleanSSHUser(body.SSHUser)
+	if problem != "" {
+		writeError(w, http.StatusBadRequest, problem)
 		return
 	}
 	// Without a cluster, the machine runs alone: Docker and the proxy, no Kubernetes.
@@ -204,7 +252,10 @@ func (a *API) createServer(w http.ResponseWriter, r *http.Request) {
 	for _, row := range existing {
 		if row.ClusterID == clusterID && row.ControlPlane {
 			hasControlPlane = true
-			break
+		}
+		if address != "" && row.Address == address {
+			writeError(w, http.StatusConflict, "Un serveur a déjà cette adresse.")
+			return
 		}
 	}
 	if !hasControlPlane && clusterID != "" {
@@ -253,6 +304,12 @@ func (a *API) createServer(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	if address != "" && sshUser != "root" {
+		if problem := a.prepareRoot(r.Context(), ownerID(r.Context()), address, sshUser, keyIDs); problem != "" {
+			writeError(w, http.StatusBadRequest, problem)
+			return
+		}
+	}
 	id := newID()
 	token := randomToken()
 	owner := ownerID(r.Context())
@@ -269,6 +326,28 @@ func (a *API) createServer(w http.ResponseWriter, r *http.Request) {
 	if err := a.Store.CreateServer(r.Context(), owner, id, name, token, providerID, clusterID, status, rawPlan, rawSteps, keyIDs, controlPlane); err != nil {
 		a.mapErr(w, err)
 		return
+	}
+	if address != "" {
+		// What the pasted command would have reported: the deployment goes on over SSH.
+		if err := a.Store.SetJoinAddress(r.Context(), token, address); err != nil {
+			_ = a.Store.DeleteServer(context.Background(), owner, id)
+			a.mapErr(w, err)
+			return
+		}
+		if sshUser != "root" {
+			if err := a.Store.SetServerSSHUser(r.Context(), owner, id, sshUser); err != nil {
+				_ = a.Store.DeleteServer(context.Background(), owner, id)
+				a.mapErr(w, err)
+				return
+			}
+		}
+		if !a.Replica {
+			if err := a.restartDeploy(context.Background(), owner, id, false); err != nil {
+				_ = a.Store.DeleteServer(context.Background(), owner, id)
+				a.mapErr(w, err)
+				return
+			}
+		}
 	}
 	row, err := a.Store.Server(r.Context(), owner, id)
 	if err != nil {
@@ -296,6 +375,45 @@ func stepsFor(cloud bool, clusterID string) []deploy.Step {
 		return deploy.AloneSteps(cloud)
 	}
 	return deploy.Steps(cloud)
+}
+
+var sshUserPattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
+
+// cleanSSHUser is the account that opens the first session, root by default.
+func cleanSSHUser(raw string) (string, string) {
+	user := strings.TrimSpace(raw)
+	if user == "" {
+		return "root", ""
+	}
+	if !sshUserPattern.MatchString(user) {
+		return "", "Nom d'utilisateur SSH illisible."
+	}
+	return user, ""
+}
+
+// prepareRoot opens SSH as user and runs, through sudo, what the pasted
+// command would: MyInfra's keys for root and root's access by key. The
+// deployment then goes on as root, as for any machine.
+func (a *API) prepareRoot(ctx context.Context, owner, address, user string, keyIDs []string) string {
+	publicKeys, err := a.Store.SSHPublicKeys(ctx, owner, keyIDs)
+	if err != nil {
+		return "Une erreur est survenue."
+	}
+	script, err := join.Prepare(publicKeys)
+	if err != nil {
+		return "Une erreur est survenue."
+	}
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	host := deploy.Host{Address: address, User: user, PrivateKey: a.privateKey(ctx, owner, keyIDs)}
+	if _, err := deploy.SSHInput(ctx, host, "sudo -n sh -s", []byte(script)); err != nil {
+		slog.Warn("préparation de root", "address", address, "user", user, "err", err)
+		if strings.Contains(err.Error(), "password is required") || strings.Contains(err.Error(), "sudo:") {
+			return "L'utilisateur SSH doit pouvoir lancer sudo sans mot de passe."
+		}
+		return "MyInfra n'a pas pu ouvrir SSH avec cet utilisateur et cette clé."
+	}
+	return ""
 }
 
 func machineScript(baseURL, token string, keys []string, clusterNode bool) (string, error) {
@@ -390,6 +508,44 @@ func (a *API) setServerPlace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.Store.SetServerPlace(r.Context(), owner, row.ID, place); err != nil {
+		a.mapErr(w, err)
+		return
+	}
+	row, err = a.Store.Server(r.Context(), owner, row.ID)
+	if err != nil {
+		a.mapErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a.toServer(row))
+}
+
+func (a *API) setServerSSHUser(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		SSHUser string `json:"sshUser"`
+	}
+	if err := readJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "Requête illisible.")
+		return
+	}
+	user, problem := cleanSSHUser(body.SSHUser)
+	if problem != "" {
+		writeError(w, http.StatusBadRequest, problem)
+		return
+	}
+	if user == "root" {
+		user = ""
+	}
+	owner := ownerID(r.Context())
+	row, err := a.Store.Server(r.Context(), owner, r.PathValue("id"))
+	if err != nil {
+		a.mapErr(w, err)
+		return
+	}
+	if row.ProviderID != "" {
+		writeError(w, http.StatusConflict, "Un serveur acheté s'ouvre toujours en root.")
+		return
+	}
+	if err := a.Store.SetServerSSHUser(r.Context(), owner, row.ID, user); err != nil {
 		a.mapErr(w, err)
 		return
 	}

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -93,6 +94,9 @@ func (a *API) importSSHKey(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Name      string `json:"name"`
 		PublicKey string `json:"publicKey"`
+		// PrivateKey is optional. With it, MyInfra opens SSH itself on a
+		// machine that already trusts this key.
+		PrivateKey string `json:"privateKey"`
 	}
 	if err := readJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "Requête illisible.")
@@ -103,12 +107,40 @@ func (a *API) importSSHKey(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Donnez un nom à la clé.")
 		return
 	}
-	public, fingerprint, err := sshk.ParsePublic(body.PublicKey)
-	if err != nil {
+	var pair sshk.Pair
+	if strings.TrimSpace(body.PrivateKey) != "" {
+		parsed, err := sshk.ParsePrivate(body.PrivateKey)
+		if errors.Is(err, sshk.ErrPassphrase) {
+			writeError(w, http.StatusBadRequest, "Cette clé privée est protégée par une phrase de passe : MyInfra ne pourrait pas l'ouvrir seul.")
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "Clé privée illisible.")
+			return
+		}
+		pair = parsed
+	}
+	if strings.TrimSpace(body.PublicKey) != "" {
+		public, fingerprint, err := sshk.ParsePublic(body.PublicKey)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "Clé publique illisible.")
+			return
+		}
+		if pair.Private != "" && fingerprint != pair.Fingerprint {
+			writeError(w, http.StatusBadRequest, "La clé publique ne correspond pas à la clé privée.")
+			return
+		}
+		pair.Public, pair.Fingerprint = public, fingerprint
+	}
+	if pair.Public == "" {
 		writeError(w, http.StatusBadRequest, "Clé publique illisible.")
 		return
 	}
-	sealed, err := a.seal([]byte("{}"))
+	secret := []byte("{}")
+	if pair.Private != "" {
+		secret = []byte(pair.Private)
+	}
+	sealed, err := a.seal(secret)
 	if err != nil {
 		a.mapErr(w, err)
 		return
@@ -117,8 +149,9 @@ func (a *API) importSSHKey(w http.ResponseWriter, r *http.Request) {
 	sealed.OwnerID = ownerID(r.Context())
 	sealed.Kind = "ssh_key"
 	sealed.Name = name
-	sealed.Fingerprint = fingerprint
-	sealed.PublicKey = public
+	sealed.Fingerprint = pair.Fingerprint
+	sealed.PublicKey = pair.Public
+	sealed.HasPrivate = pair.Private != ""
 	if err := a.Store.InsertSecret(r.Context(), sealed); err != nil {
 		a.mapErr(w, err)
 		return

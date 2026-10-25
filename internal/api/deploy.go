@@ -58,6 +58,13 @@ func (a *API) retryDeploy(w http.ResponseWriter, r *http.Request) {
 		a.mapErr(w, err)
 		return
 	}
+	// A machine that refuses root gets root's access again before the keys step.
+	if user := manualSSHUser(row.Plan); user != "" && row.Address != "" && !deploy.Done(steps, "keys") {
+		if problem := a.prepareRoot(ctx, owner, row.Address, user, keyIDs); problem != "" {
+			writeError(w, http.StatusBadRequest, problem)
+			return
+		}
+	}
 	raw, err := deploy.Encode(steps)
 	if err != nil {
 		a.mapErr(w, err)

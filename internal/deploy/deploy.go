@@ -152,7 +152,10 @@ func WaitSSH(ctx context.Context, host string, timeout time.Duration) error {
 }
 
 type Host struct {
-	Address       string
+	Address string
+	// User opens the session, root when empty. Another user only serves to
+	// prepare root's access on a machine that refuses root at first.
+	User          string
 	PrivateKey    string
 	PublicKeys    []string
 	Cluster       string
@@ -168,6 +171,13 @@ type Host struct {
 	// K3sVersion is installed on the node: the one of the cluster it joins,
 	// K3sVersion for a new cluster.
 	K3sVersion string
+}
+
+func (h Host) user() string {
+	if h.User == "" {
+		return "root"
+	}
+	return h.User
 }
 
 // K3sVersion is the k3s a new cluster starts with. Joining nodes take the
@@ -425,7 +435,7 @@ func sshRun(ctx context.Context, host Host, command string, input io.Reader) (st
 		return "", fmt.Errorf("SSH n'a pas pu préparer la connexion.")
 	}
 	config := &ssh.ClientConfig{
-		User: "root",
+		User: host.user(),
 		Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)},
 		HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {
 			return checkHostKey(host.Address, key)

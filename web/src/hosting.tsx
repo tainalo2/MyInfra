@@ -134,3 +134,47 @@ export function ServerHosting({ server, onSaved }: { server: Server; onSaved: (s
     </form>
   );
 }
+
+// ServerSSHUser is the account that prepares root's access on a machine that
+// refuses root at first. It serves the next installation or retry.
+export function ServerSSHUser({ server, onSaved }: { server: Server; onSaved: (server: Server) => void }) {
+  const toast = useToast();
+  const [draft, setDraft] = useState(server.sshUser ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setDraft(server.sshUser ?? "");
+  }, [server.id]);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const next = await api<Server>(`/api/servers/${server.id}/ssh-user`, { method: "PUT", body: JSON.stringify({ sshUser: draft.trim() }) });
+      onSaved(next);
+      setDraft(next.sshUser ?? "");
+      toast(text("server.sshUserSaved"));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : text("common.error"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="mt-6 flex max-w-[720px] flex-col gap-4">
+      <Field label={text("server.sshUser")} hint={text("server.sshUserEditHint")}>
+        <Input value={draft} placeholder="root" autoCapitalize="off" autoComplete="off" spellCheck={false} onChange={(e) => setDraft(e.target.value)} />
+      </Field>
+      {error ? <ErrorText>{error}</ErrorText> : null}
+      <div>
+        <Button type="submit" variant="secondary" disabled={busy || draft.trim() === (server.sshUser ?? "")}>
+          {busy ? <Spinner /> : <Icon icon={Save} />}
+          {text("common.save")}
+        </Button>
+      </div>
+    </form>
+  );
+}

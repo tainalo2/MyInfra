@@ -100,6 +100,18 @@ var errorCodes = map[string]string{
 	"Cette mise à jour n'a pas échoué.": "update_not_failed",
 	"Cette mise à jour est terminée.":   "update_finished",
 	"Une variable est illisible : un nom fait de lettres, chiffres et _, une valeur sur une ligne.": "variable_bad",
+
+	"Donnez l'adresse IP du serveur, par exemple 203.0.113.10.":                                      "address_bad",
+	"Une adresse ne se donne que pour un serveur existant.":                                          "address_bought",
+	"Choisissez une clé dont MyInfra garde la clé privée : c'est elle qui ouvre la session SSH.":     "address_key",
+	"Un serveur a déjà cette adresse.":                                                               "address_taken",
+	"Un serveur acheté s'ouvre toujours en root.":                                                    "ssh_user_bought",
+	"Nom d'utilisateur SSH illisible.":                                                               "ssh_user_bad",
+	"L'utilisateur SSH doit pouvoir lancer sudo sans mot de passe.":                                  "ssh_user_sudo",
+	"MyInfra n'a pas pu ouvrir SSH avec cet utilisateur et cette clé.":                               "ssh_user_refused",
+	"Clé privée illisible.":                                                                          "bad_private_key",
+	"Cette clé privée est protégée par une phrase de passe : MyInfra ne pourrait pas l'ouvrir seul.": "private_key_locked",
+	"La clé publique ne correspond pas à la clé privée.":                                             "key_mismatch",
 }
 
 func writeError(w http.ResponseWriter, status int, message string) {
