@@ -34,7 +34,7 @@ The screenshots show demo data (invented names, `example.com` domains, documenta
 | | |
 | --- | --- |
 | ![Application page](docs/screenshots/application.png) | ![Catalogue](docs/screenshots/catalogue.png) |
-| **An application**: status, address, resources, where its image comes from, its pods and addresses. | **The catalogue**: ready-made applications, each with the registry its image comes from. |
+| **An application**: status, address, resources, where its image comes from, its pods and addresses. | **The library**: ready-made applications, each with the registry its image comes from. |
 | ![Clusters](docs/screenshots/clusters.png) | ![Imported images](docs/screenshots/images.png) |
 | **Clusters and machines**: nodes across providers and places, usage and billed cost. | **Imported images**: bring your own image as a `docker save` archive, sent or fetched from a URL. |
 | ![Applications](docs/screenshots/applications.png) | ![Image registries](docs/screenshots/registries.png) |
@@ -57,7 +57,7 @@ On a phone, the same application, laid out for the thumb:
 
 **Run applications**
 
-- **Catalogue.** Ready-made applications (sites, wikis, monitoring, notes, media…). Pick one, or start from any image. Each one says which registry its image is pulled from.
+- **Library.** Ready-made applications (sites, wikis, monitoring, notes, media…) and templates that group them with their cluster. Pick one, or start from any image. Each one says which registry its image is pulled from. The library is published apart from MyInfra, in [its own repository](https://github.com/tainalo2/MyInfra-templates-and-packages-library), as signed releases: MyInfra fetches the newest every 6 hours and keeps one built in for offline use. Each package and template has its own version, and a copy you took is offered the next one on the updates page.
 - **One machine or a cluster.** The same form. On a machine, the application is a Docker container. On a cluster, it becomes Kubernetes pods.
 - **Your own images.** Use any public image, add a private registry (Docker Hub, GitHub Container Registry, GitLab, Quay, or your own), or import an image you built: the `docker save` archive, sent from the browser or fetched from a raw URL. MyInfra loads it on the servers itself over SSH, so they never need to reach MyInfra or a registry. Building an image from a Git repository is not available yet.
 - **Domains and certificates.** MyInfra writes the DNS record when a DNS account is linked, then gets the Let's Encrypt certificate. Addresses can be added and removed while the application runs.
@@ -284,7 +284,7 @@ Push a tag such as `v1.4.0`, or run the **Publication** workflow from the Action
 
 **Startup.** With no variables, the binary creates `~/.myinfra`, writes a master key there, and starts the PostgreSQL it carries. The data stays when the process stops. Then you choose a password for the first account. Further accounts share that installation: each has a login, a role (administration, deployment or read-only) and, if you turn it on, a TOTP code checked at sign-in. On the pages that install a machine, a button installs Ansible into `~/.myinfra` when it is missing — with its own Python when the machine has none, and OpenTofu for Hetzner and Scaleway when `MYINFRA_TOFU_DIR` is set. Neither needs an administrator password.
 
-**Create an application.** The catalogue fills in the image, the port, the disk and the variables. For any other image, MyInfra reads the port and the folders to keep that the image declares (`EXPOSE`, `VOLUME`). The control plane stores the application, then delivers it.
+**Create an application.** The library fills in the image, the port, the disk and the variables. For any other image, MyInfra reads the port and the folders to keep that the image declares (`EXPOSE`, `VOLUME`). The control plane stores the application, then delivers it.
 
 **Delivery on a cluster.** MyInfra renders a manifest — namespace, Deployment or StatefulSet, Service, Traefik routes, a Secret for the variables, and a pull secret when the image comes from a private registry — and applies it over SSH. An unreadable image, name or variable is not applied, and the application in place is not removed. The first SSH key of a node is remembered; a different key is refused.
 

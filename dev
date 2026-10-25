@@ -20,6 +20,12 @@ if [ -z "${DATABASE_URL:-}" ]; then
   exit 1
 fi
 
+# Un clone de la bibliothèque à côté : MyInfra la lit telle quelle.
+if [ -z "${MYINFRA_LIBRARY_DIR:-}" ] && [ -d ../MyInfra-templates-and-packages-library ]; then
+  MYINFRA_LIBRARY_DIR="$(cd ../MyInfra-templates-and-packages-library && pwd)"
+  export MYINFRA_LIBRARY_DIR
+fi
+
 pgdata="$(pwd)/.pgdata"
 pgbin=""
 pghost=""

@@ -13,6 +13,8 @@ type Template struct {
 	Name      string
 	Body      []byte
 	CreatedAt time.Time
+	// Library is the JSON of its library.Origin, {} for the person's own.
+	Library []byte
 }
 
 type TemplateRun struct {
@@ -57,7 +59,7 @@ func (s *Store) DeleteTemplate(ctx context.Context, ownerID, id string) error {
 func (s *Store) Template(ctx context.Context, ownerID, id string) (Template, error) {
 	var row Template
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, name, body, created_at FROM templates WHERE id = $1 AND owner_id = $2`, id, ownerID).Scan(&row.ID, &row.Name, &row.Body, &row.CreatedAt)
+		SELECT id, name, body, created_at, library FROM templates WHERE id = $1 AND owner_id = $2`, id, ownerID).Scan(&row.ID, &row.Name, &row.Body, &row.CreatedAt, &row.Library)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Template{}, ErrNotFound
 	}
@@ -66,7 +68,7 @@ func (s *Store) Template(ctx context.Context, ownerID, id string) (Template, err
 
 func (s *Store) ListTemplates(ctx context.Context, ownerID string) ([]Template, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, name, body, created_at FROM templates WHERE owner_id = $1 ORDER BY created_at DESC`, ownerID)
+		SELECT id, name, body, created_at, library FROM templates WHERE owner_id = $1 ORDER BY created_at DESC`, ownerID)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +76,7 @@ func (s *Store) ListTemplates(ctx context.Context, ownerID string) ([]Template, 
 	var out []Template
 	for rows.Next() {
 		var row Template
-		if err := rows.Scan(&row.ID, &row.Name, &row.Body, &row.CreatedAt); err != nil {
+		if err := rows.Scan(&row.ID, &row.Name, &row.Body, &row.CreatedAt, &row.Library); err != nil {
 			return nil, err
 		}
 		out = append(out, row)

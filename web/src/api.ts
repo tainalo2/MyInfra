@@ -384,9 +384,18 @@ export type CatalogueCard = {
   services: CatalogueService[];
   // translations hold the summary and the description in the other languages.
   translations?: Record<string, PackageWords>;
+  // categoryWords hold the category in the other languages.
+  categoryWords?: Record<string, string>;
+  // version is the version of the package in the library.
+  version: string;
+  changes?: string;
 };
 
-export type CatalogueGroup = { name: string; articles: CatalogueCard[] };
+export type CatalogueGroup = { name: string; translations?: Record<string, string>; articles: CatalogueCard[] };
+
+// LibraryMark tells a package or template taken from the library: its
+// version, the newer one offered, and whether the person changed it since.
+export type LibraryMark = { id: string; version: string; newer?: string; edited: boolean };
 
 export type CatalogueVersions = {
   name: string;
@@ -443,7 +452,7 @@ export type TemplateBody = {
   applications?: TemplateApp[];
 };
 
-export type Template = { id: string; name: string; body: TemplateBody; createdAt: string };
+export type Template = { id: string; name: string; body: TemplateBody; createdAt: string; library?: LibraryMark };
 
 export type RunStep = {
   kind: string;
@@ -488,7 +497,11 @@ export type Destruction = {
   createdAt: string;
 };
 
-export type UpdateKind = "app" | "server" | "myinfra";
+export type UpdateKind = "app" | "server" | "myinfra" | "library";
+
+// LibraryUpdateDetail is a newer version of a package or template taken
+// from the library.
+export type LibraryUpdateDetail = { kind: "package" | "template"; id: string; item: string; changes?: string; edited: boolean };
 
 export type UpdateLevel = "patch" | "minor" | "major" | "build" | "security" | "reboot" | "packages";
 
@@ -513,7 +526,7 @@ export type UpdateItem = {
   current: string;
   available: string;
   level: UpdateLevel;
-  detail: { services?: ServiceUpdate[] } & Partial<ServerUpdateDetail> & Partial<MyInfraUpdateDetail>;
+  detail: { services?: ServiceUpdate[] } & Partial<ServerUpdateDetail> & Partial<MyInfraUpdateDetail> & Partial<LibraryUpdateDetail>;
   checkedAt: string;
 };
 
@@ -631,6 +644,7 @@ export type PackageRow = {
   updatedAt: string;
   package?: Package;
   yaml?: string;
+  library?: LibraryMark;
 };
 
 // fillAddress shows a value as the application reads it now: {{url}} and

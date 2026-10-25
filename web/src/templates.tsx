@@ -18,14 +18,14 @@ import {
   type TemplateServer,
 } from "./api";
 import { CancelDeployment } from "./deployments";
-import { text, knownMessage } from "./i18n";
+import { currentLang, text, knownMessage } from "./i18n";
 import { Code } from "./code-lazy";
 import { OfferFields, OfferStorage, formatPrice } from "./offers";
 import { ConfirmDialog, Sheet, Spinner, Steps, useToast } from "./kit";
 import { usePoll } from "./poll";
 import { AppLogo } from "./app-logo";
+import { LibraryTag } from "./library-tag";
 import { useI18n } from "./lang";
-import type { MsgKey } from "./i18n";
 import { NameList } from "./names";
 import { ProviderSelect } from "./provider-select";
 import { useSession } from "./session";
@@ -139,6 +139,7 @@ export function Templates() {
             <li key={row.id} className="relative rounded-md border border-line hover:bg-status">
               <Link to={`/templates/${row.id}`} className="block p-4 pr-14 text-ink">
                 <span>{row.name}</span>
+                <LibraryTag mark={row.library} />
                 <p className="mt-2 text-muted">{summary(row.body)}</p>
               </Link>
               <div className="absolute right-3 top-3">
@@ -1145,14 +1146,29 @@ async function download(row: Template) {
 }
 
 
-type Starter = {
+type StarterWords = { name: string; summary: string; sizing: string };
+
+type Starter = StarterWords & {
   id: string;
+  version: string;
+  translations?: Record<string, StarterWords>;
   servers: number;
   controlPlanes: number;
   apps: { id: string; name: string; logo?: string }[];
 };
 
-// Starters are ready-made templates: a cluster and catalogue applications
+// starterWords gives a template of the library in the language of the
+// screen: the library carries its words.
+function starterWords(starter: Starter): StarterWords {
+  const words = starter.translations?.[currentLang()];
+  return {
+    name: words?.name || starter.name,
+    summary: words?.summary || starter.summary,
+    sizing: words?.sizing || starter.sizing,
+  };
+}
+
+// Starters are the templates of the library: a cluster and applications
 // that go well together. Using one creates a template to complete with a
 // provider, offers, keys and the zone of the names.
 function Starters() {
@@ -1168,7 +1184,7 @@ function Starters() {
     try {
       const created = await api<Template>(`/api/starters/${starter.id}`, {
         method: "POST",
-        body: JSON.stringify({ name: text(`starter.${starter.id}.name` as MsgKey) }),
+        body: JSON.stringify({ name: starterWords(starter).name }),
       });
       navigate(`/templates/${created.id}`);
     } catch (err) {
@@ -1194,8 +1210,11 @@ function Starters() {
           {data.map((starter) => (
             <li key={starter.id} className="flex flex-col gap-3 rounded-md border border-line p-4">
               <div>
-                <p className="font-medium">{text(`starter.${starter.id}.name` as MsgKey)}</p>
-                <p className="mt-1 text-muted">{text(`starter.${starter.id}.summary` as MsgKey)}</p>
+                <p className="flex flex-wrap items-baseline gap-2">
+                  <span className="font-medium">{starterWords(starter).name}</span>
+                  <span className="text-[13px] text-faint">v{starter.version}</span>
+                </p>
+                <p className="mt-1 text-muted">{starterWords(starter).summary}</p>
               </div>
               <ul className="flex flex-wrap gap-x-4 gap-y-2" aria-label={text("starter.apps")}>
                 {starter.apps.map((app) => (
@@ -1208,7 +1227,7 @@ function Starters() {
               <p className="text-[13px] text-faint">
                 {starter.servers > 1 ? text("starter.servers", { count: String(starter.servers) }) : text("starter.server")}
                 {" · "}
-                {text(`starter.${starter.id}.sizing` as MsgKey)}
+                {starterWords(starter).sizing}
               </p>
               <div className="mt-auto">
                 <Button type="button" variant="secondary" onClick={() => void use(starter)} disabled={busy !== ""}>

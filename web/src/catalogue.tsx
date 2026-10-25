@@ -40,7 +40,7 @@ export function CatalogueBrowser({ selected, onSelect }: { selected: string; onS
           <div className="flex flex-wrap gap-2">
             <Filter label={text("common.all")} active={category === ""} onClick={() => setCategory("")} />
             {groups.map((group) => (
-              <Filter key={group.name} label={categoryName(group.name)} active={category === group.name} onClick={() => setCategory(group.name)} />
+              <Filter key={group.name} label={categoryName(group.name, group.translations)} active={category === group.name} onClick={() => setCategory(group.name)} />
             ))}
           </div>
           {articles.length === 0 ? <p className="text-muted">{text("apps.noArticle")}</p> : null}
@@ -53,7 +53,7 @@ export function CatalogueBrowser({ selected, onSelect }: { selected: string; onS
                     <span className="font-medium">{article.name}</span>
                   </span>
                   <span className="text-muted">
-                    {categoryName(article.category)}
+                    {categoryName(article.category, article.categoryWords)}
                     {publishedImage(article) ? ` · ${imageSource(publishedImage(article)).label}` : ""}
                   </span>
                   <span>{localizeCard(article).summary}</span>
@@ -183,7 +183,10 @@ export function CatalogueArticle() {
           </p>
         ) : null}
         {versions?.detail ? <p className="text-bad">{knownMessage(versions.detail)}</p> : null}
-        <p className="text-muted">{categoryName(article.category)}</p>
+        <p className="text-muted">
+          {categoryName(article.category, article.categoryWords)} · {text("library.from", { version: article.version })}
+        </p>
+        {article.changes ? <p className="text-[13px] text-faint">{article.changes}</p> : null}
         {article.keepsFiles ? <p>{text("apps.keeps")}</p> : null}
         <Fold title={text("field.services")}>
           <ul className="flex flex-col gap-3">

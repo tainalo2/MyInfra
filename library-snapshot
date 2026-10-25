@@ -1,0 +1,20 @@
+#!/bin/sh
+# Remplace la bibliothèque intégrée au binaire par une release publiée.
+# ./library-snapshot v1.2.0
+# MYINFRA_LIBRARY_REPO=compte/depot vise un fork.
+set -eu
+cd "$(dirname "$0")"
+
+tag=${1:?usage : ./library-snapshot <tag>}
+repo=${MYINFRA_LIBRARY_REPO:-tainalo2/MyInfra-templates-and-packages-library}
+out=internal/library/snapshot
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+for file in library.tar.gz SHA256SUMS SHA256SUMS.sig; do
+  curl -fsSL -o "$tmp/$file" "https://github.com/$repo/releases/download/$tag/$file"
+done
+# Refusée si la signature n'est pas d'une clé que MyInfra connaît.
+go run ./cmd/library verify "$tmp"
+cp "$tmp/library.tar.gz" "$tmp/SHA256SUMS" "$tmp/SHA256SUMS.sig" "$out/"
+echo "bibliothèque intégrée : $tag"

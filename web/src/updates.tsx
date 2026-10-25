@@ -60,7 +60,7 @@ function plainImage(image: string) {
 
 // summary says in one line what an update changes.
 export function summary(item: UpdateItem): string {
-  if (item.kind === "myinfra") return `${item.current} → ${item.available}`;
+  if (item.kind === "myinfra" || item.kind === "library") return `${item.current} → ${item.available}`;
   if (item.kind === "app") {
     const services = item.detail.services ?? [];
     return services
@@ -425,6 +425,7 @@ export function UpdatesPage() {
   const myinfra = items.find((item) => item.kind === "myinfra");
   const apps = items.filter((item) => item.kind === "app");
   const serverItems = items.filter((item) => item.kind === "server");
+  const libraryItems = items.filter((item) => item.kind === "library");
   const version = view?.version;
 
   useEffect(() => {
@@ -590,6 +591,22 @@ export function UpdatesPage() {
             )}
           </section>
 
+          <section className="flex flex-col gap-3">
+            <SectionTitle>{text("upd.library.title")}</SectionTitle>
+            {libraryItems.length === 0 ? (
+              <p className="text-muted">{text("upd.library.none")}</p>
+            ) : (
+              <>
+                <p className="text-[13px] text-muted">{text("upd.library.hint")}</p>
+                <ul className="flex flex-col">
+                  {libraryItems.map((item) => (
+                    <LibraryUpdateRow key={item.id} item={item} canDeploy={canDeploy} onDone={reload} />
+                  ))}
+                </ul>
+              </>
+            )}
+          </section>
+
           <UpdateJobs />
         </div>
       )}
@@ -604,6 +621,63 @@ export function UpdatesPage() {
       ) : null}
       {restarting ? <MyInfraRestarting version={restarting} /> : null}
     </>
+  );
+}
+
+// LibraryUpdateRow offers the newer version of a package or template taken
+// from the library. A copy the person changed asks once more, since the
+// update replaces it.
+function LibraryUpdateRow({ item, canDeploy, onDone }: { item: UpdateItem; canDeploy: boolean; onDone: () => void }) {
+  useI18n();
+  const toast = useToast();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const kind = item.detail.kind ?? "package";
+  const id = item.detail.id ?? "";
+  const link = kind === "template" ? `/templates/${id}` : `/applications/paquets/${id}`;
+
+  async function apply() {
+    if (item.detail.edited && !confirming) {
+      setConfirming(true);
+      return;
+    }
+    setBusy(true);
+    try {
+      await api(`/api/updates/library/${kind}/${id}`, { method: "POST" });
+      toast(text("upd.library.done", { name: item.name }));
+      onDone();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : text("common.error"), "bad");
+    } finally {
+      setBusy(false);
+      setConfirming(false);
+    }
+  }
+
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-line py-4">
+      <div className="min-w-0">
+        <p className="flex flex-wrap items-center gap-2">
+          <Link to={link} className="font-medium underline-offset-2 hover:underline">
+            {item.name}
+          </Link>
+          <span className="text-[13px] text-muted">
+            {text(kind === "template" ? "upd.library.template" : "upd.library.package")} · {levelLabel(item)}
+          </span>
+        </p>
+        <p className="text-[13px] text-muted">
+          {item.current} → {item.available}
+          {item.detail.changes ? ` · ${item.detail.changes}` : ""}
+        </p>
+        {item.detail.edited ? <p className="text-[13px] text-bad">{text("upd.library.edited")}</p> : null}
+      </div>
+      {canDeploy ? (
+        <Button type="button" variant="secondary" onClick={() => void apply()} disabled={busy}>
+          {busy ? <Spinner /> : null}
+          {confirming ? text("upd.library.confirm") : text("upd.update")}
+        </Button>
+      ) : null}
+    </li>
   );
 }
 

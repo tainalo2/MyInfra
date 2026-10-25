@@ -61,7 +61,7 @@ Chaque action faite par un assistant est dans **Activité**, marquée **MCP** av
 
 - « Qu'est-ce qui tourne sur mon infra ? » · « Combien me coûte l'infra par mois ? »
 - « Quels clusters j'ai, et combien de place reste-t-il sur SW ? » · « Quels domaines puis-je utiliser ? »
-- « Quelles applis de stockage cloud existent dans le catalogue ? » · « Qu'a-t-on fait via MCP cette semaine ? »
+- « Quelles applis de stockage cloud existent dans la bibliothèque ? » · « Qu'a-t-on fait via MCP cette semaine ? »
 
 ### Acheter et construire
 

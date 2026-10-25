@@ -1,0 +1,30 @@
+type: myinfra-library-template
+version: 1
+name: Site et notes
+summary: Une mesure d'audience et des notes.
+sizing: 2 Go de mémoire suffisent
+translations:
+  en:
+    name: Site and notes
+    summary: An audience measure and notes.
+    sizing: 2 GB of memory is enough
+  pt:
+    name: Site e notas
+    summary: Uma medida de audiência e notas.
+    sizing: 2 GB de memória chegam
+  it:
+    name: Sito e note
+    summary: Una misura d'audience e note.
+    sizing: 2 GB di memoria bastano
+  de:
+    name: Website und Notizen
+    summary: Eine Reichweitenmessung und Notizen.
+    sizing: 2 GB Speicher genügen
+cluster: site
+servers:
+  - name: site-1
+    controlPlane: true
+apps:
+  - package: umami
+  - package: memos
+    subdomain: notes

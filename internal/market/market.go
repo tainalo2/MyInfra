@@ -1,40 +1,16 @@
-// Package market is the catalogue: applications described as packages, one
-// file each under catalogue/, installed in a few clicks. Its files are the
-// packages a person can write, with an about: block to present them.
+// Package market is the catalogue: the packages of the library, presented
+// to install in a few clicks. The library is published apart from MyInfra
+// (internal/library); market shows the one MyInfra proposes now.
 package market
 
 import (
-	"embed"
 	"encoding/json"
 	"fmt"
-	"io/fs"
-	"path"
-	"regexp"
 	"strings"
-	"unicode/utf8"
 
+	"myinfra/internal/library"
 	"myinfra/internal/pack"
 )
-
-const (
-	Sites         = "Sites"
-	Collaboration = "Collaboration"
-	Code          = "Code et données"
-	Identity      = "Identité"
-	Files         = "Fichiers et tableaux"
-	Automation    = "Automatisation"
-	Exchange      = "Échanges"
-	Notes         = "Notes et liens"
-	Accounts      = "Comptes personnels"
-	Media         = "Médias"
-	Tools         = "Outils"
-)
-
-// files holds the catalogue: one package per application, and order.txt,
-// the order the screens show them in.
-//
-//go:embed catalogue/*.yaml catalogue/order.txt
-var files embed.FS
 
 type PublicService struct {
 	Name      string `json:"name"`
@@ -57,110 +33,37 @@ type Card struct {
 	// Translations give the summary and the description in the other
 	// languages of the screens.
 	Translations map[string]pack.Words `json:"translations,omitempty"`
+	// CategoryWords give the category in the other languages.
+	CategoryWords map[string]string `json:"categoryWords,omitempty"`
+	// Version is the version of the package in the library.
+	Version string `json:"version"`
+	Changes string `json:"changes,omitempty"`
 }
 
 type Group struct {
-	Name     string `json:"name"`
-	Articles []Card `json:"articles"`
+	Name string `json:"name"`
+	// Translations give the name in the other languages of the screens.
+	Translations map[string]string `json:"translations,omitempty"`
+	Articles     []Card            `json:"articles"`
 }
 
-type article struct {
-	id  string
-	pkg pack.Package
+// Release is the version of the library MyInfra proposes.
+func Release() string {
+	return library.Current().Release
 }
 
-var (
-	idPattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,40}$`)
-	articles  []article
-)
-
-func init() {
-	list, err := load(files)
-	if err != nil {
-		panic(err)
-	}
-	articles = list
-}
-
-// load reads the catalogue in its order and checks each application: a
-// valid package, presented in every language.
-func load(fsys fs.FS) ([]article, error) {
-	raw, err := fs.ReadFile(fsys, "catalogue/order.txt")
-	if err != nil {
-		return nil, err
-	}
-	var out []article
-	listed := map[string]bool{}
-	for _, id := range strings.Fields(string(raw)) {
-		if !idPattern.MatchString(id) || listed[id] {
-			return nil, fmt.Errorf("catalogue : identifiant illisible ou en double dans order.txt : %s", id)
-		}
-		listed[id] = true
-		data, err := fs.ReadFile(fsys, "catalogue/"+id+".yaml")
-		if err != nil {
-			return nil, fmt.Errorf("catalogue : %s.yaml est absent", id)
-		}
-		p, problems := pack.Parse(data)
-		if len(problems) > 0 {
-			return nil, fmt.Errorf("catalogue : %s.yaml, ligne %d : %s", id, problems[0].Line, problems[0].Error())
-		}
-		if err := presented(id, p); err != nil {
-			return nil, err
-		}
-		out = append(out, article{id: id, pkg: p})
-	}
-	entries, err := fs.ReadDir(fsys, "catalogue")
-	if err != nil {
-		return nil, err
-	}
-	for _, entry := range entries {
-		name := entry.Name()
-		if path.Ext(name) == ".yaml" && !listed[strings.TrimSuffix(name, ".yaml")] {
-			return nil, fmt.Errorf("catalogue : %s manque dans order.txt", name)
-		}
-	}
-	return out, nil
-}
-
-// presented checks what a catalogue application needs beyond a package:
-// a name, a category, a site, a logo, a description, and its words in the
-// other languages; and that each question it asks is read somewhere.
-func presented(id string, p pack.Package) error {
-	fail := func(what string) error { return fmt.Errorf("catalogue : %s.yaml : %s", id, what) }
-	if strings.TrimSpace(p.Name) == "" || strings.TrimSpace(p.Summary) == "" || strings.TrimSpace(p.Category) == "" {
-		return fail("name, summary et category sont demandés")
-	}
-	a := p.About
-	if a == nil || !strings.HasPrefix(a.Site, "https://") || a.Logo == "" || utf8.RuneCountInString(strings.TrimSpace(a.Description)) < 80 {
-		return fail("about demande site (https://), logo et une description de 80 caractères au moins")
-	}
-	for _, lang := range []string{"en", "pt", "it", "de"} {
-		words := a.Translations[lang]
-		if strings.TrimSpace(words.Summary) == "" || strings.TrimSpace(words.Description) == "" {
-			return fail("about.translations." + lang + " demande summary et description")
-		}
-	}
-	raw, _ := json.Marshal(p)
-	for _, input := range p.Inputs {
-		if !strings.Contains(string(raw), "{{input:"+input.Key+"}}") {
-			return fail("la question " + input.Key + " n'est lue nulle part")
-		}
-	}
-	return nil
-}
-
+// Groups gives the packages by category, in the order of the library.
 func Groups() []Group {
-	var order []string
+	lib := library.Current()
 	byName := map[string][]Card{}
-	for _, item := range articles {
-		if _, ok := byName[item.pkg.Category]; !ok {
-			order = append(order, item.pkg.Category)
-		}
-		byName[item.pkg.Category] = append(byName[item.pkg.Category], cardOf(item))
+	for _, item := range lib.Packages {
+		byName[item.Pkg.Category] = append(byName[item.Pkg.Category], cardOf(item))
 	}
-	out := make([]Group, 0, len(order))
-	for _, name := range order {
-		out = append(out, Group{Name: name, Articles: byName[name]})
+	out := []Group{}
+	for _, cat := range lib.Categories {
+		if cards := byName[cat.Name]; len(cards) > 0 {
+			out = append(out, Group{Name: cat.Name, Translations: cat.Translations, Articles: cards})
+		}
 	}
 	return out
 }
@@ -177,10 +80,10 @@ func Logo(images ...string) string {
 	if len(want) == 0 {
 		return ""
 	}
-	for _, item := range articles {
-		for _, svc := range item.pkg.Services {
+	for _, item := range library.Current().Packages {
+		for _, svc := range item.Pkg.Services {
 			if want[imageBase(svc.Image)] {
-				return item.pkg.About.Logo
+				return item.Pkg.About.Logo
 			}
 		}
 	}
@@ -198,24 +101,19 @@ func imageBase(image string) string {
 }
 
 func CardOf(id string) (Card, bool) {
-	item, ok := find(id)
+	item, ok := library.Current().Package(id)
 	if !ok {
 		return Card{}, false
 	}
 	return cardOf(item), true
 }
 
-func find(id string) (article, bool) {
-	for _, item := range articles {
-		if item.id == id {
-			return item, true
-		}
+func cardOf(item library.Package) Card {
+	p := item.Pkg
+	var words map[string]string
+	if cat := library.Current().Category(p.Category); cat != nil {
+		words = cat.Translations
 	}
-	return article{}, false
-}
-
-func cardOf(item article) Card {
-	p := item.pkg
 	inputs := p.Inputs
 	if inputs == nil {
 		inputs = []pack.Input{}
@@ -228,24 +126,39 @@ func cardOf(item article) Card {
 		services = append(services, PublicService{Name: svc.Name, Image: svc.Image, Published: svc.Public, Disk: disk})
 	}
 	return Card{
-		ID: item.id, Name: p.Name, Summary: p.Summary, Description: p.About.Description,
+		ID: item.ID, Name: p.Name, Summary: p.Summary, Description: p.About.Description,
 		Site: p.About.Site, Logo: p.About.Logo, Category: p.Category,
 		KeepsFiles: keeps, Inputs: inputs, Services: services, Translations: p.About.Translations,
+		CategoryWords: words, Version: item.Version, Changes: item.Changes,
 	}
 }
 
 // PackageOf gives a catalogue application as a package of its own, to
 // install, copy or carry in a template.
 func PackageOf(id string) (pack.Package, bool) {
-	item, ok := find(id)
+	item, ok := library.Current().Package(id)
 	if !ok {
 		return pack.Package{}, false
 	}
-	// A copy: the caller may change it.
+	return copyOf(item.Pkg), true
+}
+
+// Origin says where a copy of a catalogue application comes from.
+func Origin(id string) (library.Origin, bool) {
+	lib := library.Current()
+	item, ok := lib.Package(id)
+	if !ok {
+		return library.Origin{}, false
+	}
+	return library.Origin{Repo: library.Repo(), Kind: "package", ID: id, Version: item.Version}, true
+}
+
+// copyOf is a deep copy: the caller may change it.
+func copyOf(p pack.Package) pack.Package {
 	var out pack.Package
-	raw, _ := json.Marshal(item.pkg)
+	raw, _ := json.Marshal(p)
 	_ = json.Unmarshal(raw, &out)
-	return out, true
+	return out
 }
 
 // Expand fills in the values of a catalogue application for one
@@ -260,9 +173,10 @@ func Expand(id, host string, inputs map[string]string) ([]pack.Service, map[stri
 
 // IDs lists the applications of the catalogue, in its order.
 func IDs() []string {
-	out := make([]string, len(articles))
-	for i, item := range articles {
-		out[i] = item.id
+	items := library.Current().Packages
+	out := make([]string, len(items))
+	for i, item := range items {
+		out[i] = item.ID
 	}
 	return out
 }
