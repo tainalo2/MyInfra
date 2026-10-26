@@ -390,6 +390,8 @@ export type CatalogueCard = {
   // version is the version of the package in the library.
   version: string;
   changes?: string;
+  // community is true for a package the community shares.
+  community?: boolean;
 };
 
 export type CatalogueGroup = { name: string; translations?: Record<string, string>; articles: CatalogueCard[] };

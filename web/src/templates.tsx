@@ -24,7 +24,7 @@ import { OfferFields, OfferStorage, formatPrice } from "./offers";
 import { ConfirmDialog, Sheet, Spinner, Steps, useToast } from "./kit";
 import { usePoll } from "./poll";
 import { AppLogo } from "./app-logo";
-import { LibraryTag } from "./library-tag";
+import { CommunityTag, LibraryTag } from "./library-tag";
 import { useI18n } from "./lang";
 import { NameList } from "./names";
 import { ProviderSelect } from "./provider-select";
@@ -1155,6 +1155,7 @@ type Starter = StarterWords & {
   servers: number;
   controlPlanes: number;
   apps: { id: string; name: string; logo?: string }[];
+  community?: boolean;
 };
 
 // starterWords gives a template of the library in the language of the
@@ -1177,6 +1178,9 @@ function Starters() {
   const { data, error } = usePoll<Starter[]>("/api/starters", 0);
   const [busy, setBusy] = useState("");
   const [failure, setFailure] = useState("");
+  const [community, setCommunity] = useState(false);
+  const shared = (data ?? []).some((starter) => starter.community);
+  const shown = (data ?? []).filter((starter) => !community || starter.community);
 
   async function use(starter: Starter) {
     setBusy(starter.id);
@@ -1198,6 +1202,18 @@ function Starters() {
     <section className="mt-12">
       <h2 className="mb-2 text-lg">{text("starter.title")}</h2>
       <p className="mb-6 max-w-[720px] text-muted">{text("starter.intro")}</p>
+      {shared ? (
+        <div className="mb-6 flex flex-wrap gap-2">
+          <button
+            type="button"
+            aria-pressed={community}
+            onClick={() => setCommunity(!community)}
+            className={`rounded-md border px-3 py-1 ${community ? "border-ink bg-status text-ink" : "border-line bg-surface text-muted"}`}
+          >
+            {text("library.community")}
+          </button>
+        </div>
+      ) : null}
       {failure ? (
         <div className="mb-6">
           <ErrorText>{failure}</ErrorText>
@@ -1207,12 +1223,13 @@ function Starters() {
         <LoadingLines lines={3} />
       ) : (
         <ul className="grid gap-4 md:grid-cols-2">
-          {data.map((starter) => (
+          {shown.map((starter) => (
             <li key={starter.id} className="flex flex-col gap-3 rounded-md border border-line p-4">
               <div>
                 <p className="flex flex-wrap items-baseline gap-2">
                   <span className="font-medium">{starterWords(starter).name}</span>
                   <span className="text-[13px] text-faint">v{starter.version}</span>
+                  {starter.community ? <CommunityTag /> : null}
                 </p>
                 <p className="mt-1 text-muted">{starterWords(starter).summary}</p>
               </div>
