@@ -252,7 +252,9 @@ func TestRefusesABrokenCommunity(t *testing.T) {
 			f["community/templates/site/item.yaml"] = f["community/templates/stats/item.yaml"]
 			edit(f, "community/templates/site/template.yaml", "cluster: stats", "cluster: other")
 		}, "déjà celui d'un autre template"},
-		{"cluster", func(f fstest.MapFS) { edit(f, "community/templates/stats/template.yaml", "cluster: stats", "cluster: site") }, "le cluster site"},
+		{"cluster", func(f fstest.MapFS) {
+			edit(f, "community/templates/stats/template.yaml", "cluster: stats", "cluster: site")
+		}, "le cluster site"},
 		// A MyInfra that ignores community/ would refuse the library whole.
 		{"cited", func(f fstest.MapFS) { edit(f, "templates/site/template.yaml", "package: umami", "package: stats") }, "stats"},
 	}
