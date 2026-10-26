@@ -17,6 +17,8 @@ type Starter struct {
 	Cluster string
 	Servers []StarterServer
 	Apps    []StarterApp
+	// Community is true for a template people share.
+	Community bool
 }
 
 type StarterServer struct {
@@ -51,7 +53,7 @@ func starterOf(t library.Template) Starter {
 	b := t.Body
 	out := Starter{
 		ID: t.ID, Version: t.Version, Name: b.Name, Summary: b.Summary, Sizing: b.Sizing,
-		Translations: b.Translations, Cluster: b.Cluster,
+		Translations: b.Translations, Cluster: b.Cluster, Community: t.Community,
 	}
 	for _, server := range b.Servers {
 		out.Servers = append(out.Servers, StarterServer{Name: server.Name, ControlPlane: server.ControlPlane})

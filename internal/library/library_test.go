@@ -189,3 +189,82 @@ func TestSnapshotOpens(t *testing.T) {
 		t.Fatalf("%d %d %s", len(lib.Packages), len(lib.Templates), lib.Release)
 	}
 }
+
+// withCommunity adds community/: a package of its own and a template that
+// cites it with one of the library.
+func withCommunity(f fstest.MapFS) {
+	f["community/order.txt"] = &fstest.MapFile{Data: []byte("stats\n")}
+	f["community/packages/stats/package.yaml"] = &fstest.MapFile{Data: f["packages/umami/package.yaml"].Data}
+	f["community/packages/stats/item.yaml"] = &fstest.MapFile{Data: []byte("version: 1.0.0\n")}
+	template := strings.Replace(string(f["templates/site/template.yaml"].Data), "cluster: site", "cluster: stats", 1)
+	template = strings.Replace(template, "package: umami", "package: stats", 1)
+	f["community/templates/stats/template.yaml"] = &fstest.MapFile{Data: []byte(template)}
+	f["community/templates/stats/item.yaml"] = &fstest.MapFile{Data: []byte("version: 1.0.0\n")}
+}
+
+// The community shares packages and templates beside the library's own,
+// with the same ids and the same rules.
+func TestReadsTheCommunity(t *testing.T) {
+	files := fixture(t)
+	withCommunity(files)
+	lib, err := Read(files, Dev, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, ok := lib.Package("stats")
+	if !ok || !p.Community || len(lib.Packages) != 3 {
+		t.Fatalf("%+v", p)
+	}
+	if umami, _ := lib.Package("umami"); umami.Community {
+		t.Fatal("umami is the library's own")
+	}
+	if len(lib.Templates) != 2 || lib.Templates[0].ID != "site" || !lib.Templates[1].Community {
+		t.Fatalf("%+v", lib.Templates)
+	}
+	b, err := Pack(files, "1.2.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened, err := ReadArchive(b.Archive)
+	if err != nil || len(opened.Packages) != 3 {
+		t.Fatal(err)
+	}
+}
+
+func TestRefusesABrokenCommunity(t *testing.T) {
+	cases := []struct {
+		name   string
+		change func(fstest.MapFS)
+		where  string
+	}{
+		{"taken", func(f fstest.MapFS) {
+			f["community/order.txt"].Data = []byte("umami\n")
+			f["community/packages/umami/package.yaml"] = f["community/packages/stats/package.yaml"]
+			f["community/packages/umami/item.yaml"] = f["community/packages/stats/item.yaml"]
+			delete(f, "community/packages/stats/package.yaml")
+			delete(f, "community/packages/stats/item.yaml")
+			edit(f, "community/templates/stats/template.yaml", "package: stats", "package: umami")
+		}, "déjà celui d'un autre paquet"},
+		{"unlisted", func(f fstest.MapFS) { f["community/order.txt"].Data = []byte("\n") }, "community/packages/stats manque"},
+		{"order", func(f fstest.MapFS) { delete(f, "community/order.txt") }, "community/order.txt est absent"},
+		{"template", func(f fstest.MapFS) {
+			f["community/templates/site/template.yaml"] = f["community/templates/stats/template.yaml"]
+			f["community/templates/site/item.yaml"] = f["community/templates/stats/item.yaml"]
+			edit(f, "community/templates/site/template.yaml", "cluster: stats", "cluster: other")
+		}, "déjà celui d'un autre template"},
+		{"cluster", func(f fstest.MapFS) {
+			edit(f, "community/templates/stats/template.yaml", "cluster: stats", "cluster: site")
+		}, "le cluster site"},
+		// A MyInfra that ignores community/ would refuse the library whole.
+		{"cited", func(f fstest.MapFS) { edit(f, "templates/site/template.yaml", "package: umami", "package: stats") }, "stats"},
+	}
+	for _, c := range cases {
+		files := fixture(t)
+		withCommunity(files)
+		c.change(files)
+		_, err := Read(files, Dev, "")
+		if err == nil || !strings.Contains(err.Error(), c.where) {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+	}
+}

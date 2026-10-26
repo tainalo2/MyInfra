@@ -5,6 +5,7 @@ import { api, type CatalogueCard, type CatalogueGroup, type CatalogueVersions, t
 import { cardMatches, categoryName, localizeCard } from "./catalogue-copy";
 import { knownMessage, text } from "./i18n";
 import { AppLogo } from "./app-logo";
+import { CommunityTag } from "./library-tag";
 import { ImageOrigin, imageSource } from "./registries";
 import { Button, ErrorText, Fold, Icon, Input, LoadingCards, LoadingLines, PageTitle, TextButton, useTrail } from "./ui";
 
@@ -13,6 +14,7 @@ export function CatalogueBrowser({ selected, onSelect }: { selected: string; onS
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
+  const [community, setCommunity] = useState(false);
 
   useEffect(() => {
     api<CatalogueGroup[]>("/api/catalogue")
@@ -25,10 +27,12 @@ export function CatalogueBrowser({ selected, onSelect }: { selected: string; onS
     return (groups ?? []).flatMap((group) =>
       group.articles.filter((article) => {
         if (category && article.category !== category) return false;
+        if (community && !article.community) return false;
         return cardMatches(article, needle);
       }),
     );
-  }, [groups, query, category]);
+  }, [groups, query, category, community]);
+  const shared = (groups ?? []).some((group) => group.articles.some((article) => article.community));
 
   return (
     <>
@@ -42,6 +46,7 @@ export function CatalogueBrowser({ selected, onSelect }: { selected: string; onS
             {groups.map((group) => (
               <Filter key={group.name} label={categoryName(group.name, group.translations)} active={category === group.name} onClick={() => setCategory(group.name)} />
             ))}
+            {shared ? <Filter label={text("library.community")} active={community} onClick={() => setCommunity(!community)} /> : null}
           </div>
           {articles.length === 0 ? <p className="text-muted">{text("apps.noArticle")}</p> : null}
           <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -51,6 +56,7 @@ export function CatalogueBrowser({ selected, onSelect }: { selected: string; onS
                   <span className="flex items-center gap-3">
                     <AppLogo slug={article.logo} name={article.name} size={40} />
                     <span className="font-medium">{article.name}</span>
+                    {article.community ? <CommunityTag /> : null}
                   </span>
                   <span className="text-muted">
                     {categoryName(article.category, article.categoryWords)}
@@ -186,6 +192,12 @@ export function CatalogueArticle() {
         <p className="text-muted">
           {categoryName(article.category, article.categoryWords)} · {text("library.from", { version: article.version })}
         </p>
+        {article.community ? (
+          <p className="flex items-center gap-2 text-muted">
+            <CommunityTag />
+            {text("library.communityHint")}
+          </p>
+        ) : null}
         {article.changes ? <p className="text-[13px] text-faint">{article.changes}</p> : null}
         {article.keepsFiles ? <p>{text("apps.keeps")}</p> : null}
         <Fold title={text("field.services")}>

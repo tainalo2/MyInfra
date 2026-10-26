@@ -12,7 +12,11 @@
 //	templates/<id>/item.yaml      its version
 //	templates/order.txt           the templates, in the order the screens show them
 //	logos/<slug>.svg|png          the logos simple-icons lacks
+//	community/                    packages and templates people share, laid
+//	                              out as above: order.txt, packages/, templates/
 //
+// The community items share the ids of the others, so that one can join
+// them without changing its id. A MyInfra older than community/ ignores it.
 // A release adds index.json, the sum of each file, and is signed.
 package library
 
@@ -41,6 +45,8 @@ const (
 	TemplateVersion = 1
 	// Dev is the release of a library read from a folder, in development.
 	Dev = "dev"
+	// Community is the folder of the items people share.
+	Community = "community/"
 )
 
 var (
@@ -66,13 +72,16 @@ type Package struct {
 	Pkg pack.Package
 	// Sum is the sha256 of package.yaml: a copy that changed no longer has it.
 	Sum string
+	// Community is true for a package of community/.
+	Community bool
 }
 
 type Template struct {
 	ID string
 	Item
-	Body TemplateBody
-	Sum  string
+	Body      TemplateBody
+	Sum       string
+	Community bool
 }
 
 // TemplateBody is a template of the library: a cluster, its servers and
@@ -136,10 +145,22 @@ func Read(fsys fs.FS, release, engine string) (*Library, error) {
 	if err := lib.readLogos(); err != nil {
 		return nil, err
 	}
-	if err := lib.readPackages(engine); err != nil {
+	if err := lib.readPackages("", engine); err != nil {
 		return nil, err
 	}
-	if err := lib.readTemplates(engine); err != nil {
+	// A template of the library cites no package of the community: those
+	// a MyInfra older than community/ ignores.
+	clusters := map[string]string{}
+	if err := lib.readTemplates("", engine, clusters); err != nil {
+		return nil, err
+	}
+	if _, err := fs.Stat(fsys, strings.TrimSuffix(Community, "/")); err != nil {
+		return lib, nil
+	}
+	if err := lib.readPackages(Community, engine); err != nil {
+		return nil, err
+	}
+	if err := lib.readTemplates(Community, engine, clusters); err != nil {
 		return nil, err
 	}
 	return lib, nil
@@ -192,10 +213,12 @@ func (lib *Library) readLogos() error {
 	return nil
 }
 
-func (lib *Library) readPackages(engine string) error {
-	raw, err := fs.ReadFile(lib.files, "order.txt")
+// readPackages reads the packages under root, "" or Community.
+func (lib *Library) readPackages(root, engine string) error {
+	community := root == Community
+	raw, err := fs.ReadFile(lib.files, root+"order.txt")
 	if err != nil {
-		return fmt.Errorf("order.txt est absent")
+		return fmt.Errorf("%sorder.txt est absent", root)
 	}
 	categories := map[string]bool{}
 	for _, cat := range lib.Categories {
@@ -204,10 +227,13 @@ func (lib *Library) readPackages(engine string) error {
 	listed := map[string]bool{}
 	for _, id := range strings.Fields(string(raw)) {
 		if !idPattern.MatchString(id) || listed[id] {
-			return fmt.Errorf("order.txt : identifiant illisible ou en double : %s", id)
+			return fmt.Errorf("%sorder.txt : identifiant illisible ou en double : %s", root, id)
 		}
 		listed[id] = true
-		dir := "packages/" + id
+		dir := root + "packages/" + id
+		if lib.taken(id) {
+			return fmt.Errorf("%s : l'identifiant %s est déjà celui d'un autre paquet", dir, id)
+		}
 		data, err := fs.ReadFile(lib.files, dir+"/package.yaml")
 		if err != nil {
 			return fmt.Errorf("%s/package.yaml est absent", dir)
@@ -227,37 +253,57 @@ func (lib *Library) readPackages(engine string) error {
 			return err
 		}
 		if tooNew(item, engine) {
-			lib.Left = append(lib.Left, "packages/"+id)
+			lib.Left = append(lib.Left, dir)
 			continue
 		}
-		lib.Packages = append(lib.Packages, Package{ID: id, Item: item, Pkg: p, Sum: Sum(data)})
+		lib.Packages = append(lib.Packages, Package{ID: id, Item: item, Pkg: p, Sum: Sum(data), Community: community})
 	}
-	entries, err := fs.ReadDir(lib.files, "packages")
+	entries, err := fs.ReadDir(lib.files, root+"packages")
 	if err != nil {
+		if community {
+			// The community may share templates only.
+			return nil
+		}
 		return fmt.Errorf("packages/ est absent")
 	}
 	for _, entry := range entries {
 		if !listed[entry.Name()] {
-			return fmt.Errorf("packages/%s manque dans order.txt", entry.Name())
+			return fmt.Errorf("%spackages/%s manque dans %sorder.txt", root, entry.Name(), root)
 		}
 	}
 	return nil
 }
 
-func (lib *Library) readTemplates(engine string) error {
-	entries, err := fs.ReadDir(lib.files, "templates")
+// taken is true when a package of this id was read, or left out.
+func (lib *Library) taken(id string) bool {
+	if _, ok := lib.Package(id); ok {
+		return true
+	}
+	for _, left := range lib.Left {
+		if path.Base(left) == id && strings.HasSuffix(path.Dir(left), "packages") {
+			return true
+		}
+	}
+	return false
+}
+
+// readTemplates reads the templates under root, "" or Community. clusters
+// gives the template of each cluster name, across both.
+func (lib *Library) readTemplates(root, engine string, clusters map[string]string) error {
+	community := root == Community
+	entries, err := fs.ReadDir(lib.files, root+"templates")
 	if err != nil {
 		// A library may hold packages only.
 		return nil
 	}
-	order, err := lib.templateOrder(entries)
+	order, err := lib.templateOrder(root, entries)
 	if err != nil {
 		return err
 	}
-	names := map[string]string{}
+	read := len(lib.Templates)
 	for _, entry := range entries {
 		id := entry.Name()
-		dir := "templates/" + id
+		dir := root + "templates/" + id
 		if id == "order.txt" {
 			continue
 		}
@@ -272,15 +318,18 @@ func (lib *Library) readTemplates(engine string) error {
 		if err := strict(data, &body); err != nil {
 			return fmt.Errorf("%s/template.yaml : %v", dir, err)
 		}
-		if other, ok := names[body.Cluster]; ok {
+		if _, ok := lib.Template(id); ok {
+			return fmt.Errorf("%s : l'identifiant %s est déjà celui d'un autre template", dir, id)
+		}
+		if other, ok := clusters[body.Cluster]; ok {
 			return fmt.Errorf("%s/template.yaml : le cluster %s est déjà celui de %s", dir, body.Cluster, other)
 		}
-		names[body.Cluster] = id
+		clusters[body.Cluster] = id
 		item, err := lib.readItem(dir)
 		if err != nil {
 			return err
 		}
-		missing, err := lib.checkTemplate(dir, body)
+		missing, err := lib.checkTemplate(dir, body, community)
 		if err != nil {
 			return err
 		}
@@ -288,29 +337,32 @@ func (lib *Library) readTemplates(engine string) error {
 			lib.Left = append(lib.Left, dir)
 			continue
 		}
-		lib.Templates = append(lib.Templates, Template{ID: id, Item: item, Body: body, Sum: Sum(data)})
+		lib.Templates = append(lib.Templates, Template{ID: id, Item: item, Body: body, Sum: Sum(data), Community: community})
 	}
-	sort.SliceStable(lib.Templates, func(i, j int) bool { return order[lib.Templates[i].ID] < order[lib.Templates[j].ID] })
+	// The community comes after the others.
+	mine := lib.Templates[read:]
+	sort.SliceStable(mine, func(i, j int) bool { return order[mine[i].ID] < order[mine[j].ID] })
 	return nil
 }
 
-// templateOrder reads templates/order.txt, the order the screens show the
-// templates in; without it, they follow their names.
-func (lib *Library) templateOrder(entries []fs.DirEntry) (map[string]int, error) {
+// templateOrder reads templates/order.txt under root, the order the screens
+// show the templates in; without it, they follow their names.
+func (lib *Library) templateOrder(root string, entries []fs.DirEntry) (map[string]int, error) {
 	out := map[string]int{}
-	raw, err := fs.ReadFile(lib.files, "templates/order.txt")
+	file := root + "templates/order.txt"
+	raw, err := fs.ReadFile(lib.files, file)
 	if err != nil {
 		return out, nil
 	}
 	for i, id := range strings.Fields(string(raw)) {
 		if _, ok := out[id]; ok || !idPattern.MatchString(id) {
-			return nil, fmt.Errorf("templates/order.txt : identifiant illisible ou en double : %s", id)
+			return nil, fmt.Errorf("%s : identifiant illisible ou en double : %s", file, id)
 		}
 		out[id] = i
 	}
 	for _, entry := range entries {
 		if _, ok := out[entry.Name()]; entry.IsDir() && !ok {
-			return nil, fmt.Errorf("templates/%s manque dans templates/order.txt", entry.Name())
+			return nil, fmt.Errorf("%stemplates/%s manque dans %s", root, entry.Name(), file)
 		}
 	}
 	for id := range out {
@@ -319,15 +371,16 @@ func (lib *Library) templateOrder(entries []fs.DirEntry) (map[string]int, error)
 			found = found || (entry.IsDir() && entry.Name() == id)
 		}
 		if !found {
-			return nil, fmt.Errorf("templates/order.txt : %s n'est pas un template", id)
+			return nil, fmt.Errorf("%s : %s n'est pas un template", file, id)
 		}
 	}
 	return out, nil
 }
 
 // checkTemplate checks a template; missing is true when one of its packages
-// was left out for this MyInfra.
-func (lib *Library) checkTemplate(dir string, body TemplateBody) (missing bool, err error) {
+// was left out for this MyInfra. Only a template of the community cites
+// packages of the community.
+func (lib *Library) checkTemplate(dir string, body TemplateBody, community bool) (missing bool, err error) {
 	fail := func(what string) error { return fmt.Errorf("%s/template.yaml : %s", dir, what) }
 	if body.Type != TemplateType || body.Version != TemplateVersion {
 		return false, fail(fmt.Sprintf("l'en-tête est type: %s et version: %d", TemplateType, TemplateVersion))
@@ -366,7 +419,7 @@ func (lib *Library) checkTemplate(dir string, body TemplateBody) (missing bool, 
 	for _, app := range body.Apps {
 		listed := false
 		for _, left := range lib.Left {
-			listed = listed || left == "packages/"+app.Package
+			listed = listed || left == "packages/"+app.Package || (community && left == Community+"packages/"+app.Package)
 		}
 		if listed {
 			missing = true
@@ -375,6 +428,9 @@ func (lib *Library) checkTemplate(dir string, body TemplateBody) (missing bool, 
 		p, ok := lib.Package(app.Package)
 		if !ok {
 			return false, fail("le paquet " + app.Package + " n'est pas dans la bibliothèque")
+		}
+		if p.Community && !community {
+			return false, fail("le paquet " + app.Package + " est de la communauté : seul un template de community/ le cite")
 		}
 		// A template is taken in one click: nothing to type.
 		if len(p.Pkg.Inputs) > 0 {

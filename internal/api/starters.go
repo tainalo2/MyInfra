@@ -28,6 +28,7 @@ type starterView struct {
 	Servers       int                              `json:"servers"`
 	ControlPlanes int                              `json:"controlPlanes"`
 	Apps          []starterApp                     `json:"apps"`
+	Community     bool                             `json:"community,omitempty"`
 }
 
 // listStarters gives the ready-made templates, for the templates page.
@@ -36,7 +37,7 @@ func (a *API) listStarters(w http.ResponseWriter, r *http.Request) {
 	for _, starter := range market.Starters() {
 		view := starterView{
 			ID: starter.ID, Version: starter.Version, Name: starter.Name, Summary: starter.Summary, Sizing: starter.Sizing,
-			Translations: starter.Translations, Servers: len(starter.Servers), Apps: []starterApp{},
+			Translations: starter.Translations, Servers: len(starter.Servers), Apps: []starterApp{}, Community: starter.Community,
 		}
 		for _, server := range starter.Servers {
 			if server.ControlPlane {

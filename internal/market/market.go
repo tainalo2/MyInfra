@@ -38,6 +38,8 @@ type Card struct {
 	// Version is the version of the package in the library.
 	Version string `json:"version"`
 	Changes string `json:"changes,omitempty"`
+	// Community is true for a package people share, outside the library's own.
+	Community bool `json:"community,omitempty"`
 }
 
 type Group struct {
@@ -129,7 +131,7 @@ func cardOf(item library.Package) Card {
 		ID: item.ID, Name: p.Name, Summary: p.Summary, Description: p.About.Description,
 		Site: p.About.Site, Logo: p.About.Logo, Category: p.Category,
 		KeepsFiles: keeps, Inputs: inputs, Services: services, Translations: p.About.Translations,
-		CategoryWords: words, Version: item.Version, Changes: item.Changes,
+		CategoryWords: words, Version: item.Version, Changes: item.Changes, Community: item.Community,
 	}
 }
 

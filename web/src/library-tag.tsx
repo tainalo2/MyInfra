@@ -15,3 +15,14 @@ export function LibraryTag({ mark }: { mark?: LibraryMark }) {
     </span>
   );
 }
+
+// CommunityTag marks a package or template the community shares, beside
+// the library's own.
+export function CommunityTag() {
+  useI18n();
+  return (
+    <span className="rounded-full border border-line px-2 py-0.5 text-[12px] text-muted" title={text("library.communityHint")}>
+      {text("library.community")}
+    </span>
+  );
+}

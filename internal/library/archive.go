@@ -62,7 +62,7 @@ func Sum(raw []byte) string {
 // published lists the files of a library tree that a release carries.
 func published(fsys fs.FS) ([]string, error) {
 	out := []string{"categories.yaml", "order.txt"}
-	for _, dir := range []string{"packages", "templates", "logos"} {
+	for _, dir := range []string{"packages", "templates", "logos", strings.TrimSuffix(Community, "/")} {
 		err := fs.WalkDir(fsys, dir, func(name string, entry fs.DirEntry, err error) error {
 			if err != nil {
 				if errors.Is(err, fs.ErrNotExist) && name == dir {
