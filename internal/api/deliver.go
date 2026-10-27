@@ -552,6 +552,11 @@ func (a *API) pruneShared(ctx context.Context, host deploy.Host, namespace, raw 
 	}
 }
 
+// publicObject names a Service that publishes ports on the nodes.
+var publicObject = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}-public$`)
+
+// pruneRoutes removes the routes, and the Services that publish ports on
+// the nodes, that the application no longer has.
 func (a *API) pruneRoutes(ctx context.Context, host deploy.Host, namespace, raw string) {
 	out, err := deploy.SSH(ctx, host, "k3s kubectl -n "+namespace+" get ingressroute -o name")
 	if err != nil {
@@ -566,6 +571,21 @@ func (a *API) pruneRoutes(ctx context.Context, host deploy.Host, namespace, raw 
 			continue
 		}
 		_, _ = deploy.SSH(ctx, host, "k3s kubectl -n "+namespace+" delete ingressroute "+name+" --wait=false")
+	}
+	// A Service that publishes ports on the nodes holds them until it goes.
+	out, err = deploy.SSH(ctx, host, "k3s kubectl -n "+namespace+" get svc -l myinfra.io/public=true -o name")
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(out, "\n") {
+		name := strings.TrimSpace(line)
+		if slash := strings.LastIndex(name, "/"); slash >= 0 {
+			name = name[slash+1:]
+		}
+		if name == "" || !publicObject.MatchString(name) || strings.Contains(raw, "kind: Service\nmetadata:\n  name: "+name+"\n") {
+			continue
+		}
+		_, _ = deploy.SSH(ctx, host, "k3s kubectl -n "+namespace+" delete svc "+name+" --wait=false")
 	}
 }
 

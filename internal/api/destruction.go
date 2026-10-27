@@ -336,8 +336,13 @@ func (a *API) performDestruction(owner string, step *destructionStep, whole bool
 			return "", errors.New("Le cluster n'a pas pu être retiré.")
 		}
 	case "application":
+		app, _ := a.Store.Application(context.Background(), owner, step.AppID)
 		if err := a.Store.DeleteApplication(context.Background(), owner, step.AppID); err != nil && !errors.Is(err, store.ErrNotFound) {
 			return "", errors.New("L'application n'a pas pu être retirée.")
+		}
+		// The nodes close the ports it opened; a machine alone does at its next sync.
+		if app.ClusterID != "" && exposes(app.Services) {
+			go a.openFirewall(owner, app.ClusterID)
 		}
 	case "workload":
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)

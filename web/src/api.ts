@@ -291,6 +291,8 @@ export type AppService = {
   published: boolean;
   disk: boolean;
   replicas?: number;
+  // exposed are the ports open to the Internet, such as 21116/udp.
+  exposed?: string[];
 };
 
 export type ArgoApp = { name: string; namespace: string; sync: string; health: string };
@@ -592,7 +594,8 @@ export type PackageDisk = { name: string; sizeGi: number };
 
 export type PackageFile = { path: string; content: string };
 
-export type PackagePort = { name?: string; port: number };
+// expose opens the port to the Internet under that number.
+export type PackagePort = { name?: string; port: number; protocol?: "tcp" | "udp"; expose?: number };
 
 export type PackageService = {
   name: string;

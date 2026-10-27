@@ -4,6 +4,8 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+
+	"myinfra/internal/spec"
 )
 
 func TestBootstrapInstallsRuntime(t *testing.T) {
@@ -186,5 +188,40 @@ func TestSyncLogsInBeforeAPrivatePull(t *testing.T) {
 	}
 	if strings.Contains(script, "rm -rf") {
 		t.Fatal("un mot de passe dangereux a été écrit dans le script")
+	}
+}
+
+func TestSyncPublishesExposedPorts(t *testing.T) {
+	app := Workload{
+		ID:      "7d49736b-58e7-4386-b947-720823531792",
+		Service: "hbbs",
+		Image:   "rustdesk/rustdesk-server:1.1.14",
+		Listen:  21115,
+		Spec: spec.Service{Ports: []spec.Port{
+			{Port: 21115, Expose: 21115},
+			{Port: 21116, Protocol: "udp", Expose: 21116},
+		}},
+	}
+	script, err := Sync("http://127.0.0.1:8080", "tok_en", []Workload{app})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, part := range []string{
+		"-p '21115:21115/tcp'",
+		"-p '21116:21116/udp'",
+		"tcp dport { 21115 } accept",
+		"udp dport { 21116 } accept",
+	} {
+		if !strings.Contains(script, part) {
+			t.Fatalf("missing %s\n%s", part, script)
+		}
+	}
+	// The port has one holder: no new container beside the old one.
+	if strings.Contains(script, "-next") {
+		t.Fatal(script)
+	}
+	app.Replicas = 2
+	if safeWorkload(app) {
+		t.Fatal("two copies share a port of the machine")
 	}
 }

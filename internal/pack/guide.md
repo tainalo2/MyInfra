@@ -17,7 +17,27 @@ Un service fait tourner une image : le site, sa base de données, un cache, une 
 
 ## Les services publics
 
-Un service qui porte `public: true` reçoit un domaine et son certificat HTTPS. Indiquez dans `port` le port où il répond (80, 3000…). Il en faut au moins un ; le premier est le **service principal**, celui de l'adresse de l'application. Les autres services publics reçoivent chacun leurs propres noms à l'installation (et, sans nom, une adresse donnée par MyInfra). Les services non publics restent privés à l'application. Une tâche qui n'écoute rien porte `noPort: true`.
+Un service qui porte `public: true` reçoit un domaine et son certificat HTTPS. Indiquez dans `port` le port où il répond (80, 3000…). Il en faut au moins un, sauf dans une application qui ne fait qu'ouvrir des ports sur Internet (voir plus bas) ; le premier est le **service principal**, celui de l'adresse de l'application. Les autres services publics reçoivent chacun leurs propres noms à l'installation (et, sans nom, une adresse donnée par MyInfra). Les services non publics restent privés à l'application. Une tâche qui n'écoute rien porte `noPort: true`.
+
+## Les ports ouverts sur Internet
+
+Un VPN (WireGuard), un relais de bureau à distance (RustDesk), un serveur de jeu ne parlent pas HTTP : ils ont besoin de ports bruts, TCP ou UDP, ouverts sur l'adresse des machines. Déclarez-les dans `ports` avec `expose`, le numéro ouvert sur Internet, et `protocol: udp` au besoin (TCP par défaut) :
+
+```yaml
+ports:
+  - port: 51820
+    protocol: udp
+    expose: 51820
+```
+
+- Sur une machine seule, le port est ouvert sur son adresse ; sur un cluster, sur **chaque nœud**, comme le domaine. Les clients se connectent au nom de l'application ou à l'adresse d'une machine.
+- `expose` peut différer de `port` : `{port: 51820, protocol: udp, expose: 51821}` fait entrer par 51821 ce que le conteneur écoute sur 51820.
+- MyInfra tient déjà certains ports des machines, refusés pour `expose` : TCP 22, 80, 443, 2379, 2380, 6443 et 10250 ; UDP 67, 68, 8472 et 51820 (le réseau WireGuard du cluster). Un WireGuard d'application prend donc un autre port public, 51821 par exemple.
+- Un port ouvert l'est pour une seule application de la machine ou du cluster.
+- Le port du service (`port`) peut être ouvert aussi : répétez-le dans `ports` avec `expose`.
+- Sur une machine seule, un service qui ouvre un port tourne en une copie.
+
+Un service qui n'ouvre que des ports bruts n'a pas besoin d'être public. Exemple complet plus bas.
 
 ## Les disques
 
@@ -77,7 +97,7 @@ Les variables communes (`env` en haut du paquet) vont à tous les services et so
 - `services[].noPort` : `true` pour une tâche de fond qui n'écoute aucun port.
 - `services[].replicas` : le nombre de copies, de 1 à 10 (0 pour un service arrêté).
 - `services[].command`, `services[].args` : `command` remplace le point d'entrée de l'image ; `args` le suit, un mot par élément.
-- `services[].ports` : des ports de plus, `{name, port}`, ouverts aux autres services seulement.
+- `services[].ports` : des ports de plus, `{name, port, protocol, expose}`. Sans `expose`, ouverts aux autres services seulement ; avec, ouverts aussi sur Internet, sur ce numéro. `protocol` vaut `tcp` (défaut) ou `udp`.
 - `disks` : les disques partagés, `{name, sizeGi}`.
 - `services[].volumes` : les disques, `{path, sizeGi}` ; le premier est le disque principal. `{path, disk}` monte un disque partagé.
 - `services[].files` : les fichiers posés en lecture seule, `{path, content}`.
@@ -119,6 +139,51 @@ services:
         sizeGi: 8
 ```
 
+## Un paquet qui ouvre des ports
+
+Un relais RustDesk, sans domaine HTTP : ses deux services partagent leurs clés.
+
+```yaml
+type: myinfra-package
+version: 1
+name: RustDesk
+summary: Un relais pour le bureau à distance.
+category: Outils
+disks:
+  - name: keys
+    sizeGi: 1
+services:
+  - name: hbbs
+    image: rustdesk/rustdesk-server:1.1.14
+    command: [hbbs]
+    port: 21115
+    ports:
+      - port: 21115
+        expose: 21115
+      - port: 21116
+        expose: 21116
+      - port: 21116
+        protocol: udp
+        expose: 21116
+      - port: 21118
+        expose: 21118
+    volumes:
+      - path: /root
+        disk: keys
+  - name: hbbr
+    image: rustdesk/rustdesk-server:1.1.14
+    command: [hbbr]
+    port: 21117
+    ports:
+      - port: 21117
+        expose: 21117
+      - port: 21119
+        expose: 21119
+    volumes:
+      - path: /root
+        disk: keys
+```
+
 ## Partir d'un fichier existant
 
-`convert_to_package` transforme un docker-compose, des manifests Kubernetes ou un chart Helm en paquet, sans rien enregistrer : relisez le résultat et ses avertissements avant `create_package`.
+`convert_to_package` transforme un docker-compose, des manifests Kubernetes ou un chart Helm en paquet, sans rien enregistrer : relisez le résultat et ses avertissements avant `create_package`. Les ports qu'un docker-compose publie sur la machine (`"21116:21116/udp"`, plages comprises) deviennent des ports ouverts sur Internet, sauf ceux des bases de données.

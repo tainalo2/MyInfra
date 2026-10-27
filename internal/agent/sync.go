@@ -68,7 +68,7 @@ type Login struct {
 func Install() (string, error) {
 	var b strings.Builder
 	b.WriteString("export PATH=\"/usr/local/bin:/usr/bin:/bin:$PATH\"\n")
-	guard, err := hostFirewall()
+	guard, err := hostFirewall(nil)
 	if err != nil {
 		return "", err
 	}
@@ -120,7 +120,7 @@ func Sync(baseURL, token string, apps []Workload) (string, error) {
 	// one run at a time.
 	b.WriteString("if command -v flock >/dev/null 2>&1; then exec 9>/run/myinfra-sync.lock; flock -w 120 9 || exit 0; fi\n")
 	b.WriteString("export PATH=\"/usr/local/bin:/usr/bin:/bin:$PATH\"\n")
-	guard, err := hostFirewall()
+	guard, err := hostFirewall(apps)
 	if err != nil {
 		return "", err
 	}
@@ -226,6 +226,9 @@ func writeService(b *strings.Builder, report string, app Workload) error {
 	net := "net" + compact(app.ID)
 	fmt.Fprintf(b, "docker network inspect '%s' >/dev/null 2>&1 || docker network create '%s'\n", net, net)
 	fmt.Fprintf(b, "failed=0\n")
+	// A port published on the machine has one holder: the new container
+	// takes the place of the old one, as one with a disk does.
+	inPlace := app.Disk || len(spec.Exposed(app.Spec)) > 0
 	for i := 1; i <= replicas; i++ {
 		name := serviceNames(app)[i-1]
 		spec := specOf(app) + "|" + app.Service + "|" + fmt.Sprint(replicas) + "|" + fmt.Sprint(app.Disk)
@@ -234,7 +237,7 @@ func writeService(b *strings.Builder, report string, app Workload) error {
 		fmt.Fprintf(b, "  have=$(docker inspect -f '{{index .Config.Labels \"myinfra.spec\"}}' '%s')\n", name)
 		b.WriteString("fi\n")
 		runName := name
-		if !app.Disk {
+		if !inPlace {
 			runName = name + "-next"
 		}
 		fmt.Fprintf(b, "if [ \"$have\" != '%s' ]; then\n", spec)
@@ -276,7 +279,7 @@ func writeService(b *strings.Builder, report string, app Workload) error {
 			fmt.Fprintf(b, " '%s'", arg)
 		}
 		b.WriteString("\n")
-		if !app.Disk {
+		if !inPlace {
 			writeSwap(b, runName, name, probePort(app))
 		}
 		b.WriteString("fi\n")
@@ -540,6 +543,9 @@ func safeWorkload(app Workload) bool {
 			return false
 		}
 	}
+	if app.Replicas > 1 && len(spec.Exposed(app.Spec)) > 0 {
+		return false
+	}
 	return len(spec.Check(app.Spec)) == 0
 }
 
@@ -590,12 +596,26 @@ func envKeys(env map[string]string) []string {
 	return keys
 }
 
-func hostFirewall() (string, error) {
-	script, err := firewall.Script(firewall.Spec{})
+func hostFirewall(apps []Workload) (string, error) {
+	script, err := firewall.Script(firewall.Spec{Open: OpenPorts(apps)})
 	if err != nil {
 		return "", err
 	}
 	return "if [ ! -x /usr/local/bin/k3s ]; then\n(\n" + script + ")\nfi\n", nil
+}
+
+// OpenPorts are the ports the applications of a machine publish.
+func OpenPorts(apps []Workload) []firewall.Port {
+	var out []firewall.Port
+	for _, app := range apps {
+		if !safeWorkload(app) {
+			continue
+		}
+		for _, port := range spec.Exposed(app.Spec) {
+			out = append(out, firewall.Port{Port: port.Expose, Protocol: port.Proto()})
+		}
+	}
+	return out
 }
 
 func hostRule(hosts []string) string {
@@ -700,6 +720,9 @@ func specFlags(app Workload, copy, replicas int) string {
 	var b strings.Builder
 	if len(app.Spec.Command) > 0 {
 		fmt.Fprintf(&b, " --entrypoint '%s'", app.Spec.Command[0])
+	}
+	for _, port := range spec.Exposed(app.Spec) {
+		fmt.Fprintf(&b, " -p '%d:%d/%s'", port.Expose, port.Port, port.Proto())
 	}
 	for i, volume := range app.Spec.Volumes {
 		name := fmt.Sprintf("myinfra-data-%s-%s-v%d", compact(app.ID), app.Service, i+1)

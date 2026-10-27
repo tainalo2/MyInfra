@@ -46,7 +46,7 @@ flowchart TB
 
 ### Serveur seul
 
-L'agent installe Docker Engine et Traefik. L'application est un conteneur qui écoute en HTTP sur le port fixé par la plateforme. Traefik tient les ports 80 et 443, termine le TLS, et envoie vers le conteneur. Une nouvelle version démarre à côté de l'ancienne quand l'application ne garde pas de fichiers, puis le trafic bascule. Si elle garde un dossier, l'ancienne s'arrête avant la nouvelle.
+L'agent installe Docker Engine et Traefik. L'application est un conteneur qui écoute en HTTP sur le port fixé par la plateforme. Traefik tient les ports 80 et 443, termine le TLS, et envoie vers le conteneur. Un service qui ouvre des ports bruts (`expose`, TCP ou UDP : VPN, relais) les reçoit directement de Docker, sans Traefik. Une nouvelle version démarre à côté de l'ancienne quand l'application ne garde pas de fichiers, puis le trafic bascule. Si elle garde un dossier, l'ancienne s'arrête avant la nouvelle.
 
 ### Cluster
 

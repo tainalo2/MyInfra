@@ -185,7 +185,7 @@ func Check(p Package) []Problem {
 	if len(p.Services) == 0 || len(p.Services) > maxServices {
 		add("services", "Un paquet compte de 1 à %d services.", maxServices)
 	}
-	public := 0
+	public, exposed := 0, 0
 	names := map[string]bool{}
 	quiet := map[string]bool{}
 	for _, svc := range p.Services {
@@ -224,8 +224,10 @@ func Check(p Package) []Problem {
 		for _, problem := range spec.Check(svc.Service) {
 			add(at+"."+problem.Path, "%s", problem.Message)
 		}
+		exposed += len(spec.Exposed(svc.Service))
 		for j, port := range svc.Ports {
-			if port.Port == portOf(svc) {
+			// The service's own port is listed again only to open it.
+			if port.Port == portOf(svc) && port.Proto() == "tcp" && port.Expose == 0 {
 				add(fmt.Sprintf("%s.ports[%d].port", at, j), "Le port %d est déjà celui du service.", port.Port)
 			}
 		}
@@ -252,8 +254,8 @@ func Check(p Package) []Problem {
 		}
 	}
 	checkDisks(p, add)
-	if len(p.Services) > 0 && public == 0 {
-		add("services", "Au moins un service est public : celui qui reçoit le domaine.")
+	if len(p.Services) > 0 && public == 0 && exposed == 0 {
+		add("services", "Au moins un service est public, celui qui reçoit le domaine, ou ouvre un port sur Internet (expose).")
 	}
 	checkAddresses(p, add)
 	if cycle := dependencyLoop(p.Services); cycle != "" {

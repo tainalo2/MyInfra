@@ -20,8 +20,16 @@ func specOK(app App, svc Service) bool {
 		return false
 	}
 	for _, port := range svc.Spec.Ports {
-		if port.Port == listenOf(svc) {
+		if mainAgain(svc, port) && port.Expose == 0 {
 			return false
+		}
+	}
+	if len(spec.Exposed(svc.Spec)) > 0 {
+		// The Service that publishes the ports takes this name.
+		for _, other := range app.Services {
+			if other.Name == PublicService(svc.Name) {
+				return false
+			}
 		}
 	}
 	for _, path := range svc.Spec.Volumes {
@@ -223,7 +231,13 @@ func containerHead(svc Service, probe bool) string {
 	if !svc.Spec.NoPort {
 		fmt.Fprintf(&b, "          ports:\n            - containerPort: %d\n", listenOf(svc))
 		for _, port := range svc.Spec.Ports {
+			if mainAgain(svc, port) {
+				continue
+			}
 			fmt.Fprintf(&b, "            - containerPort: %d\n              name: %s\n", port.Port, portLabel(port))
+			if port.Proto() == "udp" {
+				b.WriteString("              protocol: UDP\n")
+			}
 		}
 	}
 	if probe || svc.Spec.Health != nil {
@@ -241,9 +255,18 @@ func containerHead(svc Service, probe bool) string {
 	return b.String()
 }
 
+// mainAgain is the service's own port listed again, to open it on the
+// nodes: the main port already carries it inside the cluster.
+func mainAgain(svc Service, port spec.Port) bool {
+	return port.Port == listenOf(svc) && port.Proto() == "tcp"
+}
+
 func portLabel(port spec.Port) string {
 	if port.Name != "" {
 		return port.Name
+	}
+	if port.Proto() == "udp" {
+		return fmt.Sprintf("u%d", port.Port)
 	}
 	return fmt.Sprintf("p%d", port.Port)
 }
@@ -251,13 +274,22 @@ func portLabel(port spec.Port) string {
 // servicePortLines lists the ports of a service's Service. With more than
 // one, Kubernetes wants each named.
 func servicePortLines(svc Service) string {
-	if len(svc.Spec.Ports) == 0 {
+	var extra []spec.Port
+	for _, port := range svc.Spec.Ports {
+		if !mainAgain(svc, port) {
+			extra = append(extra, port)
+		}
+	}
+	if len(extra) == 0 {
 		return fmt.Sprintf("    - port: %d\n      targetPort: %d\n", listenOf(svc), listenOf(svc))
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "    - name: main\n      port: %d\n      targetPort: %d\n", listenOf(svc), listenOf(svc))
-	for _, port := range svc.Spec.Ports {
+	for _, port := range extra {
 		fmt.Fprintf(&b, "    - name: %s\n      port: %d\n      targetPort: %d\n", portLabel(port), port.Port, port.Port)
+		if port.Proto() == "udp" {
+			b.WriteString("      protocol: UDP\n")
+		}
 	}
 	return b.String()
 }

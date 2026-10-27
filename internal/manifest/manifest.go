@@ -371,6 +371,12 @@ func Namespace(id string) string {
 	return "mi" + out
 }
 
+// PublicService names the Service that publishes a service's ports on the
+// nodes.
+func PublicService(service string) string {
+	return service + "-public"
+}
+
 func Render(app App) string {
 	ns := Namespace(app.ID)
 	var b strings.Builder
@@ -496,6 +502,28 @@ spec:
     myinfra.io/service: %s
   ports:
 %s`, svc.Name, ns, svc.Name, servicePortLines(svc))
+			if exposed := spec.Exposed(svc.Spec); len(exposed) > 0 {
+				// ServiceLB publishes these ports on every node, as the names
+				// lead to every node.
+				fmt.Fprintf(&b, `---
+apiVersion: v1
+kind: Service
+metadata:
+  name: %s
+  namespace: %s
+  labels:
+    myinfra.io/public: "true"
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Cluster
+  selector:
+    myinfra.io/service: %s
+  ports:
+`, PublicService(svc.Name), ns, svc.Name)
+				for _, port := range exposed {
+					fmt.Fprintf(&b, "    - name: %s\n      protocol: %s\n      port: %d\n      targetPort: %d\n", portLabel(port), strings.ToUpper(port.Proto()), port.Expose, port.Port)
+				}
+			}
 		}
 		hosts := svc.Hosts
 		if hosts == nil {

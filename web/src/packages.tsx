@@ -1244,6 +1244,33 @@ function NetworkTab({ service, set }: { service: PackageService; set: Setter }) 
               aria-label={text("package.port")}
               onChange={(e) => set("ports", ports.map((item, at) => (at === index ? { ...item, port: numberOrUndefined(e.target.value) ?? 0 } : item)))}
             />
+            <span className="w-24 shrink-0">
+              <Select
+                value={port.protocol ?? "tcp"}
+                aria-label={text("package.protocol")}
+                onChange={(e) => set("ports", ports.map((item, at) => (at === index ? { ...item, protocol: e.target.value === "udp" ? "udp" : undefined } : item)))}
+              >
+                <option value="tcp">TCP</option>
+                <option value="udp">UDP</option>
+              </Select>
+            </span>
+            <label className="flex shrink-0 items-center gap-2 text-[13px]">
+              <input
+                type="checkbox"
+                checked={port.expose !== undefined}
+                onChange={(e) => set("ports", ports.map((item, at) => (at === index ? { ...item, expose: e.target.checked ? item.port || undefined : undefined } : item)))}
+              />
+              {text("package.expose")}
+            </label>
+            {port.expose !== undefined ? (
+              <Input
+                inputMode="numeric"
+                value={port.expose || ""}
+                placeholder={String(port.port || 51820)}
+                aria-label={text("package.exposePort")}
+                onChange={(e) => set("ports", ports.map((item, at) => (at === index ? { ...item, expose: numberOrUndefined(e.target.value) ?? 0 } : item)))}
+              />
+            ) : null}
             <IconButton type="button" icon={Trash2} label={text("common.delete")} onClick={() => set("ports", ports.filter((_, at) => at !== index))} />
           </div>
         ))}

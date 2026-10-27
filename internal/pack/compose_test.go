@@ -1,6 +1,7 @@
 package pack
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -103,5 +104,39 @@ func TestComposeImmich(t *testing.T) {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("missing %s in\n%s", want, joined)
 		}
+	}
+}
+
+func TestComposeOpensPublishedPorts(t *testing.T) {
+	p, warnings := compose(t, "rustdesk.compose.yaml")
+	if problems := Check(p); len(problems) > 0 {
+		t.Fatalf("%v\n%+v", problems, p)
+	}
+	hbbs, hbbr, db := service(p, "hbbs"), service(p, "hbbr"), service(p, "db")
+	got := map[string]int{}
+	for _, svc := range []Service{hbbs, hbbr, db} {
+		for _, port := range svc.Ports {
+			got[fmt.Sprintf("%s %d/%s", svc.Name, port.Port, port.Proto())] = port.Expose
+		}
+	}
+	for key, want := range map[string]int{
+		"hbbs 21116/tcp": 21116, "hbbs 21116/udp": 21116, "hbbs 21118/tcp": 21118,
+		"hbbr 21117/tcp": 21117, "hbbr 21119/tcp": 21119,
+	} {
+		if got[key] != want {
+			t.Fatalf("%s: %d in %v", key, got[key], got)
+		}
+	}
+	for key, expose := range got {
+		if strings.HasPrefix(key, "db ") && expose != 0 {
+			t.Fatalf("the database is open: %v", got)
+		}
+	}
+	joined := ""
+	for _, warning := range warnings {
+		joined += warning.Message + "\n"
+	}
+	if !strings.Contains(joined, "5432/tcp n'est pas ouvert") || !strings.Contains(joined, "retirez public") {
+		t.Fatal(joined)
 	}
 }

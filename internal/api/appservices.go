@@ -300,6 +300,10 @@ func (a *API) setServices(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if err := a.checkExposed(r.Context(), app.DestinationKind, app.ServerID, app.ClusterID, app.ID, next); err != nil {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
 	source := app.Source
 	for _, svc := range next {
 		if svc.Published {
@@ -314,6 +318,9 @@ func (a *API) setServices(w http.ResponseWriter, r *http.Request) {
 	a.note(r.Context(), owner, newID(), "app.update", "info", "Services de "+app.Name+" modifiés.", "", app.ClusterID)
 	if app.DestinationKind == "cluster" && app.ClusterID != "" {
 		go a.deliverServices(owner, app.ClusterID, app.ID, change)
+		if exposes(app.Services) || exposes(next) {
+			go a.openFirewall(owner, app.ClusterID)
+		}
 	}
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "updating"})
 }

@@ -67,3 +67,18 @@ func TestScriptRejectsAnUnreadableAddress(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestScriptOpensThePortsApplicationsPublish(t *testing.T) {
+	script, err := Script(Spec{Open: []Port{{21117, "tcp"}, {51821, "udp"}, {21115, "tcp"}, {21116, "udp"}, {21115, "tcp"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, part := range []string{"tcp dport { 21115, 21117 } accept", "udp dport { 21116, 51821 } accept"} {
+		if !strings.Contains(script, part) {
+			t.Fatalf("missing %s", part)
+		}
+	}
+	if _, err := Script(Spec{Open: []Port{{53, "sctp"}}}); err == nil {
+		t.Fatal("an unknown protocol reached the script")
+	}
+}

@@ -7,7 +7,14 @@ import (
 
 // The example of the guide must stay a valid package.
 func TestGuideExampleIsValid(t *testing.T) {
-	start := strings.Index(Guide, "## Un paquet complet")
+	for _, heading := range []string{"## Un paquet complet", "## Un paquet qui ouvre des ports"} {
+		checkGuideExample(t, heading)
+	}
+}
+
+func checkGuideExample(t *testing.T, heading string) {
+	t.Helper()
+	start := strings.Index(Guide, heading)
 	if start < 0 {
 		t.Fatal("exemple absent")
 	}

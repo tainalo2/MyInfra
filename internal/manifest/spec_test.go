@@ -206,3 +206,46 @@ func TestRenderLeavesAWorkerWithoutPort(t *testing.T) {
 		t.Fatal(raw)
 	}
 }
+
+func TestRenderPublishesExposedPortsOnTheNodes(t *testing.T) {
+	app := App{
+		ID: specApp,
+		Services: []Service{
+			{Name: "hbbs", Image: "rustdesk/rustdesk-server:1.1.14", Listen: 21115, Replicas: 1, Spec: spec.Service{
+				Ports: []spec.Port{
+					{Port: 21115, Expose: 21115},
+					{Port: 21116, Expose: 21116},
+					{Port: 21116, Protocol: "udp", Expose: 21116},
+					{Port: 51820, Protocol: "udp", Expose: 51821},
+					{Port: 9100},
+				},
+			}},
+		},
+	}
+	if refusal := Refusal(app); refusal != "" {
+		t.Fatal(refusal)
+	}
+	raw := Render(app)
+	docs := documents(t, raw)
+	// The main port is not listed twice inside the cluster.
+	ports := dig(docs["Service/hbbs"], "spec", "ports")
+	if dig(ports, 0, "port") != 21115 || dig(ports, 1, "port") != 21116 || dig(ports, 2, "name") != "u21116" || dig(ports, 2, "protocol") != "UDP" || dig(ports, 5) != nil {
+		t.Fatal(raw)
+	}
+	container := dig(docs["Deployment/hbbs"], "spec", "template", "spec", "containers", 0)
+	if dig(container, "ports", 2, "protocol") != "UDP" || dig(container, "ports", 5) != nil {
+		t.Fatal(raw)
+	}
+	public := docs["Service/hbbs-public"]
+	if dig(public, "spec", "type") != "LoadBalancer" || dig(public, "metadata", "labels", "myinfra.io/public") != "true" {
+		t.Fatal(raw)
+	}
+	open := dig(public, "spec", "ports")
+	if dig(open, 0, "port") != 21115 || dig(open, 2, "protocol") != "UDP" || dig(open, 3, "port") != 51821 || dig(open, 3, "targetPort") != 51820 || dig(open, 4) != nil {
+		t.Fatal(raw)
+	}
+	app.Services = append(app.Services, Service{Name: "hbbs-public", Image: "nginx:1", Replicas: 1})
+	if Refusal(app) == "" {
+		t.Fatal("two Services share a name")
+	}
+}

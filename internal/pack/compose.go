@@ -126,16 +126,22 @@ func Compose(data []byte, name string) (Package, []Warning, error) {
 		c.names[services.Content[i].Value] = c.serviceName(services.Content[i].Value)
 	}
 	published := map[string]int{}
+	opened := map[string][]mapping{}
 	for _, item := range list {
 		svc, open := c.service(item.name, item.body)
 		c.pkg.Services = append(c.pkg.Services, svc)
+		opened[svc.Name] = open
 		for _, port := range open {
-			if _, seen := published[svc.Name]; !seen || port == 80 || port == 443 {
-				published[svc.Name] = port
+			if port.proto != "tcp" {
+				continue
+			}
+			if _, seen := published[svc.Name]; !seen || port.published == 80 || port.published == 443 {
+				published[svc.Name] = port.published
 			}
 		}
 	}
 	c.choosePublic(published)
+	c.exposePublished(opened)
 	c.shareDisks()
 	return c.pkg, c.warnings, nil
 }
@@ -228,9 +234,16 @@ func slugOf(raw, fallback string, max int) string {
 	return out
 }
 
+// mapping is a port of a compose service: published on the machine when
+// published is set.
+type mapping struct {
+	published, target int
+	proto             string
+}
+
 // service converts one compose service; open lists the ports it publishes
 // on the machine, to find the public one.
-func (c *composer) service(raw string, body map[string]any) (Service, []int) {
+func (c *composer) service(raw string, body map[string]any) (Service, []mapping) {
 	name := c.names[raw]
 	svc := Service{Name: name}
 	if name != raw {
@@ -247,28 +260,40 @@ func (c *composer) service(raw string, body map[string]any) (Service, []int) {
 	svc.Image = image
 
 	// Ports: those published on the machine, and those only exposed.
-	var open []int
-	var targets []int
+	var open []mapping
+	var targets []mapping
+	add := func(m mapping) {
+		for _, seen := range targets {
+			if seen.target == m.target && seen.proto == m.proto {
+				return
+			}
+		}
+		targets = append(targets, mapping{target: m.target, proto: m.proto})
+	}
 	for _, item := range list(body["ports"]) {
-		published, target, ok := c.port(name, item)
-		if !ok {
-			continue
+		for _, m := range c.port(name, item) {
+			if m.published > 0 {
+				open = append(open, m)
+			}
+			add(m)
 		}
-		if published > 0 {
-			open = append(open, published)
-		}
-		targets = appendUnique(targets, target)
 	}
 	for _, item := range list(body["expose"]) {
-		if n, err := strconv.Atoi(strings.Split(scalar(item), "/")[0]); err == nil && n > 0 && n < 65536 {
-			targets = appendUnique(targets, n)
+		text, proto := splitProto(scalar(item))
+		if n, err := strconv.Atoi(text); err == nil && n > 0 && n < 65536 {
+			add(mapping{target: n, proto: proto})
 		}
 	}
-	if len(targets) > 0 {
-		svc.Port = targets[0]
-		for _, port := range targets[1:] {
-			svc.Ports = append(svc.Ports, spec.Port{Port: port})
+	for _, m := range targets {
+		if svc.Port == 0 && m.proto == "tcp" {
+			svc.Port = m.target
+			continue
 		}
+		port := spec.Port{Port: m.target}
+		if m.proto != "tcp" {
+			port.Protocol = m.proto
+		}
+		svc.Ports = append(svc.Ports, port)
 	}
 
 	c.environment(&svc, body["environment"])
@@ -302,29 +327,82 @@ func (c *composer) service(raw string, body map[string]any) (Service, []int) {
 	return svc, open
 }
 
-// port reads "8080:80", "127.0.0.1:8080:80/tcp", "80" or the long syntax.
-func (c *composer) port(service string, item any) (published, target int, ok bool) {
+// maxRange is the widest range of ports a compose service may publish.
+const maxRange = 16
+
+// port reads "8080:80", "127.0.0.1:8080:80/tcp", "53:53/udp", "80", a range
+// such as "21115-21119:21115-21119", or the long syntax.
+func (c *composer) port(service string, item any) []mapping {
 	if m, isMap := item.(map[string]any); isMap {
-		target, _ = strconv.Atoi(c.literal(service, scalar(m["target"]), "un port"))
-		published, _ = strconv.Atoi(c.literal(service, scalar(m["published"]), "un port"))
-		return published, target, target > 0 && target < 65536
+		target, _ := strconv.Atoi(c.literal(service, scalar(m["target"]), "un port"))
+		published, _ := strconv.Atoi(c.literal(service, scalar(m["published"]), "un port"))
+		proto := strings.ToLower(scalar(m["protocol"]))
+		if proto != "udp" {
+			proto = "tcp"
+		}
+		if target < 1 || target > 65535 {
+			return nil
+		}
+		return []mapping{{published: published, target: target, proto: proto}}
 	}
-	text := c.literal(service, scalar(item), "un port")
-	text = strings.Split(text, "/")[0]
-	if strings.Contains(text, "-") {
-		c.warn(service, "La plage de ports %s n'est pas reprise.", text)
-		return 0, 0, false
-	}
+	raw := c.literal(service, scalar(item), "un port")
+	text, proto := splitProto(raw)
 	parts := strings.Split(text, ":")
-	target, err := strconv.Atoi(parts[len(parts)-1])
-	if err != nil || target < 1 || target > 65535 {
-		c.warn(service, "Le port %s est illisible.", text)
-		return 0, 0, false
+	targets, ok := portRange(parts[len(parts)-1])
+	if !ok {
+		c.warn(service, "Le port %s est illisible.", raw)
+		return nil
 	}
-	if len(parts) >= 2 {
-		published, _ = strconv.Atoi(parts[len(parts)-2])
+	if len(targets) > maxRange {
+		c.warn(service, "La plage de ports %s compte plus de %d ports : elle n'est pas reprise.", raw, maxRange)
+		return nil
 	}
-	return published, target, true
+	var published []int
+	if len(parts) >= 2 && parts[len(parts)-2] != "" {
+		published, ok = portRange(parts[len(parts)-2])
+		if !ok || len(published) != len(targets) {
+			c.warn(service, "Le port %s est illisible.", raw)
+			return nil
+		}
+	}
+	out := make([]mapping, len(targets))
+	for i, target := range targets {
+		out[i] = mapping{target: target, proto: proto}
+		if published != nil {
+			out[i].published = published[i]
+		}
+	}
+	return out
+}
+
+// splitProto reads "53/udp" as 53 and udp; tcp when unsaid.
+func splitProto(text string) (string, string) {
+	text, proto, _ := strings.Cut(strings.TrimSpace(text), "/")
+	if strings.ToLower(proto) == "udp" {
+		return text, "udp"
+	}
+	return text, "tcp"
+}
+
+// portRange reads "80" or "21115-21119".
+func portRange(text string) ([]int, bool) {
+	low, high, isRange := strings.Cut(text, "-")
+	first, err := strconv.Atoi(low)
+	if err != nil || first < 1 || first > 65535 {
+		return nil, false
+	}
+	last := first
+	if isRange {
+		last, err = strconv.Atoi(high)
+		if err != nil || last < first || last > 65535 || last-first >= maxRange*4 {
+			return nil, false
+		}
+	}
+	out := make([]int, 0, last-first+1)
+	for port := first; port <= last; port++ {
+		out = append(out, port)
+	}
+	return out, true
 }
 
 // environment splits the variables: passwords and keys become secrets drawn
@@ -769,14 +847,49 @@ func (c *composer) choosePublic(published map[string]int) {
 	if c.pkg.Services[best].Port == 0 {
 		c.warn(c.pkg.Services[best].Name, "Le port du service public n'est pas indiqué : celui que l'image annonce servira.")
 	}
-	others := 0
-	for name := range published {
-		if name != c.pkg.Services[best].Name {
-			others++
+}
+
+// databasePorts are published in a compose file to reach the base from the
+// machine: never opened to the Internet.
+var databasePorts = map[int]bool{3306: true, 5432: true, 6379: true, 27017: true, 9200: true, 11211: true, 5672: true}
+
+// exposePublished opens to the Internet the ports a compose file publishes
+// on the machine, besides the one the domain leads to: a VPN, a relay.
+func (c *composer) exposePublished(opened map[string][]mapping) {
+	var exposed []string
+	for i := range c.pkg.Services {
+		svc := &c.pkg.Services[i]
+		for _, m := range opened[svc.Name] {
+			label := fmt.Sprintf("%d/%s", m.published, m.proto)
+			if m.proto == "tcp" && m.target == portOf(*svc) && svc.Public {
+				continue
+			}
+			if databasePorts[m.target] {
+				c.warn(svc.Name, "Le port %s n'est pas ouvert sur Internet : il reste aux services de l'application.", label)
+				continue
+			}
+			if spec.Reserved(m.published, m.proto) {
+				c.warn(svc.Name, "Le port %s est celui de MyInfra sur les machines : il n'est pas ouvert sur Internet.", label)
+				continue
+			}
+			found := false
+			for j := range svc.Ports {
+				if svc.Ports[j].Port == m.target && svc.Ports[j].Proto() == m.proto {
+					svc.Ports[j].Expose, found = m.published, true
+				}
+			}
+			if !found {
+				// The service's own port, opened as it is.
+				svc.Ports = append(svc.Ports, spec.Port{Port: m.target, Expose: m.published})
+			}
+			exposed = append(exposed, svc.Name+" "+label)
+		}
+		if svc.Public && len(spec.Exposed(svc.Service)) > 0 {
+			c.warn(svc.Name, "%s reçoit le domaine sur son port %d. S'il ne parle pas HTTP, retirez public et ouvrez ce port avec expose.", svc.Name, portOf(*svc))
 		}
 	}
-	if others > 0 {
-		c.warn("", "Seul %s reçoit le domaine : les autres ports publiés restent joignables par les services de l'application.", c.pkg.Services[best].Name)
+	if len(exposed) > 0 {
+		c.warn("", "Ces ports sont ouverts sur Internet, sur l'adresse des machines : %s. Retirez expose de ceux qui doivent rester privés.", strings.Join(exposed, ", "))
 	}
 }
 

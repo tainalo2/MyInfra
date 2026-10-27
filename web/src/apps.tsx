@@ -735,6 +735,7 @@ export function ApplicationPage() {
   // With several public services, each shows its names, or the address
   // MyInfra gave it while it has none.
   const publics = publicServices(app.services, app.domains);
+  const exposed = (app.services ?? []).filter((svc) => (svc.exposed ?? []).length > 0).map((svc) => ({ service: svc.name, ports: svc.exposed ?? [] }));
   const listedDomains = (app.domains ?? []).filter((domain) => domain.kind === "custom" || (domain.kind === "default" && Boolean(domain.service)));
   const address = app.domains?.find((domain) => domain.kind === "custom" && domain.status === "ready")?.hostname ?? app.domains?.find((domain) => domain.kind === "custom")?.hostname ?? "";
   const pods = runtime?.pods ?? [];
@@ -874,6 +875,20 @@ export function ApplicationPage() {
                     </Fold>
                   </div>
                 ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {exposed.length > 0 ? (
+        <section className="mt-10">
+          <SectionTitle>{text("apps.exposed")}</SectionTitle>
+          <p className="mt-2 text-muted">{text("apps.exposedHint")}</p>
+          <ul className="mt-2 flex flex-col">
+            {exposed.map((item) => (
+              <li key={item.service} className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-t border-line py-4">
+                <span className="font-mono text-[13px]">{item.ports.join(", ")}</span>
+                <span className="text-[13px] text-muted">{item.service}</span>
               </li>
             ))}
           </ul>

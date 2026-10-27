@@ -13,7 +13,7 @@ type Service struct {
 	// Command replaces the image's entrypoint; the service's Args follow it.
 	Command []string `json:"command,omitempty"`
 	// Ports are reached by the other services, besides the one the domain
-	// leads to.
+	// leads to. Those with Expose are also opened to the Internet.
 	Ports []Port `json:"ports,omitempty"`
 	// Volumes are disks besides the first one, kept as it was.
 	Volumes []Volume `json:"volumes,omitempty"`
@@ -33,6 +33,42 @@ type Service struct {
 type Port struct {
 	Name string `json:"name,omitempty"`
 	Port int    `json:"port"`
+	// Protocol is tcp, the default, or udp.
+	Protocol string `json:"protocol,omitempty"`
+	// Expose publishes the port on the machines' address, under this number,
+	// open to the Internet: a VPN or a remote desktop relay that speaks
+	// neither HTTP nor TLS. 0 leaves it to the other services.
+	Expose int `json:"expose,omitempty"`
+}
+
+// Proto is the port's protocol, tcp when unset.
+func (p Port) Proto() string {
+	if p.Protocol == "" {
+		return "tcp"
+	}
+	return p.Protocol
+}
+
+// Exposed lists the ports a service opens to the Internet.
+func Exposed(s Service) []Port {
+	var out []Port
+	for _, port := range s.Ports {
+		if port.Expose > 0 {
+			out = append(out, port)
+		}
+	}
+	return out
+}
+
+// Reserved tells whether MyInfra holds a port on the machines: SSH, the
+// proxy, Kubernetes and the WireGuard network between the nodes.
+func Reserved(port int, protocol string) bool {
+	switch protocol {
+	case "udp":
+		return port == 67 || port == 68 || port == 8472 || port == 51820
+	default:
+		return port == 22 || port == 80 || port == 443 || port == 2379 || port == 2380 || port == 6443 || port == 10250
+	}
 }
 
 type Volume struct {
@@ -96,8 +132,9 @@ var (
 	// DiskName names a disk the services of an application share.
 	DiskName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
 	portName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,14}$`)
-	// reservedPort names the ports left unnamed, and main the service's own.
-	reservedPort = regexp.MustCompile(`^p[0-9]+$`)
+	// reservedPort names the ports left unnamed, tcp then udp, and main the
+	// service's own.
+	reservedPort = regexp.MustCompile(`^[pu][0-9]+$`)
 	envKey       = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`)
 	filePath     = regexp.MustCompile(`^/[A-Za-z0-9._/-]+$`)
 	httpPath     = regexp.MustCompile(`^/[A-Za-z0-9._~/%?=&+-]{0,255}$`)
@@ -130,16 +167,32 @@ func Check(s Service) []Problem {
 	if len(s.Ports) > maxPorts {
 		add("ports", "Un service ouvre au plus %d ports.", maxPorts)
 	}
-	ports := map[int]bool{}
+	ports := map[string]bool{}
+	exposed := map[string]bool{}
 	names := map[string]bool{}
 	for i, port := range s.Ports {
 		at := fmt.Sprintf("ports[%d]", i)
+		if port.Protocol != "" && port.Protocol != "tcp" && port.Protocol != "udp" {
+			add(at+".protocol", "Le protocole est tcp ou udp.")
+		}
+		key := fmt.Sprintf("%d/%s", port.Port, port.Proto())
 		if port.Port < 1 || port.Port > 65535 {
 			add(at+".port", "Un port va de 1 à 65535.")
-		} else if ports[port.Port] {
-			add(at+".port", "Le port %d est déjà ouvert.", port.Port)
+		} else if ports[key] {
+			add(at+".port", "Le port %s est déjà ouvert.", key)
 		}
-		ports[port.Port] = true
+		ports[key] = true
+		if port.Expose != 0 {
+			public := fmt.Sprintf("%d/%s", port.Expose, port.Proto())
+			if port.Expose < 1 || port.Expose > 65535 {
+				add(at+".expose", "Un port va de 1 à 65535.")
+			} else if Reserved(port.Expose, port.Proto()) {
+				add(at+".expose", "MyInfra tient déjà le port %s des machines.", public)
+			} else if exposed[public] {
+				add(at+".expose", "Le port %s est déjà ouvert sur Internet.", public)
+			}
+			exposed[public] = true
+		}
 		if port.Name != "" {
 			if !portName.MatchString(port.Name) {
 				add(at+".name", "Le nom d'un port tient en 15 caractères, en minuscules.")
@@ -150,6 +203,9 @@ func Check(s Service) []Problem {
 			}
 			names[port.Name] = true
 		}
+	}
+	if len(exposed) > 0 && s.NoPort {
+		add("ports", "Un service sans port n'en ouvre aucun sur Internet.")
 	}
 	if len(s.Volumes) > maxVolumes {
 		add("volumes", "Un service garde au plus %d disques de plus.", maxVolumes)

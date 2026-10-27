@@ -295,7 +295,7 @@ func (p existingPlan) recap() string {
 	default:
 		fmt.Fprintf(&b, "Elle rejoint le cluster %s : WireGuard et Kubernetes y sont installés.\n", p.cluster.Name)
 	}
-	b.WriteString("Le pare-feu, la configuration SSH et les ports 80 et 443 de la machine sont pris par MyInfra. Rien n'est acheté.\n")
+	b.WriteString("Le pare-feu, la configuration SSH et les ports 80 et 443 de la machine sont pris par MyInfra ; une application peut ouvrir d'autres ports, TCP ou UDP, avec expose. Rien n'est acheté.\n")
 	return b.String()
 }
 

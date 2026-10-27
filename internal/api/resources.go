@@ -22,6 +22,7 @@ import (
 	"myinfra/internal/market"
 	"myinfra/internal/provision"
 	"myinfra/internal/registry"
+	"myinfra/internal/spec"
 	"myinfra/internal/store"
 	"myinfra/internal/usage"
 )
@@ -1109,6 +1110,8 @@ type serviceView struct {
 	Published bool   `json:"published"`
 	Disk      bool   `json:"disk"`
 	Replicas  int    `json:"replicas"`
+	// Exposed are the ports open to the Internet, such as 21116/udp.
+	Exposed []string `json:"exposed,omitempty"`
 }
 
 func logoImages(app store.Application) []string {
@@ -1184,9 +1187,13 @@ func toApp(app store.Application) appView {
 		view.Domains = []domainView{}
 	}
 	for _, svc := range app.Services {
-		view.Services = append(view.Services, serviceView{
+		item := serviceView{
 			Name: svc.Name, Image: svc.Image, Published: svc.Published, Disk: svc.Disk, Replicas: svc.Replicas,
-		})
+		}
+		for _, port := range spec.Exposed(svc.Spec) {
+			item.Exposed = append(item.Exposed, publicKey(port))
+		}
+		view.Services = append(view.Services, item)
 	}
 	return view
 }

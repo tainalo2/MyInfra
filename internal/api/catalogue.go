@@ -206,6 +206,14 @@ func (a *API) installFrom(w http.ResponseWriter, r *http.Request, expand expandF
 	if body.Copies > 1 {
 		in.Replicas = body.Copies
 	}
+	if main == "" && len(in.Services) > 0 {
+		// Nothing public: the application only opens ports to the Internet.
+		in.Source = in.Services[0].Image
+	}
+	if err := a.checkExposed(r.Context(), in.DestinationKind, in.ServerID, in.ClusterID, in.ID, in.Services); err != nil {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
 	sealed, err := a.sealVars(in.Variables)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -228,6 +236,9 @@ func (a *API) installFrom(w http.ResponseWriter, r *http.Request, expand expandF
 	}
 	if in.DestinationKind == "cluster" && len(in.Services) > 0 {
 		go a.deliverClusters(context.Background())
+		if exposes(in.Services) {
+			go a.openFirewall(in.OwnerID, in.ClusterID)
+		}
 	}
 	writeJSON(w, http.StatusCreated, toApp(app))
 }

@@ -1958,6 +1958,47 @@ func (s *Store) MarkName(ctx context.Context, id, status, detail string) error {
 	return err
 }
 
+// ExposedPort is a port an application opens on the machines of its
+// destination.
+type ExposedPort struct {
+	ApplicationID   string
+	ApplicationName string
+	Service         string
+	Port            spec.Port
+}
+
+// ExposedPorts lists the ports the applications of a destination open to
+// the Internet: one holder each, on a machine as on every node of a cluster.
+func (s *Store) ExposedPorts(ctx context.Context, kind, serverID, clusterID string) ([]ExposedPort, error) {
+	column, id := "server_id", serverID
+	if kind == "cluster" {
+		column, id = "cluster_id", clusterID
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT a.id, a.name, s.name, s.spec
+		FROM application_services s
+		JOIN applications a ON a.id = s.application_id
+		WHERE a.destination_kind = $1 AND a.`+column+` = $2 AND s.spec ? 'ports'
+		ORDER BY a.name, s.name`, kind, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ExposedPort
+	for rows.Next() {
+		var row ExposedPort
+		var raw []byte
+		if err := rows.Scan(&row.ApplicationID, &row.ApplicationName, &row.Service, &raw); err != nil {
+			return nil, err
+		}
+		for _, port := range spec.Exposed(readSpec(raw)) {
+			row.Port = port
+			out = append(out, row)
+		}
+	}
+	return out, rows.Err()
+}
+
 // DestinationAddresses are the addresses a name points to: the machine, or
 // every linked node of the cluster, since each node answers on 80 and 443.
 func (s *Store) DestinationAddresses(ctx context.Context, kind, serverID, clusterID string) ([]string, error) {

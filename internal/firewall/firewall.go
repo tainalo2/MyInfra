@@ -12,11 +12,31 @@ import (
 type Spec struct {
 	Peers         []string
 	ControlPlanes []string
+	// Open are the ports applications publish to the Internet.
+	Open []Port
+}
+
+// Port is a port of the machine, tcp or udp.
+type Port struct {
+	Port     int
+	Protocol string
 }
 
 // Script installe un pare-feu qui ne laisse entrer depuis Internet
-// que SSH, HTTP et HTTPS. Les ports du cluster ne répondent qu'aux autres nœuds.
+// que SSH, HTTP, HTTPS et les ports que publient les applications.
+// Les ports du cluster ne répondent qu'aux autres nœuds.
 func Script(spec Spec) (string, error) {
+	open := map[string][]int{}
+	seen := map[Port]bool{}
+	for _, port := range spec.Open {
+		if port.Port < 1 || port.Port > 65535 || (port.Protocol != "tcp" && port.Protocol != "udp") {
+			return "", fmt.Errorf("port illisible")
+		}
+		if !seen[port] {
+			seen[port] = true
+			open[port.Protocol] = append(open[port.Protocol], port.Port)
+		}
+	}
 	planes, err := ipv4s(spec.ControlPlanes)
 	if err != nil {
 		return "", err
@@ -45,6 +65,16 @@ func Script(spec Spec) (string, error) {
     udp sport 67 udp dport 68 accept
     tcp dport { 22, 80, 443 } accept
 `)
+	for _, protocol := range []string{"tcp", "udp"} {
+		if ports := open[protocol]; len(ports) > 0 {
+			sort.Ints(ports)
+			words := make([]string, len(ports))
+			for i, port := range ports {
+				words[i] = fmt.Sprint(port)
+			}
+			fmt.Fprintf(&nft, "    %s dport { %s } accept\n", protocol, strings.Join(words, ", "))
+		}
+	}
 	if len(peers) > 0 {
 		nft.WriteString("    ip saddr @cluster tcp dport { 6443, 10250 } accept\n")
 		nft.WriteString("    ip saddr @cluster udp dport { 8472, 51820 } accept\n")

@@ -72,6 +72,7 @@ On a phone, the same application, laid out for the thumb:
 - **Providers.** Buy and destroy machines at Hetzner, Scaleway, OVH, DigitalOcean, Infomaniak, UpCloud, Akamai, Vultr, Exoscale, Gcore, Kamatera and IONOS, with your own API token. MyInfra does not resell compute.
 - **Bring your own machine.** Any Linux machine you already have joins with one command to paste. The command installs MyInfra's SSH key and announces the machine's own address; MyInfra then installs Docker, or Kubernetes on a cluster node, over SSH, as it does for a machine it bought. Choose a city so the machine shows on the map. When MyInfra itself is on the same local network, that command uses the address of your computer instead of localhost.
 - **Clusters.** Linked machines running k3s, Traefik at the edge, Kubernetes traffic between nodes over WireGuard only, an odd number of control planes, a name pointing at every node.
+- **Raw ports.** A VPN, a remote desktop relay or a game server opens its own TCP or UDP ports on the machines' address (`expose` in a package), besides the domain on 80 and 443. MyInfra keeps the ports it uses itself (SSH, Kubernetes, the cluster's WireGuard) and gives each port to one application.
 - **Overview.** A map of every server; switch to applications or pods. Pick an application to light up the servers that run it. A machine you added yourself takes the city you chose. A panel lists what needs attention, and the hourly and monthly cost is always at the top.
 - **Templates.** Describe applications, machines and a cluster once; deploy, export or share it. Nine ready-made templates — first steps, website, team workspace, knowledge base, development, monitoring, automation, paperwork, media — only ask for your provider, offers, keys and domain; the applications' passwords are drawn at deployment.
 
@@ -289,6 +290,8 @@ Push a tag such as `v1.4.0`, or run the **Publication** workflow from the Action
 **Delivery on a cluster.** MyInfra renders a manifest — namespace, Deployment or StatefulSet, Service, Traefik routes, a Secret for the variables, and a pull secret when the image comes from a private registry — and applies it over SSH. An unreadable image, name or variable is not applied, and the application in place is not removed. The first SSH key of a node is remembered; a different key is refused.
 
 **Delivery on a machine.** MyInfra runs the agent script on the machine over SSH. The script creates the Docker network, the volume if the application keeps files, and the container; Traefik sends the domain name to that container.
+
+**Raw ports.** A port a service exposes is published on the machine by Docker (`-p`), or on every node of a cluster by a `LoadBalancer` Service that k3s's ServiceLB serves; the firewall lets it in. Such a service is replaced in place, since only one container can hold the port, and runs one copy on a machine alone.
 
 **Imported images.** An archive from `docker save` (Docker or OCI layout, compressed or not, up to 4 GB) is read, renamed `myinfra.local/<name>:<version>` and stored in PostgreSQL. Before a delivery, MyInfra streams it over SSH to every server that needs it (`ctr images import` on a cluster node, `docker load` on a machine) and checks again every ten minutes that it is still there.
 

@@ -168,6 +168,8 @@ type Host struct {
 	WGPeers       []WireGuardPeer
 	Peers         []string
 	ControlPlanes []string
+	// Open are the ports the cluster's applications publish on the nodes.
+	Open []firewall.Port
 	// K3sVersion is installed on the node: the one of the cluster it joins,
 	// K3sVersion for a new cluster.
 	K3sVersion string
@@ -272,7 +274,7 @@ func Play(ctx context.Context, host Host, tag string) error {
 	if tag == "firewall" && engine == "k3s" && len(host.Peers) == 0 {
 		return fmt.Errorf("Le pare-feu n'a pas la liste des nœuds.")
 	}
-	script, err := firewall.Script(firewall.Spec{Peers: host.Peers, ControlPlanes: host.ControlPlanes})
+	script, err := firewall.Script(firewall.Spec{Peers: host.Peers, ControlPlanes: host.ControlPlanes, Open: host.Open})
 	if err != nil {
 		return err
 	}

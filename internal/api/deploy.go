@@ -397,6 +397,11 @@ func (a *API) applyFirewall(ctx context.Context, owner, clusterID string) error 
 			planes = append(planes, row.Address)
 		}
 	}
+	exposed, err := a.Store.ExposedPorts(ctx, "cluster", "", clusterID)
+	if err != nil {
+		return err
+	}
+	open := openPorts(exposed)
 	for _, row := range nodes {
 		// A node without its keys yet cannot be reached: it applies the
 		// firewall itself at its WireGuard step. Waiting for it here would
@@ -418,7 +423,7 @@ func (a *API) applyFirewall(ctx context.Context, owner, clusterID string) error 
 		}
 		host := deploy.Host{
 			Address: row.Address, PrivateKey: privateKey, PublicKeys: publicKeys, Cluster: row.ClusterName,
-			NodeName: deploy.NodeName(row.Name), Peers: peers, ControlPlanes: planes,
+			NodeName: deploy.NodeName(row.Name), Peers: peers, ControlPlanes: planes, Open: open,
 		}
 		if err := deploy.Play(ctx, host, "firewall"); err != nil {
 			return err
