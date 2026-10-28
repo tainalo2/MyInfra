@@ -87,19 +87,11 @@ func mcpReadTools() []mcpTool {
 		},
 		{
 			Name: "list_provider_accounts", Title: "Comptes providers", Role: store.RoleRead,
-			Description: "Les comptes de fournisseurs cloud enregistrés, où MyInfra peut acheter des machines. Un compte s'ajoute dans l'interface (Réglages › Providers), jamais par ici.",
+			Description: "Les comptes de fournisseurs cloud enregistrés, où MyInfra peut acheter des machines : nom, provider, et l'identifiant public s'il y en a un (access key, application key). Le secret n'est jamais renvoyé. Un compte s'ajoute avec create_provider_account.",
 			Schema:      object(nil, map[string]any{}),
 			Routes:      []string{"GET /api/secrets"},
 			Run: func(c *mcpCall, _ json.RawMessage) (string, error) {
-				rows, err := c.secretsOf("provider_token")
-				if err != nil {
-					return "", err
-				}
-				out := []map[string]string{}
-				for _, row := range rows {
-					out = append(out, map[string]string{"name": row.Name, "provider": row.Provider})
-				}
-				return asJSON(out), nil
+				return c.listAccounts("provider_token")
 			},
 		},
 		{

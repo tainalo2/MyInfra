@@ -29,14 +29,13 @@ const mcpInstructions = `MyInfra pilote des serveurs, des clusters Kubernetes, d
 Règles :
 - Désignez les clusters, machines, applications, paquets et comptes par leur nom : les outils les retrouvent. Si un nom est ambigu ou inconnu, l'outil liste les choix ; demandez à l'utilisateur, ne devinez pas.
 - Achats et destructions se font en deux temps. Le premier appel ne fait rien : il rend un récapitulatif et un code de confirmation. Montrez le récapitulatif tel quel à l'utilisateur et n'envoyez le code qu'après son accord explicite, avec exactement les mêmes arguments.
-- Les modifications DNS qui touchent un enregistrement existant suivent la même règle. La suppression d'un registre d'images privé aussi : le jeton n'est pas dans le récapitulatif.
+- Les modifications DNS qui touchent un enregistrement existant suivent la même règle. Le retrait d'un compte provider, DNS, Git ou d'un registre privé aussi : le secret n'est pas dans le récapitulatif.
 - La redondance réelle est celle que rapporte l'outil, service par service : n'en promettez pas davantage.
 - Quand une demande est impossible, présentez les alternatives proposées par l'outil.
 - Pour écrire un paquet, lisez la ressource myinfra://guide/packages et vérifiez le texte avec check_package avant de l'enregistrer. Un paquet de l'utilisateur s'enregistre avec create_package ; la bibliothèque (le catalogue) se publie dans son propre dépôt et n'est pas modifiée par ici.
 - Un paquet peut avoir plusieurs services publics : le premier est le principal (domains), les autres reçoivent leurs noms par service_domains, sinon une adresse donnée par MyInfra.
 - Les services qui montent un disque partagé tournent en une copie, sur un même nœud : à l'installation sur un cluster, choisissez ce nœud avec disk_node d'après la place libre (get_cluster_usage).
-- Les identifiants de provider, de DNS et de Git ne passent jamais par ici : renvoyez l'utilisateur vers l'interface.
-- Un registre d'images privé s'ajoute, se remplace ou se retire (list_registries, create_registry, update_registry, delete_registry). Le mot de passe ou jeton s'écrit une fois et ne se relit jamais : ne le redemandez pas à MyInfra, ne le répétez pas dans ce que vous montrez, et un champ absent ne veut pas dire qu'il est vide.`
+- Les identifiants de provider, de DNS, de Git et de registre d'images s'ajoutent, se remplacent ou se retirent par les outils dédiés. Le secret s'écrit une fois et ne se relit jamais : ne le redemandez pas à MyInfra, ne le répétez pas dans ce que vous montrez, et un champ absent ne veut pas dire qu'il est vide. Un provider qui a encore des serveurs ne se retire pas.`
 
 type rpcMessage struct {
 	JSONRPC string          `json:"jsonrpc"`
@@ -324,7 +323,7 @@ func argsSubject(raw json.RawMessage) string {
 		return ""
 	}
 	var parts []string
-	for _, key := range []string{"name", "registry", "article", "package", "application", "cluster", "server", "zone", "domain", "domains", "type", "repository", "copies", "quantity"} {
+	for _, key := range []string{"name", "registry", "provider", "article", "package", "application", "cluster", "server", "zone", "domain", "domains", "type", "repository", "copies", "quantity"} {
 		value, ok := args[key]
 		if !ok {
 			continue

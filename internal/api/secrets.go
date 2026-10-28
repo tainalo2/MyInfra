@@ -483,8 +483,10 @@ func (a *API) replaceToken(w http.ResponseWriter, r *http.Request) {
 		a.mapErr(w, err)
 		return
 	}
-	if sec.Kind != "provider_token" && sec.Kind != registryKind {
-		writeError(w, http.StatusBadRequest, "Ce compte n'est pas un provider.")
+	switch sec.Kind {
+	case "provider_token", "dns_token", "git_token", registryKind:
+	default:
+		writeError(w, http.StatusBadRequest, "Ce compte ne se remplace pas ainsi.")
 		return
 	}
 	var body tokenBody

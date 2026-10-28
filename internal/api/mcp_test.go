@@ -109,6 +109,10 @@ func TestArgsSubject(t *testing.T) {
 	if got != "name=hub, registry=registry-ghcr" || strings.Contains(got, "jeton") || strings.Contains(got, "alice") {
 		t.Fatal(got)
 	}
+	got = argsSubject(json.RawMessage(`{"name":"perso","provider":"ovh","secret":"test-hetzner","key_secret":"test-app-secret","consumer_key":"test-consumer","access_key":"SCWTEST"}`))
+	if got != "name=perso, provider=ovh" || strings.Contains(got, "test-") || strings.Contains(got, "SCW") {
+		t.Fatal(got)
+	}
 }
 
 // mcpPost sends one JSON-RPC body to /mcp.
