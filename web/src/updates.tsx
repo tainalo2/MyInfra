@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowUpCircle, ExternalLink, RefreshCw, ShieldAlert } from "lucide-react";
 import { api, type Impact, type ImpactEffect, type Server, type UpdateItem, type UpdateJob, type UpdateJobStep, type UpdatesView, type VersionView } from "./api";
@@ -347,8 +347,12 @@ export function UpdateJobs({ filter }: { filter?: (job: UpdateJob) => boolean })
   const [busy, setBusy] = useState("");
   const jobs = (data ?? []).filter((job) => !filter || filter(job));
   const running = jobs.some((job) => job.status === "running");
+  const wasRunning = useRef(false);
   useEffect(() => {
-    if (!running) reloadUpdates();
+    // Only when a job finishes. Reloading while nothing runs would change
+    // reloadUpdates and call this effect again, without end.
+    if (wasRunning.current && !running) reloadUpdates();
+    wasRunning.current = running;
   }, [running, reloadUpdates]);
   if (jobs.length === 0) return null;
 
