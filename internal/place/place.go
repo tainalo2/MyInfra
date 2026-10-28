@@ -40,7 +40,7 @@ var named = []struct {
 	{`(?i)^blr`, Place{Label: "Bangalore", Country: "IN", Lat: 12.97, Lon: 77.59}},
 	{`(?i)^syd`, Place{Label: "Sydney", Country: "AU", Lat: -33.87, Lon: 151.21}},
 	{`(?i)^dc3`, Place{Label: "Genève", Country: "CH", Lat: 46.2, Lon: 6.14}},
-	{`(?i)^dc4`, Place{Label: "Zurich", Country: "CH", Lat: 47.38, Lon: 8.54}},
+	{`(?i)^dc4`, Place{Label: "Plan-les-Ouates", Country: "CH", Lat: 46.17, Lon: 6.12}},
 	{`(?i)^fi-hel`, Place{Label: "Helsinki", Country: "FI", Lat: 60.17, Lon: 24.94}},
 	{`(?i)^de-fra|^eu-central`, Place{Label: "Francfort", Country: "DE", Lat: 50.11, Lon: 8.68}},
 	{`(?i)^uk-lon|^lhr$|^eu-west`, Place{Label: "Londres", Country: "GB", Lat: 51.51, Lon: -0.13}},
@@ -119,6 +119,19 @@ var named = []struct {
 	{`(?i)^as-ty$`, Place{Label: "Tokyo", Country: "JP", Lat: 35.68, Lon: 139.69}},
 	{`(?i)^au-sy$`, Place{Label: "Sydney", Country: "AU", Lat: -33.87, Lon: 151.21}},
 	{`(?i)^ca-tr$`, Place{Label: "Toronto", Country: "CA", Lat: 43.65, Lon: -79.38}},
+	{`(?i)^sin$`, Place{Label: "Singapour", Country: "SG", Lat: 1.35, Lon: 103.82}},
+	{`(?i)^lim$|^eu-west-lim`, Place{Label: "Limburg", Country: "DE", Lat: 50.38, Lon: 8.06}},
+	{`(?i)^jnb$|^johannesburg`, Place{Label: "Johannesburg", Country: "ZA", Lat: -26.2, Lon: 28.05}},
+	{`(?i)^hnl$|^honolulu`, Place{Label: "Honolulu", Country: "US", Lat: 21.31, Lon: -157.86}},
+	{`(?i)^del$|^delhi`, Place{Label: "Delhi", Country: "IN", Lat: 28.61, Lon: 77.21}},
+	{`(?i)^manchester|^mnc$`, Place{Label: "Manchester", Country: "GB", Lat: 53.48, Lon: -2.24}},
+	{`(?i)^marseille|^mrs$`, Place{Label: "Marseille", Country: "FR", Lat: 43.3, Lon: 5.37}},
+	{`(?i)^bruxelles|^brussels|^bru$`, Place{Label: "Bruxelles", Country: "BE", Lat: 50.85, Lon: 4.35}},
+	{`(?i)^prague|^praha|^prg$`, Place{Label: "Prague", Country: "CZ", Lat: 50.08, Lon: 14.44}},
+	{`(?i)^copenhagen|^copenhague|^cph$`, Place{Label: "Copenhague", Country: "DK", Lat: 55.68, Lon: 12.57}},
+	{`(?i)^dublin|^dln$`, Place{Label: "Dublin", Country: "IE", Lat: 53.35, Lon: -6.26}},
+	{`(?i)^oslo|^osl$`, Place{Label: "Oslo", Country: "NO", Lat: 59.91, Lon: 10.75}},
+	{`(?i)^lisbon|^lisboa|^lis$`, Place{Label: "Lisbonne", Country: "PT", Lat: 38.72, Lon: -9.14}},
 }
 
 var compiled = func() []*regexp.Regexp {
@@ -183,6 +196,12 @@ var countries = []Country{
 	{"GB", "Royaume-Uni", "United Kingdom", Europe},
 	{"FI", "Finlande", "Finland", Europe},
 	{"CH", "Suisse", "Switzerland", Europe},
+	{"BE", "Belgique", "Belgium", Europe},
+	{"CZ", "Tchéquie", "Czechia", Europe},
+	{"DK", "Danemark", "Denmark", Europe},
+	{"IE", "Irlande", "Ireland", Europe},
+	{"NO", "Norvège", "Norway", Europe},
+	{"PT", "Portugal", "Portugal", Europe},
 	{"ES", "Espagne", "Spain", Europe},
 	{"SE", "Suède", "Sweden", Europe},
 	{"IT", "Italie", "Italy", Europe},
@@ -206,6 +225,7 @@ var countries = []Country{
 	{"IL", "Israël", "Israel", Asia},
 	{"HK", "Hong Kong", "Hong Kong", Asia},
 	{"AU", "Australie", "Australia", Oceania},
+	{"ZA", "Afrique du Sud", "South Africa", Africa},
 }
 
 // CountryOf finds a country by its ISO code, or its French or English name.

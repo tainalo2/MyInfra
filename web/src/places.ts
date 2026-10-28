@@ -22,7 +22,7 @@ const named: { test: RegExp; place: Place }[] = [
   { test: /^blr/i, place: { label: "Bangalore", lat: 12.97, lon: 77.59 } },
   { test: /^syd/i, place: { label: "Sydney", lat: -33.87, lon: 151.21 } },
   { test: /^dc3/i, place: { label: "Genève", lat: 46.2, lon: 6.14 } },
-  { test: /^dc4/i, place: { label: "Zurich", lat: 47.38, lon: 8.54 } },
+  { test: /^dc4/i, place: { label: "Plan-les-Ouates", lat: 46.17, lon: 6.12 } },
   { test: /^fi-hel/i, place: { label: "Helsinki", lat: 60.17, lon: 24.94 } },
   { test: /^de-fra|^eu-central/i, place: { label: "Francfort", lat: 50.11, lon: 8.68 } },
   { test: /^uk-lon|^lhr$|^eu-west/i, place: { label: "Londres", lat: 51.51, lon: -0.13 } },
@@ -101,6 +101,19 @@ const named: { test: RegExp; place: Place }[] = [
   { test: /^as-ty$/i, place: { label: "Tokyo", lat: 35.68, lon: 139.69 } },
   { test: /^au-sy$/i, place: { label: "Sydney", lat: -33.87, lon: 151.21 } },
   { test: /^ca-tr$/i, place: { label: "Toronto", lat: 43.65, lon: -79.38 } },
+  { test: /^sin$/i, place: { label: "Singapour", lat: 1.35, lon: 103.82 } },
+  { test: /^lim$|^eu-west-lim/i, place: { label: "Limburg", lat: 50.38, lon: 8.06 } },
+  { test: /^jnb$|^johannesburg/i, place: { label: "Johannesburg", lat: -26.2, lon: 28.05 } },
+  { test: /^hnl$|^honolulu/i, place: { label: "Honolulu", lat: 21.31, lon: -157.86 } },
+  { test: /^del$|^delhi/i, place: { label: "Delhi", lat: 28.61, lon: 77.21 } },
+  { test: /^manchester|^mnc$/i, place: { label: "Manchester", lat: 53.48, lon: -2.24 } },
+  { test: /^marseille|^mrs$/i, place: { label: "Marseille", lat: 43.3, lon: 5.37 } },
+  { test: /^bruxelles|^brussels|^bru$/i, place: { label: "Bruxelles", lat: 50.85, lon: 4.35 } },
+  { test: /^prague|^praha|^prg$/i, place: { label: "Prague", lat: 50.08, lon: 14.44 } },
+  { test: /^copenhagen|^copenhague|^cph$/i, place: { label: "Copenhague", lat: 55.68, lon: 12.57 } },
+  { test: /^dublin|^dln$/i, place: { label: "Dublin", lat: 53.35, lon: -6.26 } },
+  { test: /^oslo|^osl$/i, place: { label: "Oslo", lat: 59.91, lon: 10.75 } },
+  { test: /^lisbon|^lisboa|^lis$/i, place: { label: "Lisbonne", lat: 38.72, lon: -9.14 } },
 ];
 
 export function placeOf(code?: string): Place | null {

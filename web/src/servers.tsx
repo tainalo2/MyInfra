@@ -700,25 +700,11 @@ export function ServerPage() {
       </dl>
       {!server.providerId && canDeploy ? (
         <div className="mt-6 max-w-[720px]">
-          <Field label={text("server.place")} hint={text("server.placeHint")}>
-            <Select
-              value={placeOf(server.place)?.label ?? server.place ?? ""}
-              onChange={(e) => {
-                const place = e.target.value;
-                void api<Server>(`/api/servers/${server.id}/place`, { method: "PUT", body: JSON.stringify({ place }) })
-                  .then(setServer)
-                  .catch((err) => setError(err instanceof Error ? err.message : text("common.error")));
-              }}
-            >
-              <option value="">{text("ui.sansLieuConnu")}</option>
-              {server.place && !knownPlaces().some((item) => item.label === server.place) ? <option value={server.place}>{server.place}</option> : null}
-              {knownPlaces().map((item) => (
-                <option key={item.label} value={item.label}>
-                  {item.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          <ServerPlace
+            server={server}
+            onSaved={setServer}
+            onError={(message) => setError(message)}
+          />
           <ServerHosting server={server} onSaved={setServer} />
           <ServerSSHUser server={server} onSaved={setServer} />
         </div>
@@ -904,6 +890,53 @@ export function billText(cost: Cost, cluster = false, hourly?: number) {
 
 // ReachNotice tells, on the page of a server, that it no longer answers or
 // that its provider no longer has it, and what to do about it.
+function ServerPlace({ server, onSaved, onError }: { server: Server; onSaved: (server: Server) => void; onError: (message: string) => void }) {
+  const shown = placeLabel(server.place);
+  const [value, setValue] = useState(shown);
+  useEffect(() => setValue(shown), [shown]);
+
+  async function commit(raw: string) {
+    const typed = raw.trim();
+    const place = placeOf(typed)?.label || typed;
+    if (place === (server.place ?? "")) return;
+    try {
+      onSaved(await api<Server>(`/api/servers/${server.id}/place`, { method: "PUT", body: JSON.stringify({ place }) }));
+    } catch (err) {
+      onError(err instanceof Error ? err.message : text("common.error"));
+      setValue(shown);
+    }
+  }
+
+  return (
+    <Field label={text("server.place")} hint={text("server.placeHint")}>
+      <Input
+        list="server-places"
+        value={value}
+        autoComplete="off"
+        spellCheck={false}
+        placeholder={text("server.placePlaceholder")}
+        onChange={(event) => {
+          const next = event.target.value;
+          setValue(next);
+          if (knownPlaces().some((item) => item.label === next)) void commit(next);
+        }}
+        onBlur={() => void commit(value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            void commit(value);
+          }
+        }}
+      />
+      <datalist id="server-places">
+        {knownPlaces().map((item) => (
+          <option key={item.label} value={item.label} />
+        ))}
+      </datalist>
+    </Field>
+  );
+}
+
 function ReachNotice({ server, onChecked, onRemove }: { server: Server; onChecked: (server: Server) => void; onRemove: () => void }) {
   useI18n();
   const [checking, setChecking] = useState(false);

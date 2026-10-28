@@ -53,6 +53,19 @@ func TestSampleLocationsArePlaced(t *testing.T) {
 	}
 }
 
+func TestInfomaniakAndMissingSites(t *testing.T) {
+	got, ok := Of("dc4-a", "")
+	if !ok || got.Label != "Plan-les-Ouates" || got.Country != "CH" {
+		t.Fatal(got, ok)
+	}
+	if got, ok = Of("sin", ""); !ok || got.Label != "Singapour" {
+		t.Fatal(got, ok)
+	}
+	if got, ok = Of("", "Plan-les-Ouates"); !ok || got.Lat == 0 {
+		t.Fatal(got, ok)
+	}
+}
+
 func TestCountryNames(t *testing.T) {
 	for _, name := range []string{"FR", "france", "Allemagne", "germany", "uk", "USA"} {
 		if _, ok := CountryOf(name); !ok {

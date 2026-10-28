@@ -80,7 +80,7 @@ func sampleDigitalOcean(location string) Catalog {
 func sampleInfomaniak(location string) Catalog {
 	locations := []Location{
 		{ID: "dc3-a", Label: "Genève"},
-		{ID: "dc4-a", Label: "Zurich"},
+		{ID: "dc4-a", Label: "Plan-les-Ouates"},
 	}
 	chosen := pickLocation(locations, location, "dc3-a")
 	return Catalog{

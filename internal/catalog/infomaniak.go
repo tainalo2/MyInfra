@@ -133,7 +133,7 @@ func infomaniakAuth(ctx context.Context, client *http.Client, base, id, secret s
 }
 
 func infomaniakLocations(endpoints []infoEndpoint) []Location {
-	labels := map[string]string{"dc3-a": "Genève", "dc4-a": "Zurich"}
+	labels := map[string]string{"dc3-a": "Genève", "dc4-a": "Plan-les-Ouates"}
 	seen := map[string]bool{}
 	locations := make([]Location, 0)
 	for _, item := range endpoints {
