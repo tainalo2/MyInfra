@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./dist/**/*)",
+      "Read(./.pgdata/**/*)",
+      "Read(./web/node_modules/**/*)",
+      "Read(./web/dist/**/*)",
+      "Read(./web/test-results/**/*)",
+      "Read(./web/playwright-report/**/*)",
+      "Read(./internal/ui/dist/**/*)",
+      "Read(./internal/boot/postgres.tar.gz)",
+      "Read(./internal/boot/postgres.txz)",
+      "Read(./docs/screenshots/**/*)",
+      "Read(./**/*.exe)",
+      "Read(./cmd/myinfra/rsrc_windows_*.syso)",
+      "Read(./coverage.out)",
+      "Read(./.env)"
+    ]
+  }
+}

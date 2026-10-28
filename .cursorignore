@@ -1,0 +1,16 @@
+# Généré, données locales, binaires. Le code source reste lisible.
+dist/
+.pgdata/
+web/node_modules/
+web/dist/
+web/test-results/
+web/playwright-report/
+internal/ui/dist/*
+!internal/ui/dist/.keep
+internal/boot/postgres.tar.gz
+internal/boot/postgres.txz
+docs/screenshots/
+*.exe
+cmd/myinfra/rsrc_windows_*.syso
+coverage.out
+.env

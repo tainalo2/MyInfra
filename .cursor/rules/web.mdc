@@ -1,0 +1,14 @@
+---
+description: Interface React de MyInfra
+globs: web/**/*.{ts,tsx,css}
+alwaysApply: false
+---
+
+# Interface
+
+React 19, TypeScript, React Router 7, Vite 6, Tailwind 4. Pas d'autre bibliothèque UI que CodeMirror, xterm, lucide et simple-icons.
+
+- Textes dans `web/src/i18n.ts` (en, fr, de, it, pt) : toute clé nouvelle va dans les cinq langues.
+- Appels HTTP dans `web/src/api.ts`.
+- Vérification : `npm run build --prefix web` (`tsc --noEmit`, puis Vite).
+- Ne pas éditer `web/dist` ni `internal/ui/dist` : `./build` ou `build.ps1` les régénèrent.
