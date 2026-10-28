@@ -53,6 +53,7 @@ func (t mcpTool) listing() map[string]any {
 func (a *API) mcpTools() []mcpTool {
 	var out []mcpTool
 	out = append(out, mcpReadTools()...)
+	out = append(out, mcpRegistryTools()...)
 	out = append(out, mcpPackageTools()...)
 	out = append(out, mcpAppTools()...)
 	out = append(out, mcpInfraTools()...)

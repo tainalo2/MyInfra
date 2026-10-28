@@ -483,7 +483,7 @@ func (a *API) replaceToken(w http.ResponseWriter, r *http.Request) {
 		a.mapErr(w, err)
 		return
 	}
-	if sec.Kind != "provider_token" {
+	if sec.Kind != "provider_token" && sec.Kind != registryKind {
 		writeError(w, http.StatusBadRequest, "Ce compte n'est pas un provider.")
 		return
 	}
@@ -516,6 +516,9 @@ func (a *API) replaceToken(w http.ResponseWriter, r *http.Request) {
 	if err := a.Store.UpdateSecret(r.Context(), sealed); err != nil {
 		a.mapErr(w, err)
 		return
+	}
+	if sec.Kind == registryKind {
+		forgetRegistryLogins()
 	}
 	forgetZones(owner, sec.ID)
 	saved, err := a.Store.Secret(r.Context(), owner, sec.ID)

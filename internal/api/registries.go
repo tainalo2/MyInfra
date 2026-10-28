@@ -24,6 +24,10 @@ import (
 
 const registryKind = "registry_token"
 
+// registryLoginCheck is registry.Check. A test replaces it so a login can be
+// accepted without calling the registry.
+var registryLoginCheck = registry.Check
+
 // registryHosts are the registries known by name; any other is given by address.
 var registryHosts = map[string]string{
 	"registry-dockerhub": "docker.io",
@@ -54,6 +58,16 @@ func registryHostOf(provider, address string) (string, error) {
 	return address, nil
 }
 
+// registryLoginParts reads the public half stored for a registry login:
+// identifiant@adresse. The password is not in it.
+func registryLoginParts(keyID string) (user, host string) {
+	user, host, ok := strings.Cut(keyID, "@")
+	if !ok || user == "" || host == "" {
+		return "", ""
+	}
+	return user, host
+}
+
 // checkRegistry tries the login before it is kept.
 func (a *API) checkRegistry(ctx context.Context, body tokenBody) (storedToken, string, error) {
 	host, err := registryHostOf(body.Provider, body.ApplicationKey)
@@ -65,7 +79,7 @@ func (a *API) checkRegistry(ctx context.Context, body tokenBody) (storedToken, s
 	if user == "" || secret == "" {
 		return storedToken{}, "", errString("Indiquez l'identifiant et le mot de passe ou jeton.")
 	}
-	if err := registry.Check(ctx, host, user, secret); err != nil {
+	if err := registryLoginCheck(ctx, host, user, secret); err != nil {
 		return storedToken{}, "", err
 	}
 	forgetRegistryLogins()

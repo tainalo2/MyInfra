@@ -24,12 +24,12 @@ Ouvrir `/mcp` dans un navigateur mène à la page des réglages.
 - L'assistant ne voit que les outils que son rôle permet :
   - lecture seule : tout lire, chercher des offres, prévoir un changement ;
   - déploiement : installer, acheter, supprimer ;
-  - administration : en plus, écrire le DNS.
+  - administration : en plus, écrire le DNS et gérer les identifiants des registres d'images privés (le jeton s'enregistre, il ne se relit pas).
 - Un jeton ne crée ni ne révoque de jeton. Les jetons se gèrent depuis l'interface. Comme les sessions, chaque copie de MyInfra garde les siens.
 
 ## Confirmations
 
-Acheter des machines, relier une machine existante par SSH, supprimer une machine, un cluster, une application ou un paquet, et toute modification DNS qui touche l'existant se font **en deux temps** :
+Acheter des machines, relier une machine existante par SSH, supprimer une machine, un cluster, une application, un paquet ou un registre privé, et toute modification DNS qui touche l'existant se font **en deux temps** :
 
 1. Le premier appel ne fait rien. Il rend un récapitulatif et un code (`ABC-DEF`) :
    - pour un achat : les machines, le provider, le lieu, le prix, le coût théorique actuel et après achat, le budget ;
@@ -40,7 +40,7 @@ Acheter des machines, relier une machine existante par SSH, supprimer une machin
 3. Le second appel, avec le code, agit. Le code n'est valable :
    - que pour le même jeton, le même outil et les mêmes arguments ;
    - que pendant 10 minutes, et une seule fois ;
-   - que si rien n'a changé entre-temps (prix, enregistrements DNS).
+   - que si rien n'a changé entre-temps (prix, enregistrements DNS, identifiant du registre).
 
    Dans le cas contraire, rien n'est fait et un nouveau récapitulatif est rendu.
 
@@ -48,7 +48,7 @@ C'est l'assistant qui relaie la question : ses instructions l'y obligent. Pour u
 
 Refusés par l'assistant, à faire depuis l'interface :
 - détruire ce qui héberge MyInfra ;
-- ajouter des identifiants de provider ou de DNS, et révéler un secret ;
+- ajouter des identifiants de provider, de DNS ou de Git, et révéler un secret (un jeton de registre d'images privé s'enregistre, il ne se relit pas) ;
 - gérer les utilisateurs ou les jetons ;
 - ouvrir un terminal, transférer MyInfra.
 
@@ -109,6 +109,15 @@ Exemples :
 - « Pourquoi Immich ne démarre pas ? » · « Redémarre le pod web de Nextcloud. » · « Mets Ghost en pause. »
 - « Ajoute files.mondomaine.fr à Nextcloud. » · « Change SMTP_HOST de Ghost. » · « Passe Vikunja à trois copies. »
 - « Quelles mises à jour sont disponibles, et quel est leur impact ? Fais celle de Gitea. »
+
+### Registres d'images privés
+
+Un jeton administrateur peut enregistrer l'identifiant d'un registre privé (Docker Hub, GitHub Container Registry, GitLab, Quay, ou une adresse à soi). Le mot de passe ou jeton est vérifié auprès du registre, puis chiffré. Il n'est plus jamais renvoyé : ni dans la liste, ni dans l'historique, ni par un autre outil.
+
+- « Quels registres privés sont enregistrés ? » Nom, type et identifiant (`alice@ghcr.io`).
+- « Ajoute le registre GHCR, utilisateur moi, avec ce jeton. »
+- « Change le jeton du registre Docker Hub. » L'ancien ne se relit pas : il faut redonner le nouveau, et l'identifiant s'il change.
+- « Retire le registre Quay. » Récapitulatif, puis accord. Le jeton n'y figure pas.
 
 ### DNS
 
