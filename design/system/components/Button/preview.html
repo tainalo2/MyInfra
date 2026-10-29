@@ -1,0 +1,30 @@
+<!-- @dsCard group="Actions" height=96 -->
+<!doctype html>
+<html lang="fr">
+<head><meta charset="utf-8">
+<style>
+  html, body { margin: 0; background: var(--color-canvas); color: var(--color-ink); font-family: var(--font-sans); font-size: 15px; line-height: 1.5; }
+  #root { padding: 20px 24px; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+  .col { display: flex; flex-direction: column; gap: 16px; }
+  .note { color: var(--color-faint); font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const h = React.createElement;
+const M = window.MyInfra;
+const I = M.icons;
+M.setLang("fr");
+function Demo() {
+  return h("div", { className: "row" },
+    h(M.Button, null, h(M.Icon, { icon: I.Plus }), "Nouvelle application"),
+    h(M.Button, { variant: "secondary" }, "Annuler"),
+    h(M.Button, { variant: "danger" }, h(M.Icon, { icon: I.Trash2 }), "Supprimer"),
+    h(M.Button, { disabled: true }, "Déployer"));
+}
+ReactDOM.createRoot(document.getElementById("root")).render(h(Demo));
+</script>
+</body>
+</html>

@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Application déployée · MyInfra (proposition)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/myinfra/components/bundle.css">
+<script src="ds/myinfra/components/bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+:root{--font-sans:"Geist",ui-sans-serif,system-ui,sans-serif;--font-mono:"Geist Mono",ui-monospace,monospace;--color-canvas:#fafaf9;--color-surface:#ffffff;--color-line:#e7e5e4;--color-ink:#1c1917;--color-muted:#57534e;--color-faint:#78716c;--color-focus:#57534e;--color-ok:#3f6212;--color-warn:#92400e;--color-bad:#991b1b;--color-status:#f5f5f4;--color-link:#1d4ed8;--radius-md:6px}
+a{color:#1d4ed8}a:hover{color:#1e40af;text-underline-offset:3px}
+.ico{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.nav:hover{background:#f5f5f4}
+.pick:hover{background:#f5f5f4}
+.plan-node{transition:left .25s ease,top .25s ease,height .25s ease,opacity .2s ease,box-shadow .2s ease}
+.plan-node:hover{background:#f5f5f4 !important}
+.plan-band{transition:top .25s ease,height .25s ease}
+.plan-box{transition:height .25s ease}
+.plan-edge{transition:opacity .2s ease}
+.flow{animation:planflow 1.1s linear infinite}
+@keyframes planflow{to{stroke-dashoffset:-14}}
+@media (prefers-reduced-motion: reduce){.plan-node,.plan-band,.plan-box{transition:none}}
+.tool:hover{background:#f5f5f4 !important}
+
+.mi-tabs{display:none}
+@media (max-width: 720px){
+.mi-top{padding:10px 16px!important;gap:8px!important;flex-wrap:nowrap!important}
+.mi-search{min-width:0!important;padding:6px!important;border:0!important;background:transparent!important}
+.mi-search>span,.mi-search>kbd{display:none!important}
+.mi-lang{display:none!important}
+.mi-side{display:none!important}
+.mi-main{padding:16px 16px 96px!important}
+.mi-tabs{display:grid!important}
+h1{font-size:20px!important;line-height:1.4!important}
+[style*="grid-template-columns: repeat(4"]{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+[style*="grid-template-columns: repeat(3"]:not([style*="padding: 4px"]),[style*="grid-template-columns: repeat(2"]:not([style*="padding: 4px"]),[style*="repeat(auto-fit, minmax(220px"]{grid-template-columns:minmax(0,1fr)!important}
+[style*="1.4fr) minmax(0px, 1fr) minmax(0px, 1.6fr) auto"]{grid-template-columns:minmax(0,1fr) auto!important}
+[style*="minmax(150px, 200px) 1fr"],[style*="minmax(150px, auto) 1fr"]{grid-template-columns:minmax(0,1fr)!important;row-gap:2px!important}
+span:has(> svg[width="22"][height="6"]){display:none!important}
+#plan > section:first-child{display:none!important}
+}
+</style>
+</helmet>
+<div style="min-height: 1700px; display: flex; flex-direction: column; background: #fafaf9; color: #1c1917; font-family: 'Geist', ui-sans-serif, system-ui, sans-serif; font-size: 15px; line-height: 1.5;">
+
+<header class="mi-top" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 24px; border-bottom: 1px solid #e7e5e4; flex-wrap: wrap;">
+<a href="#" style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500; color: #1c1917; text-decoration: none;"><x-import component-from-global-scope="MyInfra.Icon" icon="{{icons.Boxes}}"></x-import>MyInfra</a>
+<div style="display: flex; align-items: center; gap: 12px;">
+<button type="button" class="mi-search" aria-label="Rechercher" style="display: inline-flex; align-items: center; gap: 8px; padding: 4px 6px 4px 10px; border: 1px solid #e7e5e4; border-radius: 6px; background: #ffffff; color: #57534e; min-width: 240px;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><span style="flex: 1; text-align: left;">Rechercher une app, un serveur…</span><kbd style="font-family: 'Geist Mono', monospace; font-size: 12px; border: 1px solid #e7e5e4; border-radius: 4px; padding: 0 4px; color: #57534e;">⌘K</kbd></button>
+<select class="mi-lang" aria-label="Langue" style="background: transparent; border: 0; color: #1c1917; font: inherit;"><option>Français</option><option>English</option></select>
+<button type="button" aria-label="Thème sombre" style="display: inline-flex; padding: 4px; border: 0; border-radius: 6px; background: transparent; color: #1c1917;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg></button>
+</div>
+</header>
+
+<div style="display: flex; flex-wrap: wrap; flex: 1;">
+<aside class="mi-side" style="flex: 1 1 224px; max-width: 224px; box-sizing: border-box; border-right: 1px solid #e7e5e4; padding: 16px; display: flex; flex-direction: column; gap: 4px;">
+<nav aria-label="Navigation principale" style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
+<a class="nav" href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #57534e;"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg><span style="flex: 1;">Vue d'ensemble</span><span title="2 points à traiter" style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #92400e;"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 9999px; background: #92400e;"></span>2</span></a>
+<a class="nav" href="#" aria-current="page" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none; background: #f5f5f4;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #57534e;"><rect width="7" height="7" x="3" y="3" rx="1"></rect><rect width="7" height="7" x="14" y="3" rx="1"></rect><rect width="7" height="7" x="14" y="14" rx="1"></rect><rect width="7" height="7" x="3" y="14" rx="1"></rect></svg><span style="flex: 1;">Applications</span><span style="font-size: 13px; color: #57534e;">8</span></a>
+<a class="nav" href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #57534e;"><rect x="16" y="16" width="6" height="6" rx="1"></rect><rect x="2" y="16" width="6" height="6" rx="1"></rect><rect x="9" y="2" width="6" height="6" rx="1"></rect><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"></path><path d="M12 12V8"></path></svg><span style="flex: 1;">Serveurs</span><span style="font-size: 13px; color: #57534e;">4</span></a>
+<a class="nav" href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #57534e;"><rect width="18" height="7" x="3" y="3" rx="1"></rect><rect width="9" height="7" x="3" y="14" rx="1"></rect><rect width="5" height="7" x="16" y="14" rx="1"></rect></svg>Templates</a>
+<a class="nav" href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #57534e;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M12 7v5l4 2"></path></svg>Activité</a>
+<a class="nav" href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #57534e;"><circle cx="12" cy="12" r="10"></circle><path d="m16 12-4-4-4 4"></path><path d="M12 16V8"></path></svg>Mises à jour</a>
+<div style="margin-top: auto; border-top: 1px solid #e7e5e4; padding-top: 16px; display: flex; flex-direction: column; gap: 4px;">
+<a class="nav" href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none;"><x-import component-from-global-scope="MyInfra.Icon" icon="{{icons.Settings}}" style="color: #57534e;"></x-import>Réglages</a>
+</div>
+</nav>
+<p style="margin: 8px 0 0; font-size: 11px; line-height: 1.25; color: #78716c;">Licence Apache-2.0</p>
+</aside>
+
+<nav class="mi-tabs" aria-label="Navigation principale" style="position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; grid-template-columns: repeat(5, minmax(0, 1fr)); background: #ffffff; border-top: 1px solid #e7e5e4;"><a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 56px; font-size: 11px; text-decoration: none; color: #57534e;"><span style="position: relative; display: inline-flex;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg></span><span style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px;">Vue d'ensemble</span></a><a href="#" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 56px; font-size: 11px; text-decoration: none; color: #1c1917;"><span style="position: relative; display: inline-flex;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"></rect><rect width="7" height="7" x="14" y="3" rx="1"></rect><rect width="7" height="7" x="14" y="14" rx="1"></rect><rect width="7" height="7" x="3" y="14" rx="1"></rect></svg></span><span style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px;">Applications</span></a><a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 56px; font-size: 11px; text-decoration: none; color: #57534e;"><span style="position: relative; display: inline-flex;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="16" y="16" width="6" height="6" rx="1"></rect><rect x="2" y="16" width="6" height="6" rx="1"></rect><rect x="9" y="2" width="6" height="6" rx="1"></rect><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"></path><path d="M12 12V8"></path></svg></span><span style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px;">Serveurs</span></a><a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 56px; font-size: 11px; text-decoration: none; color: #57534e;"><span style="position: relative; display: inline-flex;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M12 7v5l4 2"></path></svg></span><span style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px;">Activité</span></a><a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 56px; font-size: 11px; text-decoration: none; color: #57534e;"><span style="position: relative; display: inline-flex;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16"></path><path d="M4 12h16"></path><path d="M4 18h16"></path></svg><span aria-label="Mises à jour en attente" style="position: absolute; top: -3px; right: -6px; width: 8px; height: 8px; border-radius: 9999px; background: #1d4ed8;"></span></span><span style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px;">Plus</span></a></nav>
+<main class="mi-main" style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 32px 24px 48px;">
+<div style="max-width: 1120px; margin: 0 auto;">
+<nav aria-label="Fil d'Ariane" style="margin-bottom: 16px; display: flex; gap: 8px; color: #57534e;"><a href="#" style="color: #1d4ed8; text-decoration: none;">Applications</a><span aria-hidden="true">/</span><span style="color: #1c1917;">nextcloud</span></nav>
+
+<div style="display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px 24px; margin-bottom: 12px;">
+<div style="display: flex; gap: 12px; align-items: flex-start; min-width: 0;">
+<span aria-hidden="true" style="flex: none; width: 40px; height: 40px; border-radius: 6px; background: #f5f5f4; border: 1px solid #e7e5e4; display: inline-flex; align-items: center; justify-content: center; font-weight: 500; color: #57534e;">N</span>
+<div style="display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;"><h1 style="margin: 0; font-size: 24px; font-weight: 500; line-height: 1.33;">nextcloud</h1><x-import component-from-global-scope="MyInfra.StatusBadge" status="running"></x-import></div>
+<span style="display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 14px; color: #57534e;"><a href="#" style="font-family: 'Geist Mono', monospace; font-size: 13px;">cloud.example.com ↗</a><span>nextcloud:30-apache · cluster production</span></span>
+<span style="display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: #57534e;"><span style="display: inline-flex; align-items: center; gap: 6px;" title="Processeur : 1,3 / 6 cœurs"><span>Processeur</span><span aria-hidden="true" style="width: 48px; height: 4px; border-radius: 9999px; background: #e7e5e4; overflow: hidden;"><span style="display: block; height: 100%; width: 22%; background: #57534e;"></span></span><span style="color: #1c1917;">1,3 / 6 cœurs</span></span><span style="display: inline-flex; align-items: center; gap: 6px;" title="Mémoire : 2,3 / 12 Gio"><span>Mémoire</span><span aria-hidden="true" style="width: 48px; height: 4px; border-radius: 9999px; background: #e7e5e4; overflow: hidden;"><span style="display: block; height: 100%; width: 19%; background: #57534e;"></span></span><span style="color: #1c1917;">2,3 / 12 Gio</span></span><span style="display: inline-flex; align-items: center; gap: 6px;" title="Disque : 19 / 180 Gio"><span>Disque</span><span aria-hidden="true" style="width: 48px; height: 4px; border-radius: 9999px; background: #e7e5e4; overflow: hidden;"><span style="display: block; height: 100%; width: 11%; background: #57534e;"></span></span><span style="color: #1c1917;">19 / 180 Gio</span></span></span>
+</div>
+</div>
+<div style="display: flex; align-items: center; gap: 12px;">
+<a href="#" style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 6px; background: #1c1917; color: #fafaf9; text-decoration: none;">Ouvrir</a>
+<x-import component-from-global-scope="MyInfra.Button" variant="secondary">Mettre en pause</x-import>
+<x-import component-from-global-scope="MyInfra.ActionsMenu" label="Plus d'actions"><x-import component-from-global-scope="MyInfra.MenuItem">Enregistrer comme paquet</x-import><x-import component-from-global-scope="MyInfra.MenuItem" tone="danger">Supprimer</x-import></x-import>
+</div>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 10px 16px; background: #ffffff; border: 1px solid #e7e5e4; border-radius: 6px; margin-bottom: 8px;">
+<span style="display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px;"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 9999px; background: #92400e;"></span><span style="color: #92400e;">1 pod redémarre</span><span style="color: #57534e;">· cron-5d2-q sur fr-par-3, 3 fois depuis 10:12.</span></span>
+<x-import component-from-global-scope="MyInfra.TextButton" on-click="{{seeCron}}">Voir le pod</x-import>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 10px 16px; background: #ffffff; border: 1px solid #e7e5e4; border-radius: 6px; margin-bottom: 16px;">
+<span style="color: #1c1917;">Mise à jour disponible <span style="color: #57534e;">· nextcloud 30.0.2 → 30.0.4. Les copies sont remplacées l'une après l'autre ; si la nouvelle ne répond pas, l'ancienne revient.</span></span>
+<x-import component-from-global-scope="MyInfra.Button" variant="secondary">Mettre à jour</x-import>
+</div>
+
+<div id="plan" style="position: sticky; top: 0; z-index: 2; background: #fafaf9; padding-top: 8px; margin-top: -8px;">
+<section aria-label="Plan de l'application" style="background: #ffffff; border: 1px solid #e7e5e4; border-radius: 6px; padding: {{pad}}; margin-bottom: 8px;">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 16px; margin-bottom: 6px;">
+<span style="display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px;"><span style="font-weight: 500;">Plan</span><span style="color: #57534e;">{{planSummary}}</span>
+<button type="button" class="tool" onClick="{{pickApp}}" aria-pressed="{{appAttr}}" style="padding: 2px 8px; border: 1px solid #e7e5e4; border-radius: 6px; background: {{appBg}}; color: #1c1917; font-size: 12px;">Toute l'application</button>
+<button type="button" class="tool" onClick="{{toggleDetail}}" aria-pressed="{{detailAttr}}" style="display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border: 1px solid #e7e5e4; border-radius: 6px; background: #ffffff; color: #1c1917; font-size: 12px;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px;"><rect width="7" height="7" x="3" y="3" rx="1"></rect><rect width="7" height="7" x="14" y="3" rx="1"></rect><rect width="7" height="7" x="14" y="14" rx="1"></rect><rect width="7" height="7" x="3" y="14" rx="1"></rect></svg>{{detailLabel}}</button></span>
+<span style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; font-size: 12px; color: #57534e;">
+<span style="display: inline-flex; align-items: center; gap: 6px;"><svg width="22" height="6" aria-hidden="true"><line x1="0" y1="3" x2="22" y2="3" stroke="#1c1917" stroke-width="2"></line></svg>Par le proxy</span>
+<span style="display: inline-flex; align-items: center; gap: 6px;"><svg width="22" height="6" aria-hidden="true"><line x1="0" y1="3" x2="22" y2="3" stroke="#92400e" stroke-width="2"></line></svg>Port ouvert directement</span>
+<span style="display: inline-flex; align-items: center; gap: 6px;"><svg width="22" height="6" aria-hidden="true"><line x1="0" y1="3" x2="22" y2="3" stroke="#57534e" stroke-width="1.5" stroke-dasharray="6 4"></line></svg>Interne</span>
+<span style="display: inline-flex; align-items: center; gap: 6px;"><svg width="22" height="6" aria-hidden="true"><line x1="0" y1="3" x2="22" y2="3" stroke="#57534e" stroke-width="3" stroke-dasharray="2 3"></line></svg>Disque monté</span>
+<span style="display: inline-flex; align-items: center; gap: 6px;"><svg width="22" height="6" aria-hidden="true"><line x1="0" y1="3" x2="22" y2="3" stroke="#1c1917" stroke-width="1.5" stroke-dasharray="10 3 2 3"></line></svg>Redondance</span>
+<span style="display: inline-flex; align-items: center; gap: 6px;"><svg width="22" height="6" aria-hidden="true"><line x1="0" y1="3" x2="22" y2="3" stroke="#78716c" stroke-width="1.5" stroke-dasharray="1 4" stroke-linecap="round"></line></svg>Sauvegarde</span>
+<button type="button" class="tool" onClick="{{toggleFlows}}" aria-expanded="{{flowsAttr}}" aria-controls="interactions" style="display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border: 1px solid #e7e5e4; border-radius: 6px; background: {{flowsBg}}; color: #1c1917; font-size: 12px;">Interactions · {{flowCount}}<svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px; transform: {{flowsRot}};"><path d="m6 9 6 6 6-6"></path></svg></button>
+</span>
+</div>
+
+<div class="plan-box" role="group" aria-label="{{planLabel}}" onClick="{{bgClick}}" title="Cliquer hors d'un élément : toute l'application" style="position: relative; height: {{H}}px; cursor: default;">
+<sc-for list="{{bands}}" as="b" hint-placeholder-count="3">
+<div class="plan-band" aria-hidden="true" style="position: absolute; left: {{b.left}}; width: {{b.width}}; top: {{b.top}}px; height: {{b.height}}px; border-radius: 6px; background: {{b.bg}};"></div>
+<sc-if value="{{b.showLabel}}" hint-placeholder-val="{{true}}"><span class="plan-band" aria-hidden="true" style="position: absolute; left: {{b.labelLeft}}; top: {{b.labelTop}}px; font-size: 11px; color: #78716c;">{{b.label}}</span></sc-if>
+</sc-for>
+<sc-for list="{{cols}}" as="c" hint-placeholder-count="4">
+<div aria-hidden="true" style="position: absolute; left: {{c.left}}; width: 0; top: {{c.top}}px; bottom: 0; border-left: 1px dashed #e7e5e4;"></div>
+</sc-for>
+<sc-if value="{{showExt}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="position: absolute; left: {{extLeft}}; top: {{extTop}}px; font-size: 11px; color: #78716c;">Hors des serveurs</span></sc-if>
+
+<sc-for list="{{edges}}" as="e" hint-placeholder-count="12">
+<svg viewBox="0 0 1000 {{H}}" preserveAspectRatio="none" aria-hidden="true" style="position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none;"><path class="plan-edge {{e.cls}}" d="{{e.d}}" fill="none" stroke="{{e.stroke}}" stroke-width="{{e.w}}" stroke-dasharray="{{e.dash}}" stroke-linecap="{{e.cap}}" opacity="{{e.op}}" vector-effect="non-scaling-stroke"></path></svg>
+</sc-for>
+
+<sc-for list="{{tags}}" as="t" hint-placeholder-count="3">
+<span aria-hidden="true" style="position: absolute; left: {{t.left}}; top: {{t.top}}px; transform: translate(-50%, -50%); padding: 0 4px; border-radius: 4px; background: #ffffff; font-size: 11px; color: {{t.color}}; font-family: 'Geist Mono', monospace; white-space: nowrap; opacity: {{t.op}};">{{t.text}}</span>
+</sc-for>
+
+<sc-for list="{{chips}}" as="n" hint-placeholder-count="20">
+<button type="button" class="plan-node" onClick="{{n.pick}}" aria-current="{{n.current}}" aria-label="{{n.aria}}" style="position: absolute; left: {{n.left}}; top: {{n.top}}px; width: {{n.width}}; height: {{n.h}}px; box-sizing: border-box; display: flex; align-items: center; gap: 6px; padding: 0 {{n.padX}}; border-radius: {{n.radius}}; background: {{n.bg}}; border: {{n.border}}; box-shadow: {{n.ring}}; opacity: {{n.op}}; text-align: left; color: #1c1917; overflow: hidden;">
+<sc-if value="{{n.hasDot}}" hint-placeholder-val="{{true}}"><span aria-hidden="true" style="flex: none; width: {{n.dot}}; height: {{n.dot}}; border-radius: 9999px; background: {{n.dotColor}};"></span></sc-if>
+<span style="display: flex; flex-direction: column; min-width: 0; line-height: 1.2;">
+<span style="font-size: {{n.size}}; font-family: {{n.font}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{n.label}}</span>
+<sc-if value="{{n.showMeta}}" hint-placeholder-val="{{true}}"><span style="font-size: 11px; color: {{n.metaColor}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{n.meta}}</span></sc-if>
+</span>
+</button>
+</sc-for>
+</div>
+</section>
+
+<div aria-label="Élément en cours" style="background: #ffffff; border: 1px solid #e7e5e4; border-bottom: 0; border-radius: 6px 6px 0 0; padding: {{headPad}}; display: flex; flex-direction: column; gap: {{headGap}}; box-shadow: {{headShadow}};">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 8px;">
+<div style="display: flex; flex-direction: column; gap: 2px;">
+<span style="font-size: 13px; color: #57534e;">{{sel.kind}}</span>
+<span style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px;"><h2 style="margin: 0; font-size: {{headSize}}; font-weight: 500;">{{sel.label}}</h2><sc-if value="{{sel.hasState}}" hint-placeholder-val="{{true}}"><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: {{sel.stateColor}};"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 9999px; background: {{sel.stateColor}};"></span>{{sel.state}}</span></sc-if></span>
+<sc-if value="{{showDesc}}" hint-placeholder-val="{{true}}"><span style="color: #57534e;">{{sel.desc}}</span></sc-if>
+</div>
+</div>
+<x-import component-from-global-scope="MyInfra.Tabs" tabs="{{tabs}}" active="{{tab}}" on-change="{{pickTab}}" label="Parties de l'élément"></x-import>
+</div>
+</div>
+
+<section id="reglages" aria-label="Réglages de {{sel.label}}" style="background: #ffffff; border: 1px solid #e7e5e4; border-top: 0; border-radius: 0 0 6px 6px; padding: 16px 20px 20px; display: flex; flex-direction: column; gap: 16px;">
+<sc-if value="{{flowsOpen}}" hint-placeholder-val="{{false}}">
+<section id="interactions" aria-label="Toutes les interactions" style="display: flex; flex-direction: column; gap: 8px; padding-bottom: 16px; border-bottom: 1px solid #e7e5e4;">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 8px;"><div style="display: flex; flex-direction: column;"><h2 style="margin: 0; font-size: 16px; font-weight: 400;">Toutes les interactions<span style="color: #57534e;"> · {{flowCount}}</span></h2><span style="font-size: 13px; color: #57534e;">Telles qu'elles tournent en ce moment, serveur par serveur.</span></div><x-import component-from-global-scope="MyInfra.TextButton" on-click="{{toggleFlows}}">Replier</x-import></div>
+<div style="border: 1px solid #e7e5e4; border-radius: 6px; overflow-x: auto;"><div style="min-width: 760px;">
+<div style="display: grid; grid-template-columns: 1.2fr 24px 1.2fr 1.1fr 1.6fr 0.8fr; gap: 12px; padding: 8px 16px; font-size: 13px; color: #57534e; border-bottom: 1px solid #e7e5e4;"><span>De</span><span></span><span>Vers</span><span>Type</span><span>Détail</span><span>Serveur</span></div>
+<sc-for list="{{flows}}" as="r" hint-placeholder-count="10">
+<button type="button" onClick="{{r.pick}}" class="pick" style="display: grid; width: 100%; grid-template-columns: 1.2fr 24px 1.2fr 1.1fr 1.6fr 0.8fr; gap: 12px; align-items: center; padding: 8px 16px; border: 0; border-top: {{r.top}}; background: {{r.bg}}; text-align: left; color: #1c1917; font: inherit; font-size: 14px;">
+<span>{{r.from}}</span><span aria-hidden="true" style="color: #78716c;">→</span><span>{{r.to}}</span><span style="color: {{r.typeColor}};">{{r.type}}</span><span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #57534e;">{{r.detail}}</span><span style="font-size: 13px; color: #57534e;">{{r.server}}</span>
+</button>
+</sc-for>
+</div></div>
+</section>
+</sc-if>
+
+<sc-for list="{{cards}}" as="c" hint-placeholder-count="2">
+<div style="border: 1px solid {{c.border}}; border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 8px;">
+<div style="display: flex; flex-direction: column; max-width: 660px;"><span style="font-weight: 500; font-family: {{c.font}};">{{c.title}}</span><sc-if value="{{c.hasHint}}" hint-placeholder-val="{{true}}"><span style="font-size: 13px; color: {{c.hintColor}};">{{c.hint}}</span></sc-if></div>
+<sc-if value="{{c.hasAction}}" hint-placeholder-val="{{false}}"><x-import component-from-global-scope="MyInfra.Button" variant="secondary">{{c.action}}</x-import></sc-if>
+</div>
+<sc-for list="{{c.fields}}" as="f" hint-placeholder-count="2">
+<sc-if value="{{f.isInput}}" hint-placeholder-val="{{false}}"><div style="max-width: {{f.maxW}};"><x-import component-from-global-scope="MyInfra.Field" label="{{f.label}}"><x-import component-from-global-scope="MyInfra.Input" default-value="{{f.value}}"></x-import></x-import></div></sc-if>
+<sc-if value="{{f.isText}}" hint-placeholder-val="{{true}}"><div style="display: grid; grid-template-columns: minmax(150px, 200px) 1fr; gap: 16px; font-size: 14px;"><span style="color: #57534e;">{{f.label}}</span><span style="font-family: {{f.font}}; color: {{f.color}};">{{f.value}}</span></div></sc-if>
+<sc-if value="{{f.isMeter}}" hint-placeholder-val="{{false}}"><div style="display: grid; grid-template-columns: minmax(150px, 200px) 1fr 140px; gap: 16px; align-items: center; font-size: 14px;"><span style="color: #57534e;">{{f.label}}</span><span aria-hidden="true" style="height: 6px; border-radius: 9999px; background: #f5f5f4; overflow: hidden;"><span style="display: block; height: 100%; width: {{f.pct}}; background: #57534e;"></span></span><span style="color: #57534e; font-size: 13px;">{{f.value}}</span></div></sc-if>
+<sc-if value="{{f.isMini}}" hint-placeholder-val="{{false}}"><div style="display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: #57534e;"><sc-for list="{{f.items}}" as="m" hint-placeholder-count="3"><span style="display: inline-flex; align-items: center; gap: 6px;" title="{{m.label}} : {{m.value}}"><span>{{m.label}}</span><span aria-hidden="true" style="width: 48px; height: 4px; border-radius: 9999px; background: #e7e5e4; overflow: hidden;"><span style="display: block; height: 100%; width: {{m.pct}}; background: {{m.color}};"></span></span><span style="color: #1c1917;">{{m.value}}</span></span></sc-for></div></sc-if>
+<sc-if value="{{f.isNote}}" hint-placeholder-val="{{false}}"><p style="margin: 0; padding: 10px 12px; background: #fafaf9; border-radius: 6px; font-size: 13px; color: {{f.color}}; font-family: {{f.font}}; overflow-wrap: anywhere;">{{f.value}}</p></sc-if>
+<sc-if value="{{f.isLog}}" hint-placeholder-val="{{false}}"><pre style="margin: 0; max-height: 200px; overflow: auto; white-space: pre-wrap; padding: 10px 12px; border: 1px solid #e7e5e4; border-radius: 6px; background: #fafaf9; font-family: 'Geist Mono', monospace; font-size: 12px; color: #1c1917;">{{f.value}}</pre></sc-if>
+<sc-if value="{{f.isButtons}}" hint-placeholder-val="{{false}}"><div style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px;"><sc-for list="{{f.buttons}}" as="b" hint-placeholder-count="3"><x-import component-from-global-scope="MyInfra.TextButton" tone="{{b.tone}}">{{b.label}}</x-import></sc-for></div></sc-if>
+<sc-if value="{{f.isTable}}" hint-placeholder-val="{{false}}"><div style="border: 1px solid #e7e5e4; border-radius: 6px; overflow-x: auto;"><div style="min-width: 520px;">
+<div style="display: grid; grid-template-columns: {{f.cols}}; gap: 12px; padding: 6px 12px; font-size: 13px; color: #57534e; border-bottom: 1px solid #e7e5e4;"><sc-for list="{{f.head}}" as="h" hint-placeholder-count="3"><span>{{h}}</span></sc-for></div>
+<sc-for list="{{f.rows}}" as="r" hint-placeholder-count="2"><div style="display: grid; grid-template-columns: {{f.cols}}; gap: 12px; padding: 8px 12px; font-size: 14px; border-top: {{r.top}}; align-items: center;"><sc-for list="{{r.cells}}" as="x" hint-placeholder-count="3"><span style="font-family: {{x.font}}; font-size: {{x.size}}; color: {{x.color}}; overflow-wrap: anywhere;">{{x.v}}</span></sc-for></div></sc-for>
+</div></div></sc-if>
+</sc-for>
+</div>
+</sc-for>
+</section>
+</div>
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"compact":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":1600}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { sel: 'app', tab: 'overview', pod: null, scrolled: false, flows: false, detail: false }; this.onScroll = this.onScroll.bind(this); this.onResize = function () { var n = window.innerWidth < 720; if (n !== this.state.narrow) this.setState({ narrow: n }); }.bind(this); this.state.narrow = typeof window !== 'undefined' && window.innerWidth < 720; }
+  componentDidMount() {
+    if (window.MyInfra && window.MyInfra.setLang) window.MyInfra.setLang('fr');
+    window.addEventListener('scroll', this.onScroll, { passive: true });
+    window.addEventListener('resize', this.onResize);
+  }
+  componentWillUnmount() { window.removeEventListener('scroll', this.onScroll); window.removeEventListener('resize', this.onResize); }
+  onScroll() {
+    var y = window.scrollY || 0, sc = this.state.scrolled;
+    if (!sc && y > 260) this.setState({ scrolled: true });
+    else if (sc && y < 60) this.setState({ scrolled: false });
+  }
+  keepInView() {
+    requestAnimationFrame(function () {
+      var el = document.getElementById('reglages'), plan = document.getElementById('plan');
+      if (!el || !plan) return;
+      var top = el.getBoundingClientRect().top, ph = plan.getBoundingClientRect().height;
+      if (top < ph) window.scrollTo({ top: window.scrollY + top - ph, behavior: 'smooth' });
+    });
+  }
+  pick(sel, pod, tab) { var s = { sel: sel, pod: pod || null }; if (tab) s.tab = tab; this.setState(s); this.keepInView(); }
+  renderVals() {
+    var self = this, st = this.state, cur = st.sel, M = window.MyInfra || {};
+    var compact = !!(this.props.compact || st.scrolled);
+    var detail = st.detail || !!this.props.detail;
+    var mono = "'Geist Mono', monospace", sans = "'Geist', sans-serif";
+    var OK = '#3f6212', WARN = '#92400e', BAD = '#991b1b', MUTED = '#57534e', LINK = '#1d4ed8';
+
+    // Columns: x and w in 1000ths of the width.
+    var COL = { lab: [30, 135], s1: [170, 225], s2: [400, 225], s3: [630, 225], ext: [865, 135] };
+    var L = compact ? {
+      H: 222, h: 18, hh: 22,
+      y: { hdr: 0, proxy: 28, nextcloud: 54, turn: 74, cron: 94, redis: 114, db: 134, files: 160, dbdata: 180, bak: 200 },
+      bands: [[24, 26, 'Entrée'], [50, 104, 'Services'], [156, 66, 'Stockage']]
+    } : {
+      H: 580, h: 40, hh: 40,
+      y: { hdr: 0, proxy: 74, nextcloud: 156, turn: 204, cron: 252, redis: 300, db: 348, files: 430, dbdata: 478, bak: 526 },
+      bands: [[52, 70, 'Entrée'], [134, 262, 'Services'], [408, 166, 'Stockage']]
+    };
+    function box(row, col) { var c = COL[col], h = row === 'hdr' ? L.hh : L.h; return { x: c[0] + (col === 'lab' ? 0 : 4), w: c[1] - (col === 'lab' ? 0 : 8), y: L.y[row], h: h, cx: c[0] + c[1] / 2, mid: L.y[row] + h / 2, r: c[0] + c[1] - (col === 'lab' ? 0 : 4), b: L.y[row] + h }; }
+
+    var SRV = { s1: 'fr-par-1', s2: 'fr-par-2', s3: 'fr-par-3' };
+    var ROW = {
+      proxy: { label: 'Proxy', meta: 'HTTPS 443 · 80', kind: 'Entrée · proxy sur chaque serveur' },
+      nextcloud: { label: 'nextcloud', meta: 'public · :80 · 2 copies', kind: 'Service public · par le proxy' },
+      turn: { label: 'turn', meta: 'direct · 3478', kind: 'Service · ports ouverts directement', warnBorder: true },
+      cron: { label: 'cron', meta: 'interne', kind: 'Service interne' },
+      redis: { label: 'redis', meta: 'interne · :6379', kind: 'Service interne' },
+      db: { label: 'db', meta: 'base répliquée · 2', kind: 'Service interne · base répliquée' },
+      files: { label: 'fichiers', meta: 'partagé · 3 exemplaires', kind: 'Stockage · disque partagé' },
+      dbdata: { label: 'db-data', meta: 'disque · 10 Gio × 2', kind: 'Stockage · disque de db' },
+      bak: { label: 'Sauvegardes', meta: 'chaque nuit · 04:00', kind: 'Stockage · sauvegardes' }
+    };
+    // Pods and copies, as they run now.
+    var P = [
+      ['proxy@s1', 'proxy', 's1', 'proxy', 'HTTPS 443', 'ok'], ['proxy@s2', 'proxy', 's2', 'proxy', 'HTTPS 443', 'ok'], ['proxy@s3', 'proxy', 's3', 'proxy', 'HTTPS 443', 'ok'],
+      ['nextcloud@s1', 'nextcloud', 's1', 'nextcloud-7f9c-a', 'en marche · 0,4 cœur', 'ok', '0,4 cœur', '612 Mio', '1,2 Gio'],
+      ['nextcloud@s2', 'nextcloud', 's2', 'nextcloud-7f9c-b', 'en marche · 0,3 cœur', 'ok', '0,3 cœur', '588 Mio', '1,2 Gio'],
+      ['turn@s1', 'turn', 's1', 'turn-k2x', 'en marche · 3478', 'ok', '0,1 cœur', '42 Mio', '12 Mio'],
+      ['turn@s2', 'turn', 's2', 'turn-m8p', 'en marche · 3478', 'ok', '0,1 cœur', '40 Mio', '12 Mio'],
+      ['turn@s3', 'turn', 's3', 'turn-r4d', 'en marche · 3478', 'ok', '0,1 cœur', '41 Mio', '12 Mio'],
+      ['cron@s3', 'cron', 's3', 'cron-5d2-q', 'redémarre · 3 fois', 'warn', '0 cœur', '18 Mio', '1,2 Gio'],
+      ['redis@s2', 'redis', 's2', 'redis-0', 'en marche', 'ok', '0,05 cœur', '96 Mio', '0'],
+      ['db@s1', 'db', 's1', 'db-1', 'principale', 'ok', '0,2 cœur', '410 Mio', '3,1 Gio'],
+      ['db@s3', 'db', 's3', 'db-2', 'réplique · à jour', 'ok', '0,1 cœur', '380 Mio', '3,1 Gio'],
+      ['files@s1', 'files', 's1', 'copie', 'à jour', 'ok'], ['files@s2', 'files', 's2', 'copie', 'à jour', 'ok'], ['files@s3', 'files', 's3', 'copie', 'à jour', 'ok'],
+      ['dbdata@s1', 'dbdata', 's1', 'disque de db-1', '3,1 / 10 Gio', 'ok'], ['dbdata@s3', 'dbdata', 's3', 'disque de db-2', '3,1 / 10 Gio', 'ok'],
+      ['bak@ext', 'bak', 'ext', 'S3 externe', 'cette nuit, 04:02', 'ok'],
+      ['globe@ext', 'globe', 'ext', 'Internet', '2 adresses', 'ok']
+    ];
+    var POD = {}; P.forEach(function (p) { POD[p[0]] = p; });
+    function at(id) { var p = POD[id]; return box(p[1] === 'globe' ? 'proxy' : p[1], p[2]); }
+
+    // Edges: id, type, tags, path, from, to, detail, server, label
+    var E = [];
+    function edge(type, tags, d, from, to, detail, server, tag) { E.push({ type: type, tags: tags, d: d, from: from, to: to, detail: detail, server: server, tag: tag }); }
+    var G = at('globe@ext');
+    ['s1', 's2', 's3'].forEach(function (s) {
+      var p = at('proxy@' + s), y = p.y - (compact ? 3 : 10);
+      edge('proxy', ['globe', 'proxy', s, 'proxy@' + s], 'M' + G.cx + ' ' + G.y + ' L' + G.cx + ' ' + y + ' L' + p.cx + ' ' + y + ' L' + p.cx + ' ' + p.y, 'Internet', 'proxy · ' + SRV[s], 'HTTPS 443 · cloud.example.com, files.example.com', SRV[s], s === 's1' && !compact ? ['HTTPS 443', (p.cx + G.cx) / 2, y] : null);
+    });
+    ['s1', 's2'].forEach(function (s) {
+      var p = at('proxy@' + s), n = at('nextcloud@' + s);
+      edge('proxy', ['proxy', 'nextcloud', s, 'proxy@' + s, 'nextcloud@' + s], 'M' + p.cx + ' ' + p.b + ' L' + n.cx + ' ' + n.y, 'proxy · ' + SRV[s], POD['nextcloud@' + s][3], 'cloud.example.com → :80', SRV[s], s === 's1' && !compact ? [':80', p.cx, (p.b + n.y) / 2] : null);
+    });
+    (function () {
+      var p = at('proxy@s3'), n = at('nextcloud@s2');
+      edge('proxy', ['proxy', 'nextcloud', 's3', 'proxy@s3', 'nextcloud@s2'], 'M' + p.cx + ' ' + p.b + ' C' + p.cx + ' ' + n.mid + ' ' + (n.r + 60) + ' ' + n.mid + ' ' + n.r + ' ' + n.mid, 'proxy · fr-par-3', 'nextcloud-7f9c-b', 'vers une copie sur un autre serveur', 'fr-par-3 → 2', null);
+    })();
+    (function () {
+      var t3 = at('turn@s3'), y = t3.y - (compact ? 1 : 4);
+      ['s1', 's2', 's3'].forEach(function (s) {
+        var t = at('turn@' + s);
+        edge('direct', ['globe', 'turn', s, 'turn@' + s], 'M' + G.cx + ' ' + G.b + ' L' + G.cx + ' ' + y + ' L' + t.cx + ' ' + y + ' L' + t.cx + ' ' + t.y, 'Internet', POD['turn@' + s][3], '3478 UDP, 3478 TCP · en direct', SRV[s], s === 's3' && !compact ? ['3478 tcp+udp', (t.cx + G.cx) / 2 + 10, y] : null);
+      });
+    })();
+    function arc(a, b, detail, tag) {
+      var A = box(a, 'lab'), B = box(b, 'lab'), k = Math.min(26, 6 + Math.abs(B.mid - A.mid) * (compact ? 0.25 : 0.1));
+      edge('int', [a, b], 'M' + A.x + ' ' + A.mid + ' C' + (A.x - k) + ' ' + A.mid + ' ' + (B.x - k) + ' ' + B.mid + ' ' + B.x + ' ' + B.mid, ROW[a].label, ROW[b].label, detail, 'réseau interne', null);
+    }
+    arc('nextcloud', 'turn', ':3478 (réglages du relais)'); arc('nextcloud', 'redis', ':6379'); arc('nextcloud', 'db', ':5432'); arc('cron', 'redis', ':6379'); arc('cron', 'db', ':5432');
+    function mount(pod, disk, path, right) {
+      var A = at(pod), B = at(disk), x = right ? A.r - 14 : A.x + 14, s = POD[pod][2];
+      edge('mount', [POD[pod][1], POD[disk][1], s, pod, disk], 'M' + x + ' ' + A.b + ' L' + x + ' ' + B.y, POD[pod][3], ROW[POD[disk][1]].label + ' · ' + SRV[s], path, SRV[s], null);
+    }
+    mount('nextcloud@s1', 'files@s1', '/var/www/html/data'); mount('nextcloud@s2', 'files@s2', '/var/www/html/data'); mount('cron@s3', 'files@s3', '/var/www/html/data');
+    mount('db@s1', 'dbdata@s1', '/var/lib/postgresql/data', true); mount('db@s3', 'dbdata@s3', '/var/lib/postgresql/data', true);
+    (function () {
+      var a = at('db@s1'), b = at('db@s3');
+      edge('repl', ['db', 's1', 's3', 'db@s1', 'db@s3'], 'M' + a.r + ' ' + a.mid + ' L' + b.x + ' ' + b.mid, 'db-1 (principale)', 'db-2 (réplique)', 'réplication continue · retard 0 s', 'fr-par-1 → 3', compact ? null : ['réplication', (a.r + b.x) / 2, a.mid]);
+      var f1 = at('files@s1'), f2 = at('files@s2'), f3 = at('files@s3');
+      edge('repl', ['files', 's1', 's2', 'files@s1', 'files@s2'], 'M' + f1.r + ' ' + f1.mid + ' L' + f2.x + ' ' + f2.mid, 'copie · fr-par-1', 'copie · fr-par-2', 'exemplaire à jour', 'fr-par-1 → 2', null);
+      edge('repl', ['files', 's2', 's3', 'files@s2', 'files@s3'], 'M' + f2.r + ' ' + f2.mid + ' L' + f3.x + ' ' + f3.mid, 'copie · fr-par-2', 'copie · fr-par-3', 'exemplaire à jour', 'fr-par-2 → 3', compact ? null : ['3 exemplaires', (f2.r + f3.x) / 2, f2.mid - 12]);
+      var k = at('bak@ext'), d3 = at('dbdata@s3');
+      edge('bak', ['bak', 'files', 's3', 'files@s3', 'bak@ext'], 'M' + f3.r + ' ' + f3.mid + ' C' + (f3.r + 40) + ' ' + f3.mid + ' ' + k.cx + ' ' + (k.y - 30) + ' ' + k.cx + ' ' + k.y, 'fichiers', 'S3 externe', 'chaque nuit à 04:00', '—', null);
+      edge('bak', ['bak', 'dbdata', 'db', 's3', 'dbdata@s3', 'bak@ext'], 'M' + d3.r + ' ' + d3.mid + ' C' + (d3.r + 20) + ' ' + d3.mid + ' ' + (k.x - 20) + ' ' + k.mid + ' ' + k.x + ' ' + k.mid, 'db-data', 'S3 externe', '04:00 + journaux en continu', '—', compact ? null : ['04:00', (d3.r + k.x) / 2 + 6, (d3.mid + k.mid) / 2]);
+    })();
+
+    var ED = E;
+    // The simplified, logical plan: one box per element.
+    var LL = compact ? {
+      H: 148, nh: 34,
+      globe: [10, 8], proxy: [10, 56], turn: [210, 8], nextcloud: [210, 56], redis: [470, 8], db: [470, 56], cron: [730, 56],
+      files: [210, 108], dbdata: [470, 108], bak: [730, 108],
+      bands: [[0, 0, 190, 98, 'Entrée'], [200, 0, 800, 98, 'Services'], [200, 102, 800, 46, 'Stockage']]
+    } : {
+      H: 404, nh: 60,
+      globe: [16, 46], proxy: [16, 176], turn: [220, 46], nextcloud: [220, 176], redis: [480, 46], db: [480, 176], cron: [740, 176],
+      files: [220, 318], dbdata: [480, 318], bak: [740, 318],
+      bands: [[0, 22, 196, 252, 'Entrée'], [206, 22, 794, 252, 'Services'], [206, 296, 794, 104, 'Stockage']]
+    };
+    var narrow = !!st.narrow;
+    if (narrow) LL = compact ? { H: 200, nh: 26, globe: [10, 4], proxy: [520, 4], turn: [10, 42], nextcloud: [520, 42], redis: [10, 72], db: [520, 72], cron: [10, 102],  files: [10, 140], dbdata: [520, 140], bak: [520, 170], bands: [[0, 0, 1000, 34, ''], [0, 38, 1000, 94, ''], [0, 136, 1000, 64, '']] } : { H: 420, nh: 48, globe: [10, 22], proxy: [520, 22], turn: [10, 106], nextcloud: [520, 106], redis: [10, 162], db: [520, 162], cron: [10, 218],  files: [10, 304], dbdata: [520, 304], bak: [520, 360], bands: [[0, 0, 1000, 76, 'Entrée'], [0, 84, 1000, 190, 'Services'], [0, 282, 1000, 134, 'Stockage']] };
+    function lb(k) { var q = LL[k], w = narrow ? 470 : ((k === 'globe' || k === 'proxy') ? 170 : 220); return { x: q[0], y: q[1], w: w, h: LL.nh, cx: q[0] + w / 2, mid: q[1] + LL.nh / 2, r: q[0] + w, b: q[1] + LL.nh }; }
+    function lcurve(a, b) {
+      var A = lb(a), B = lb(b);
+      if (Math.abs(A.cx - B.cx) < 40) { var t = A.y < B.y ? A : B, o = A.y < B.y ? B : A; return { d: 'M' + t.cx + ' ' + t.b + ' L' + t.cx + ' ' + o.y, mx: t.cx, my: (t.b + o.y) / 2 }; }
+      var l = A.x < B.x ? A : B, r = A.x < B.x ? B : A, m = (l.r + r.x) / 2;
+      return { d: 'M' + l.r + ' ' + l.mid + ' C' + m + ' ' + l.mid + ' ' + m + ' ' + r.mid + ' ' + r.x + ' ' + r.mid, mx: m, my: (l.mid + r.mid) / 2 };
+    }
+    function ldown(a, b) { var A = lb(a), B = lb(b); return { d: 'M' + A.cx + ' ' + A.b + ' C' + A.cx + ' ' + (A.b + 30) + ' ' + B.cx + ' ' + (B.y - 30) + ' ' + B.cx + ' ' + B.y, mx: (A.cx + B.cx) / 2, my: (A.b + B.y) / 2 }; }
+    function lbak(a) { if (Math.abs(lb(a).cx - lb('bak').cx) < 40) return lcurve(a, 'bak'); var A = lb(a), B = lb('bak'), y = A.b - 6, o = compact ? 8 : 30; return { d: 'M' + A.r + ' ' + y + ' C' + (A.r + 120) + ' ' + (y + o) + ' ' + (B.x - 120) + ' ' + (y + o) + ' ' + B.x + ' ' + (B.b - 6), mx: (A.r + B.x) / 2, my: y + o * 0.75 }; }
+    var EL = [];
+    E = EL;
+    [['proxy', 'globe', 'proxy', ldown, 'Internet', 'Proxy', 'HTTPS 443 · cloud.example.com, files.example.com', 'les 3', 'HTTPS 443'],
+     ['proxy', 'proxy', 'nextcloud', lcurve, 'Proxy', 'nextcloud', 'cloud.example.com → :80, réparti entre 2 copies', 'les 3', ':80'],
+     ['direct', 'globe', 'turn', lcurve, 'Internet', 'turn', '3478 UDP, 3478 TCP · en direct', 'les 3', '3478 tcp+udp'],
+     ['int', 'nextcloud', 'redis', lcurve, 'nextcloud', 'redis', ':6379', '—', ':6379'],
+     ['int', 'nextcloud', 'db', lcurve, 'nextcloud', 'db', ':5432', '—', ':5432'],
+     ['int', 'nextcloud', 'turn', lcurve, 'nextcloud', 'turn', ':3478 (réglages du relais)', '—', ''],
+     ['int', 'cron', 'redis', lcurve, 'cron', 'redis', ':6379', '—', ''],
+     ['int', 'cron', 'db', lcurve, 'cron', 'db', ':5432', '—', ''],
+     ['mount', 'nextcloud', 'files', ldown, 'nextcloud', 'fichiers', '/var/www/html/data', '—', '/var/www/html/data'],
+     ['mount', 'cron', 'files', lcurve, 'cron', 'fichiers', '/var/www/html/data', '—', ''],
+     ['mount', 'db', 'dbdata', ldown, 'db', 'db-data', '/var/lib/postgresql/data', '—', ''],
+     ['bak', 'dbdata', 'bak', function () { return lbak('dbdata'); }, 'db-data', 'Sauvegardes', '04:00 + journaux en continu', '—', '04:00'],
+     ['bak', 'files', 'bak', function () { return lbak('files'); }, 'fichiers', 'Sauvegardes', 'chaque nuit à 04:00', '—', '']
+    ].forEach(function (x) { var g = x[3](x[1], x[2]); edge(x[0], [x[1], x[2]], g.d, x[4], x[5], x[6], x[7], x[8] && !compact && !narrow ? [x[8], g.mx, g.my] : null); });
+    E = detail ? ED : EL;
+    // What the selection lights up.
+    var isSrv = !!SRV[cur], lit = {}; lit[cur] = true; if (st.pod) lit[st.pod] = true;
+    var hitE = E.map(function (e) {
+      if (cur === 'app') return false;
+      if (st.pod) return e.tags.indexOf(st.pod) >= 0;
+      return e.tags.indexOf(cur) >= 0;
+    });
+    E.forEach(function (e, i) { if (hitE[i]) e.tags.forEach(function (t) { lit[t] = true; }); });
+    var STY = {
+      proxy: ['#1c1917', '2', '8 6', 'none', 'butt'], direct: ['#92400e', '2', '8 6', 'none', 'butt'], int: ['#57534e', '1.5', '6 4', '6 4', 'butt'],
+      mount: ['#57534e', '2.5', '2 3', '2 3', 'butt'], repl: ['#1c1917', '1.5', '10 3 2 3', '10 3 2 3', 'butt'], bak: ['#78716c', '1.5', '1 5', '1 5', 'round']
+    };
+    var edges = E.map(function (e, i) {
+      var s = STY[e.type], on = hitE[i];
+      return { d: e.d, stroke: s[0], w: on ? String(+s[1] + 0.75) : s[1], dash: on ? s[2] : s[3], cap: s[4], op: cur === 'app' ? '0.75' : (on ? '1' : '0.25'), cls: on ? 'flow' : '' };
+    });
+    var tags = E.filter(function (e) { return e.tag; }).map(function (e) { var on = hitE[E.indexOf(e)]; return { text: e.tag[0], left: (e.tag[1] / 10) + '%', top: e.tag[2], color: e.type === 'direct' ? WARN : MUTED, op: cur === 'app' || on ? '1' : '0.5' }; });
+
+    var STATE = { ok: OK, warn: WARN, bad: BAD };
+    var chips = [];
+    function chip(id, row, col, label, meta, state, key, opts) {
+      opts = opts || {};
+      var b = opts.box || box(row, col), on = (key === cur && !st.pod) || id === st.pod;
+      var bright = isSrv ? (col === cur || id === cur || (col === 'lab' && P.some(function (p) { return p[1] === key && p[2] === cur; }))) : (cur === 'app' || lit[key] || lit[id]);
+      chips.push({
+        left: (b.x / 10) + '%', width: (b.w / 10) + '%', top: b.y, h: b.h,
+        padX: compact || (narrow && detail) ? '4px' : '10px', radius: opts.round ? '9999px' : '6px',
+        bg: opts.bg || '#ffffff',
+        border: on ? '2px solid #1c1917' : (opts.dashed ? '1px dashed #a8a29e' : (opts.warnBorder ? '1px solid #92400e' : (state === 'warn' ? '1px solid #92400e' : '1px solid #d6d3d1'))),
+        ring: on ? '0 0 0 3px rgba(28,25,23,.08)' : 'none', op: bright ? '1' : '0.4',
+        hasDot: !!state, dot: compact ? '6px' : '8px', dotColor: STATE[state] || '#a8a29e',
+        label: label, meta: meta, metaColor: state === 'warn' ? WARN : MUTED, showMeta: !compact && !(narrow && detail) && !!meta,
+        size: compact || (narrow && detail) ? '11px' : (opts.small ? '13px' : '14px'), font: opts.mono ? mono : sans,
+        current: on ? 'true' : 'false', aria: (opts.aria || label) + (meta ? ', ' + meta : ''),
+        pick: opts.pick || function () { self.pick(key, null); }
+      });
+    }
+    if (detail) {
+    chip('app', 'hdr', 'lab', 'nextcloud', 'application', null, 'app', { bg: '#fafaf9' });
+    ['s1', 's2', 's3'].forEach(function (s) { chip(s, 'hdr', s, SRV[s], s === 's3' ? 'relié · 1 pod à surveiller' : 'relié', s === 's3' ? 'warn' : 'ok', s, { bg: '#fafaf9', aria: 'Serveur ' + SRV[s] }); });
+    Object.keys(ROW).forEach(function (r) { chip('lab:' + r, r, 'lab', ROW[r].label, ROW[r].meta, null, r, { bg: '#fafaf9', warnBorder: ROW[r].warnBorder }); });
+    P.forEach(function (p) {
+      var isPod = ['nextcloud', 'turn', 'cron', 'redis', 'db'].indexOf(p[1]) >= 0;
+      chip(p[0], p[1] === 'globe' ? 'proxy' : p[1], p[2], p[3], p[4], p[5], p[1], {
+        mono: isPod, small: !isPod, round: p[1] === 'globe', warnBorder: p[1] === 'turn',
+        pick: isPod ? function () { self.pick(p[1], p[0], 'pods'); } : null
+      });
+    });
+
+    } else {
+      var LOGIC = {
+        globe: ['Internet', '2 adresses · 1 en attente', 'warn'], proxy: ['Proxy', 'HTTPS 443 · sur les 3 serveurs', 'ok'],
+        nextcloud: ['nextcloud', 'public · 2 copies · fr-par-1, 2', 'ok'], turn: ['turn', 'direct 3478 · 1 par serveur', 'ok'],
+        cron: ['cron', 'redémarre · fr-par-3', 'warn'], redis: ['redis', 'interne · fr-par-2', 'ok'], db: ['db', 'répliquée · fr-par-1 et 3', 'ok'],
+        files: ['fichiers', '3 exemplaires · 18 / 50 Gio', 'ok'], dbdata: ['db-data', '2 disques · 3,1 / 10 Gio', 'ok'], bak: ['Sauvegardes', 'S3 · cette nuit 04:02', 'ok']
+      };
+      Object.keys(LOGIC).forEach(function (k) {
+        var q = LOGIC[k], storage = k === 'files' || k === 'dbdata' || k === 'bak';
+        chip(k, null, null, q[0], q[1], q[2], k, { box: lb(k), round: k === 'globe', warnBorder: k === 'turn', bg: storage ? '#fafaf9' : '#ffffff', dashed: k === 'bak' && cur !== 'bak' });
+      });
+    }
+    // Panel content, built from cards and fields.
+    function T(head, cols, rows) { return { isTable: true, head: head, cols: cols, rows: rows.map(function (r, i) { return { top: i ? '1px solid #e7e5e4' : '0', cells: r.map(function (c) { var o = typeof c === 'string' ? { v: c } : c; return { v: o.v, font: o.mono ? mono : sans, size: o.mono ? '13px' : '14px', color: o.color || '#1c1917' }; }) }; }) }; }
+    function X(label, value, o) { o = o || {}; return { isText: true, label: label, value: value, font: o.mono ? mono : sans, color: o.color || '#1c1917' }; }
+    function I(label, value, maxW) { return { isInput: true, label: label, value: value, maxW: maxW || '520px' }; }
+    function N(value, o) { o = o || {}; return { isNote: true, value: value, color: o.color || MUTED, font: o.mono ? mono : sans }; }
+    function MT(label, used, total, unit) { return { isMeter: true, label: label, value: used + ' / ' + total + ' ' + unit, pct: Math.round(parseFloat(String(used).replace(',', '.')) / parseFloat(String(total).replace(',', '.')) * 100) + '%' }; }
+    function B(list) { return { isButtons: true, buttons: list.map(function (b) { return { label: b[0], tone: b[1] || '' }; }) }; }
+    function amount(t) { var m = String(t).match(/([\d,]+)\s*(cœur|Mio|Gio)?/); if (!m) return 0; var n = parseFloat(m[1].replace(',', '.')); return m[2] === 'Gio' ? n * 1024 : n; }
+    function MINI(list) { return { isMini: true, items: list.map(function (x) { var r = amount(x[1]) / amount(x[2]); return { label: x[0], value: x[1] + ' / ' + x[2], pct: (r > 0 ? Math.max(2, Math.min(100, Math.round(r * 100))) : 0) + '%', color: r >= 0.9 ? WARN : MUTED }; }) }; }
+    var LIMIT = { nextcloud: ['1 cœur', '1 Gio', '2 Gio'], turn: ['0,5 cœur', '256 Mio', '100 Mio'], cron: ['0,25 cœur', '256 Mio', '2 Gio'], redis: ['0,25 cœur', '256 Mio', '100 Mio'], db: ['1 cœur', '1 Gio', '10 Gio'] };
+    function LOG(v) { return { isLog: true, value: v }; }
+    function card(title, hint, fields, o) { o = o || {}; return { title: title, hint: hint || '', hasHint: !!hint, hintColor: o.hintColor || MUTED, fields: fields, action: o.action || '', hasAction: !!o.action, border: o.focus ? '#1c1917' : '#e7e5e4', font: o.mono ? mono : sans }; }
+    var DL = { v: 'Télécharger', color: LINK }, RS = { v: 'Restaurer', color: LINK };
+    function links(key) {
+      var rows = ED.filter(function (e) { return e.tags.indexOf(key) >= 0; }).map(function (e) { return [e.from, e.to, { v: { proxy: 'Par le proxy', direct: 'Port ouvert directement', int: 'Réseau interne', mount: 'Disque monté', repl: 'Redondance', bak: 'Sauvegarde' }[e.type], color: e.type === 'direct' ? WARN : MUTED }, { v: e.detail, mono: true }, e.server]; });
+      return [card('Connexions', 'Ce qui relie cet élément au reste, tel que ça tourne maintenant. Elles s’allument sur le plan.', rows.length ? [T(['De', 'Vers', 'Type', 'Détail', 'Serveur'], '1.2fr 1.2fr 1fr 1.6fr 0.8fr', rows)] : [N('Aucune.')])];
+    }
+    var tabs = [], TABS = {}, sel = { label: '', kind: '', desc: '', state: '', stateColor: OK, hasState: false };
+    function setSel(label, kind, desc, state, color) { sel = { label: label, kind: kind, desc: desc, state: state || '', stateColor: color || OK, hasState: !!state }; }
+    var SVC = {
+      nextcloud: { image: 'nextcloud:30-apache', update: 'nextcloud:30.0.4-apache', copies: '2, sur fr-par-1 et fr-par-2', mounts: [['fichiers', '/var/www/html/data', 'lecture et écriture']], net: [X('Adresse', 'cloud.example.com, files.example.com', { mono: true }), X('Port du service', '80', { mono: true })] },
+      turn: { image: 'coturn/coturn:4.6', update: '', copies: '1 par serveur (3)', mounts: [], net: [T(['Ports', 'Ouverts sur'], '1fr 2fr', [[{ v: '3478 UDP, 3478 TCP', mono: true }, { v: 'fr-par-1, fr-par-2, fr-par-3', color: WARN }]]), N('Ouverts sur l’adresse de chaque machine de l’application : les clients se connectent à son nom ou à cette adresse.')] },
+      cron: { image: 'nextcloud:30-apache', update: 'nextcloud:30.0.4-apache', copies: '1, sur fr-par-3', mounts: [['fichiers', '/var/www/html/data', 'lecture et écriture']], net: [X('Ports', 'aucun')] },
+      redis: { image: 'redis:7', update: '', copies: '1, sur fr-par-2', mounts: [], net: [X('Adresse interne', 'redis:6379', { mono: true })] },
+      db: { image: 'postgres:16', update: '', copies: 'Base répliquée : principale sur fr-par-1, réplique sur fr-par-3', mounts: [['db-data', '/var/lib/postgresql/data', 'lecture et écriture']], net: [X('Adresse interne', 'db:5432', { mono: true })] }
+    };
+
+    if (cur === 'app') {
+      setSel('nextcloud', 'Application', 'Ce qui vaut pour toute l’application. Choisissez un élément du plan pour le voir ou le changer.', 'En marche · 1 pod à surveiller', WARN);
+      tabs = [['overview', 'Vue générale'], ['vars', 'Variables'], ['secrets', 'Secrets']];
+      TABS.overview = [
+        card('Activité récente', '', [T(['Quand', 'Quoi'], '0.8fr 2fr', [['10:41', { v: 'cron-5d2-q redémarré (3e fois)', color: WARN }], ['cette nuit, 04:02', 'Sauvegarde réussie (fichiers, db-data)'], ['12 oct.', 'Mise à jour vers nextcloud 30.0.2'], ['3 oct.', 'Adresse files.example.com ajoutée']]), B([['Tout l\u2019historique']])]),
+        card('Origine', '', [X('Installée depuis', 'Paquet nextcloud · bibliothèque'), X('Emplacement', 'Cluster production · 3 serveurs'), X('Image', 'nextcloud:30-apache', { mono: true })]),
+        card('Autres actions', '', [B([['Enregistrer comme paquet'], ['Supprimer l’application', 'danger']]), N('La pause arrête les pods. Les disques et les données restent en place. La suppression demande de retaper le nom de l’application.')])
+      ];
+      TABS.vars = [card('Variables', 'Les mots de passe et les clés sont chiffrés. Chaque affichage est noté dans l’historique.', [T(['Nom', 'Valeur', ''], '1.2fr 1.6fr 0.6fr', [[{ v: 'NEXTCLOUD_ADMIN_USER', mono: true }, { v: 'admin', mono: true }, ''], [{ v: 'NEXTCLOUD_ADMIN_PASSWORD', mono: true }, { v: '••••••••', mono: true }, { v: 'Afficher', color: LINK }], [{ v: 'OVERWRITEHOST', mono: true }, { v: 'cloud.example.com · suit l’adresse', mono: true }, ''], [{ v: 'POSTGRES_PASSWORD', mono: true }, { v: '••••••••', mono: true }, { v: 'Afficher', color: LINK }]]), N('En les modifiant, les copies redémarrent l’une après l’autre ; si elles ne démarrent pas, les variables précédentes reviennent.')], { action: 'Modifier les variables' })];
+      TABS.secrets = [card('Secrets accordés', '', [T(['Secret', ''], '2fr 1fr', [['smtp-relay', { v: 'Ouvrir', color: LINK }]]), N('Gérer les secrets depuis Réglages.')])];
+    } else if (SRV[cur]) {
+      var mine = P.filter(function (p) { return p[2] === cur && ['nextcloud', 'turn', 'cron', 'redis', 'db'].indexOf(p[1]) >= 0; });
+      setSel(SRV[cur], 'Serveur du cluster production', 'Ce que cette application fait tourner sur ce serveur.', cur === 's3' ? 'Relié · 1 pod à surveiller' : 'Relié', cur === 's3' ? WARN : OK);
+      tabs = [['server', 'Sur ce serveur'], ['links', 'Connexions']];
+      TABS.server = [
+        card('Pods de nextcloud sur ' + SRV[cur], '', [T(['Pod', 'Service', 'État', 'Processeur', 'Mémoire'], '1.4fr 1fr 1.2fr 0.8fr 0.8fr', mine.map(function (p) { return [{ v: p[3], mono: true }, p[1], { v: p[4], color: STATE[p[5]] }, p[6], p[7]]; }))]),
+        card('Ouvert sur ce serveur', 'Le pare-feu n’ouvre que ces ports.', [X('Par le proxy', 'HTTPS 443, HTTP 80', { mono: true }), X('En direct', '3478 UDP, 3478 TCP (turn)', { mono: true, color: WARN })]),
+        card('Serveur', '', [N('Ses mises à jour, son terminal et ses autres applications sont sur la page du serveur.'), B([['Ouvrir la page de ' + SRV[cur]]])])
+      ];
+    } else if (cur === 'globe') {
+      setSel('Internet', 'Entrée · adresses', 'Comment on joint l’application depuis l’extérieur.', '1 adresse en attente', WARN);
+      tabs = [['addr', 'Adresses'], ['ports', 'Ports ouverts sur Internet'], ['links', 'Connexions']];
+      TABS.addr = [
+        card('cloud.example.com', 'nextcloud · Prête · certificat HTTPS valide', [B([['Ouvrir'], ['Avancé']])], { mono: true, hintColor: OK }),
+        card('files.example.com', 'nextcloud · En attente : le nom n’est pas encore publié', [N('files.example.com.  CNAME  production.example.net.', { mono: true }), B([['Copier'], ['Avancé']])], { mono: true, hintColor: WARN }),
+        card('Changer les adresses', 'L’application continue de tourner. Une nouvelle adresse répond dès que son nom est publié et son certificat HTTPS obtenu, en une à deux minutes.', [], { action: 'Modifier les adresses' })
+      ];
+      TABS.ports = [card('Ports ouverts sur Internet', 'Ouverts sur l’adresse de chaque machine de l’application : les clients se connectent à son nom ou à cette adresse.', [T(['Ports', 'Service', 'Serveurs'], '1fr 1fr 1.6fr', [[{ v: '3478 UDP, 3478 TCP', mono: true }, 'turn', { v: 'fr-par-1, fr-par-2, fr-par-3', color: WARN }]])])];
+    } else if (cur === 'proxy') {
+      setSel('Proxy', 'Entrée · un par serveur', 'Tient les ports 80 et 443 de chaque serveur, présente le certificat et répartit les visites entre les copies de nextcloud.', 'En marche sur 3 serveurs', OK);
+      tabs = [['domains', 'Domaines'], ['certs', 'Certificats'], ['links', 'Connexions']];
+      TABS.domains = [card('Domaines', '', [T(['Domaine', 'Service', 'État'], '1.4fr 1fr 1fr', [[{ v: 'cloud.example.com', mono: true }, 'nextcloud', { v: 'Prête', color: OK }], [{ v: 'files.example.com', mono: true }, 'nextcloud', { v: 'En attente', color: WARN }]])], { action: 'Modifier les adresses' })];
+      TABS.certs = [card('Certificats HTTPS', 'Créés et renouvelés par MyInfra.', [T(['Domaine', 'Valable jusqu’au'], '1.4fr 1fr', [[{ v: 'cloud.example.com', mono: true }, '12 janvier 2027'], [{ v: 'files.example.com', mono: true }, { v: 'pas encore obtenu', color: WARN }]])])];
+    } else if (SVC[cur]) {
+      var v = SVC[cur], pods = P.filter(function (p) { return p[1] === cur; }), warnPod = pods.filter(function (p) { return p[5] === 'warn'; })[0];
+      setSel(cur, ROW[cur].kind, { nextcloud: 'L’application elle-même, derrière le proxy.', turn: 'Le relais audio et vidéo de Nextcloud Talk, joint en direct.', cron: 'Les tâches planifiées de Nextcloud.', redis: 'Le cache et les verrous.', db: 'La base de données, répliquée sur deux serveurs.' }[cur], warnPod ? (pods.length > 1 ? pods.length + ' pods · 1 redémarre' : 'Le pod redémarre') : pods.length + (pods.length > 1 ? ' pods en marche' : ' pod en marche'), warnPod ? WARN : OK);
+      tabs = [['pods', 'Pods · ' + pods.length], ['image', 'Image et version'], ['network', 'Réseau'], ['storage', 'Stockage'], ['links', 'Connexions']];
+      TABS.pods = pods.map(function (p) {
+        var focus = p[0] === st.pod, open = focus || p[5] === 'warn';
+        var lim = LIMIT[p[1]], f = [X('Serveur', SRV[p[2]]), MINI([['Processeur', p[6], lim[0]], ['Mémoire', p[7], lim[1]], ['Disque', p[8] === '0' ? '0 Mio' : p[8], lim[2]]]), B([[open ? 'Masquer le journal' : 'Journal'], ['Relancer'], ['Terminal']])];
+        if (open) f.push(LOG(p[5] === 'warn' ? '10:41:02 Nextcloud cron: impossible de joindre redis:6379 (connexion refusée)\n10:41:02 Sortie avec le code 1\n10:41:33 Redémarrage (3)' : '10:40:58 Apache démarré\n10:41:00 GET /status.php 200'));
+        return card(p[3], (p[5] === 'warn' ? 'Redémarre · 3 fois depuis 10:12' : 'En marche') + ' · ' + SRV[p[2]] + (focus ? ' · choisi sur le plan' : ''), f, { mono: true, focus: focus, hintColor: p[5] === 'warn' ? WARN : MUTED });
+      });
+      TABS.image = [card('Image', 'Changer l’image remplace les copies l’une après l’autre ; si la nouvelle ne répond pas, l’ancienne revient.', [I('Image', v.image)].concat(v.update ? [N('Mise à jour disponible : ' + v.update), B([['Mettre à jour']])] : [N('À jour.')]), { action: 'Enregistrer' }), card('Copies', '', [X('En ce moment', v.copies)])];
+      TABS.network = [card(cur === 'turn' ? 'Ports ouverts sur Internet' : 'Réseau', '', v.net)];
+      TABS.storage = [card('Disques montés', '', v.mounts.length ? [T(['Disque', 'Chemin', 'Accès'], '1fr 1.6fr 1fr', v.mounts.map(function (m) { return [m[0], { v: m[1], mono: true }, m[2]]; }))] : [N('Aucun disque : rien n’est gardé quand le service redémarre.')])];
+    } else if (cur === 'files' || cur === 'dbdata') {
+      var isF = cur === 'files';
+      setSel(ROW[cur].label, ROW[cur].kind, isF ? 'Les fichiers des utilisateurs, montés par nextcloud et cron.' : 'Les données de la base, un disque par copie de db.', isF ? '3 exemplaires à jour' : '2 disques à jour', OK);
+      tabs = [['copies', 'Exemplaires et redondance'], ['backups', 'Sauvegardes'], ['links', 'Connexions']];
+      TABS.copies = [
+        card('Où sont les données', '', [T(['Exemplaire', 'Serveur', 'État'], '1.4fr 1fr 1fr', isF ? [['copie', 'fr-par-1', { v: 'à jour', color: OK }], ['copie', 'fr-par-2', { v: 'à jour', color: OK }], ['copie', 'fr-par-3', { v: 'à jour', color: OK }]] : [['disque de db-1 (principale)', 'fr-par-1', { v: 'à jour', color: OK }], ['disque de db-2 (réplique)', 'fr-par-3', { v: 'retard 0 s', color: OK }]]), MT('Place utilisée', isF ? '18' : '3,1', isF ? '50' : '10', 'Gio')]),
+        card('Redondance', '', [X('Mode', isF ? 'Copie continue et bascule' : 'Base répliquée'), X('Si un serveur tombe', isF ? 'Les pods repartent sur un autre serveur avec leurs données, en une à deux minutes.' : 'L’autre copie répond, en quelques secondes.')])
+      ];
+      TABS.backups = [card('Sauvegardes de ' + ROW[cur].label, 'Téléchargez une copie locale des données. Restauration : envoyez le fichier obtenu par téléchargement ; l’application est arrêtée le temps de l’opération.', [T(['Source', 'Dernière', '', ''], '1.6fr 1fr 0.7fr 0.7fr', (isF ? [['Copie continue (stockage du cluster)', 'en continu'], ['Copie sur S3 externe', 'cette nuit, 04:02'], ['Fichiers sur le disque actuel', 'maintenant']] : [['Copie continue (stockage du cluster)', 'en continu'], ['Copie sur S3 externe', 'cette nuit, 04:02'], ['Export PostgreSQL', 'cette nuit, 04:03']]).map(function (r) { return [r[0], r[1], DL, RS]; }))])];
+    } else if (cur === 'bak') {
+      setSel('Sauvegardes', 'Stockage · sauvegardes', 'Les copies de secours de l’application, hors des serveurs.', 'Dernière réussie cette nuit, 04:02', OK);
+      tabs = [['list', 'Sauvegardes'], ['plan', 'Programme'], ['links', 'Connexions']];
+      TABS.list = [card('À télécharger ou restaurer', 'Téléchargez une copie locale des données : stockage du cluster, S3 externe si configuré, disque en cours ou base PostgreSQL.', [T(['Données', 'Source', '', ''], '1fr 1.6fr 0.7fr 0.7fr', [['fichiers', 'Copie continue (stockage du cluster)', DL, RS], ['fichiers', 'Copie sur S3 externe', DL, RS], ['db-data', 'Export PostgreSQL', DL, RS], ['db-data', 'Copie sur S3 externe', DL, RS]]), N('Restauration : envoyez le fichier obtenu par téléchargement (ou une copie équivalente). L’application est arrêtée le temps de l’opération.')])];
+      TABS.plan = [card('Programme', '', [X('Rythme', 'Chaque nuit à 04:00 ; journaux de la base en continu'), X('Gardées', 'chaque jour sur une semaine, chaque semaine sur un mois, chaque mois sur trois mois'), X('Où', 'Stockage du cluster, s3.fr-par.scw.cloud · myinfra-offsite', { mono: false }), X('Dernier test de restauration', '3 octobre, réussi')])];
+    }
+    if (cur !== 'app') TABS.links = links(cur);
+    var keys = tabs.map(function (t) { return t[0]; }), tab = keys.indexOf(st.tab) >= 0 ? st.tab : keys[0];
+
+    var flows = ED.map(function (e, i) { var hit = cur !== 'app' && e.tags.indexOf(st.pod || cur) >= 0; return { from: e.from, to: e.to, type: { proxy: 'Par le proxy', direct: 'Port ouvert directement', int: 'Réseau interne', mount: 'Disque monté', repl: 'Redondance', bak: 'Sauvegarde' }[e.type], typeColor: e.type === 'direct' ? WARN : MUTED, detail: e.detail, server: e.server, top: i ? '1px solid #e7e5e4' : '0', bg: hit ? '#f5f5f4' : 'transparent', pick: function () { var k = e.tags.filter(function (t) { return ROW[t] || t === 'globe'; })[0] || 'app'; self.pick(k, null); } }; });
+
+    return {
+      icons: M.icons || {},
+      H: detail ? L.H : LL.H, pad: compact ? '8px 12px' : '12px 16px',
+      bands: detail ? L.bands.map(function (b) { return { left: '0%', width: '100%', top: b[0], height: b[1], label: b[2], showLabel: !compact, labelLeft: '8px', labelTop: b[0] + 3, bg: b[2] === 'Stockage' ? '#f7f6f5' : '#fbfaf9' }; })
+        : LL.bands.map(function (b) { return { left: (b[0] / 10) + '%', width: (b[2] / 10) + '%', top: b[1], height: b[3], label: b[4], showLabel: true, labelLeft: 'calc(' + (b[0] / 10) + '% + 8px)', labelTop: compact ? b[1] + b[3] - 14 : b[1] + 4, bg: b[4] === 'Stockage' ? '#f7f6f5' : '#fbfaf9' }; }),
+      showExt: detail,
+      detailAttr: detail ? 'true' : 'false', detailLabel: detail ? 'Vue simplifiée' : 'Voir tous les pods',
+      toggleDetail: function () { self.setState({ detail: !detail, pod: detail ? null : st.pod }); },
+      appAttr: cur === 'app' ? 'true' : 'false', appBg: cur === 'app' ? '#f5f5f4' : '#ffffff',
+      pickApp: function () { self.pick('app', null); },
+      // A click on the plan itself, not on one of its elements, shows the whole application.
+      bgClick: function (ev) { var t = ev && ev.target; if (t && t.closest && t.closest('button')) return; if (cur !== 'app' || st.pod) self.pick('app', null); },
+      planSummary: detail ? '3 serveurs · 11 pods · 1 à surveiller' : 'Vue simplifiée · 5 services, 3 stockages',
+      cols: (detail ? ['s1', 's2', 's3', 'ext'] : []).map(function (c) { return { left: ((COL[c][0] - 3) / 10) + '%', top: compact ? 24 : 48 }; }),
+      extLeft: (COL.ext[0] / 10 + 0.6) + '%', extTop: compact ? 4 : 12,
+      edges: edges, tags: tags, chips: chips,
+      planLabel: 'Plan de nextcloud : 3 serveurs, 11 pods. Élément en cours : ' + sel.label + '.',
+      headPad: compact ? '10px 16px 0' : '16px 20px 0', headGap: compact ? '2px' : '10px', headSize: compact ? '16px' : '20px', showDesc: !compact,
+      headShadow: compact ? '0 8px 8px -8px rgba(28,25,23,.18)' : 'none',
+      sel: sel,
+      tabs: tabs.map(function (t) { return { key: t[0], label: t[1] }; }), tab: tab,
+      pickTab: function (k) { self.setState({ tab: k }); self.keepInView(); },
+      cards: TABS[tab] || [],
+      seeCron: function () { self.pick('cron', 'cron@s3', 'pods'); },
+      flowsOpen: st.flows, flowsAttr: st.flows ? 'true' : 'false', flowsBg: st.flows ? '#f5f5f4' : '#ffffff', flowsRot: st.flows ? 'rotate(180deg)' : 'none',
+      toggleFlows: function () { self.setState({ flows: !st.flows }); },
+      flows: flows, flowCount: flows.length
+    };
+  }
+}
+</script>
+</body>
+</html>

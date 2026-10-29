@@ -1,0 +1,51 @@
+<!-- @dsCard height=288 -->
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--color-canvas); font-family: var(--font-sans); color: var(--color-ink); }
+  .cover { position: relative; width: 960px; height: 288px; overflow: hidden; }
+  .cover svg { position: absolute; left: 0; top: 0; }
+  .ink { fill: var(--color-ink); }
+  .muted { fill: var(--color-muted); }
+  .faint { fill: var(--color-faint); }
+  .line { fill: var(--color-line); }
+  .ok { fill: var(--color-ok); }
+  .warn { fill: var(--color-warn); }
+  .bad { fill: var(--color-bad); }
+  .canvas { fill: var(--color-canvas); }
+  .tile { rx: var(--radius-md); ry: var(--radius-md); }
+  .text { position: absolute; left: 40px; bottom: 32px; max-width: 440px; }
+  .name { margin: 0; font-size: 96px; line-height: .95; font-weight: 500; letter-spacing: -0.02em; }
+  .tag { margin: 16px 0 0; font-size: 14px; line-height: 1.5; color: var(--color-muted); }
+</style>
+</head>
+<body>
+<div class="cover">
+  <svg width="960" height="288" viewBox="0 0 960 288" aria-hidden="true">
+    <!--
+      blocks: color-ink (2×2 slab, 212×152), color-muted, color-faint (single tiles 102×72), color-line (two-wide 212×72 and single), state dots color-ok / color-warn / color-bad (8px discs, radius-full) on the two-wide line tile
+      arrangement: flush modular grid of 4 columns × 3 rows from x=504, gap space-2, like the two-column card list (ItemList)
+      pattern: modular tiles cut by radius-md, some merged two-wide — the system says "clear, wide, almost colourless", cards with hairlines, one radius
+      scales: gap space-2 (8px), outer inset space-6 (24px), corners radius-md (6px), dots radius-full
+    -->
+    <rect class="ink tile"   x="504" y="28"  width="212" height="152"/>
+    <rect class="muted tile" x="724" y="28"  width="102" height="72"/>
+    <rect class="line tile"  x="834" y="28"  width="102" height="72"/>
+    <rect class="line tile"  x="724" y="108" width="212" height="72"/>
+    <rect class="line tile"  x="504" y="188" width="102" height="72"/>
+    <rect class="faint tile" x="614" y="188" width="102" height="72"/>
+    <rect class="ink tile"   x="724" y="188" width="212" height="72"/>
+    <circle class="ok"   cx="752" cy="144" r="4"/>
+    <circle class="warn" cx="772" cy="144" r="4"/>
+    <circle class="bad"  cx="792" cy="144" r="4"/>
+  </svg>
+  <div class="text">
+    <h1 class="name">MyInfra</h1>
+    <p class="tag">Votre plateforme d'applications, sur les serveurs que vous louez.</p>
+  </div>
+</div>
+</body>
+</html>

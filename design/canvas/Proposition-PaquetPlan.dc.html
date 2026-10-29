@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Plan du paquet · MyInfra (proposition)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/myinfra/components/bundle.css">
+<script src="ds/myinfra/components/bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+:root{--font-sans:"Geist",ui-sans-serif,system-ui,sans-serif;--font-mono:"Geist Mono",ui-monospace,monospace;--color-canvas:#fafaf9;--color-surface:#ffffff;--color-line:#e7e5e4;--color-ink:#1c1917;--color-muted:#57534e;--color-faint:#78716c;--color-focus:#57534e;--color-ok:#3f6212;--color-warn:#92400e;--color-bad:#991b1b;--color-status:#f5f5f4;--color-link:#1d4ed8;--radius-md:6px}
+a{color:#1d4ed8}a:hover{color:#1e40af;text-underline-offset:3px}
+.ico{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.nav:hover{background:#f5f5f4}
+.pick:hover{background:#f5f5f4}
+.plan-node{transition:left .25s ease,top .25s ease,height .25s ease,opacity .2s ease,box-shadow .2s ease}
+.plan-node:hover{background:#f5f5f4 !important}
+.plan-band{transition:top .25s ease,height .25s ease}
+.plan-box{transition:height .25s ease}
+.plan-edge{transition:opacity .2s ease}
+.flow{animation:planflow 1.1s linear infinite}
+@keyframes planflow{to{stroke-dashoffset:-14}}
+@media (prefers-reduced-motion: reduce){.plan-node,.plan-band,.plan-box{transition:none}}
+.tool:hover{background:#f5f5f4 !important}
+
+.mi-tabs{display:none}
+@media (max-width: 720px){
+.mi-top{padding:10px 16px!important;gap:8px!important;flex-wrap:nowrap!important}
+.mi-search{min-width:0!important;padding:6px!important;border:0!important;background:transparent!important}
+.mi-search>span,.mi-search>kbd{display:none!important}
+.mi-lang{display:none!important}
+.mi-side{display:none!important}
+.mi-main{padding:16px 16px 96px!important}
+.mi-tabs{display:grid!important}
+h1{font-size:20px!important;line-height:1.4!important}
+[style*="grid-template-columns: repeat(4"]{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+[style*="grid-template-columns: repeat(3"]:not([style*="padding: 4px"]),[style*="grid-template-columns: repeat(2"]:not([style*="padding: 4px"]),[style*="repeat(auto-fit, minmax(220px"]{grid-template-columns:minmax(0,1fr)!important}
+[style*="1.4fr) minmax(0px, 1fr) minmax(0px, 1.6fr) auto"]{grid-template-columns:minmax(0,1fr) auto!important}
+[style*="minmax(150px, 200px) 1fr"],[style*="minmax(150px, auto) 1fr"]{grid-template-columns:minmax(0,1fr)!important;row-gap:2px!important}
+span:has(> svg[width="22"][height="6"]){display:none!important}
+#plan > section:first-child{display:none!important}
+}
+</style>
+</helmet>
+<div style="min-height: 1700px; display: flex; flex-direction: column; background: #fafaf9; color: #1c1917; font-family: 'Geist', ui-sans-serif, system-ui, sans-serif; font-size: 15px; line-height: 1.5;">
+
+<header class="mi-top" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 24px; border-bottom: 1px solid #e7e5e4; flex-wrap: wrap;">
+<a href="#" style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500; color: #1c1917; text-decoration: none;"><x-import component-from-global-scope="MyInfra.Icon" icon="{{icons.Boxes}}"></x-import>MyInfra</a>
+<div style="display: flex; align-items: center; gap: 12px;">
+<button type="button" class="mi-search" aria-label="Rechercher" style="display: inline-flex; align-items: center; gap: 8px; padding: 4px 6px 4px 10px; border: 1px solid #e7e5e4; border-radius: 6px; background: #ffffff; color: #57534e; min-width: 240px;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><span style="flex: 1; text-align: left;">Rechercher une app, un serveur…</span><kbd style="font-family: 'Geist Mono', monospace; font-size: 12px; border: 1px solid #e7e5e4; border-radius: 4px; padding: 0 4px; color: #57534e;">⌘K</kbd></button>
+<select class="mi-lang" aria-label="Langue" style="background: transparent; border: 0; color: #1c1917; font: inherit;"><option>Français</option><option>English</option></select>
+<button type="button" aria-label="Thème sombre" style="display: inline-flex; padding: 4px; border: 0; border-radius: 6px; background: transparent; color: #1c1917;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg></button>
+</div>
+</header>
+
+<div style="display: flex; flex-wrap: wrap; flex: 1;">
+<aside class="mi-side" style="flex: 1 1 224px; max-width: 224px; box-sizing: border-box; border-right: 1px solid #e7e5e4; padding: 16px; display: flex; flex-direction: column; gap: 4px;">
+<nav aria-label="Navigation principale" style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
+<a class="nav" href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #57534e;"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg><span style="flex: 1;">Vue d'ensemble</span><span title="2 points à traiter" style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #92400e;"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 9999px; background: #92400e;"></span>2</span></a>
+<a class="nav" href="#" aria-current="page" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none; background: #f5f5f4;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #57534e;"><rect width="7" height="7" x="3" y="3" rx="1"></rect><rect width="7" height="7" x="14" y="3" rx="1"></rect><rect width="7" height="7" x="14" y="14" rx="1"></rect><rect width="7" height="7" x="3" y="14" rx="1"></rect></svg><span style="flex: 1;">Applications</span><span style="font-size: 13px; color: #57534e;">8</span></a>
+<a class="nav" href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #57534e;"><rect x="16" y="16" width="6" height="6" rx="1"></rect><rect x="2" y="16" width="6" height="6" rx="1"></rect><rect x="9" y="2" width="6" height="6" rx="1"></rect><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"></path><path d="M12 12V8"></path></svg><span style="flex: 1;">Serveurs</span><span style="font-size: 13px; color: #57534e;">4</span></a>
+<a class="nav" href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #57534e;"><rect width="18" height="7" x="3" y="3" rx="1"></rect><rect width="9" height="7" x="3" y="14" rx="1"></rect><rect width="5" height="7" x="16" y="14" rx="1"></rect></svg>Templates</a>
+<a class="nav" href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #57534e;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M12 7v5l4 2"></path></svg>Activité</a>
+<a class="nav" href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #57534e;"><circle cx="12" cy="12" r="10"></circle><path d="m16 12-4-4-4 4"></path><path d="M12 16V8"></path></svg>Mises à jour</a>
+<div style="margin-top: auto; border-top: 1px solid #e7e5e4; padding-top: 16px; display: flex; flex-direction: column; gap: 4px;">
+<a class="nav" href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none;"><x-import component-from-global-scope="MyInfra.Icon" icon="{{icons.Settings}}" style="color: #57534e;"></x-import>Réglages</a>
+</div>
+</nav>
+<p style="margin: 8px 0 0; font-size: 11px; line-height: 1.25; color: #78716c;">Licence Apache-2.0</p>
+</aside>
+
+<nav class="mi-tabs" aria-label="Navigation principale" style="position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; grid-template-columns: repeat(5, minmax(0, 1fr)); background: #ffffff; border-top: 1px solid #e7e5e4;"><a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 56px; font-size: 11px; text-decoration: none; color: #57534e;"><span style="position: relative; display: inline-flex;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg></span><span style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px;">Vue d'ensemble</span></a><a href="#" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 56px; font-size: 11px; text-decoration: none; color: #1c1917;"><span style="position: relative; display: inline-flex;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"></rect><rect width="7" height="7" x="14" y="3" rx="1"></rect><rect width="7" height="7" x="14" y="14" rx="1"></rect><rect width="7" height="7" x="3" y="14" rx="1"></rect></svg></span><span style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px;">Applications</span></a><a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 56px; font-size: 11px; text-decoration: none; color: #57534e;"><span style="position: relative; display: inline-flex;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="16" y="16" width="6" height="6" rx="1"></rect><rect x="2" y="16" width="6" height="6" rx="1"></rect><rect x="9" y="2" width="6" height="6" rx="1"></rect><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"></path><path d="M12 12V8"></path></svg></span><span style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px;">Serveurs</span></a><a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 56px; font-size: 11px; text-decoration: none; color: #57534e;"><span style="position: relative; display: inline-flex;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M12 7v5l4 2"></path></svg></span><span style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px;">Activité</span></a><a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 56px; font-size: 11px; text-decoration: none; color: #57534e;"><span style="position: relative; display: inline-flex;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16"></path><path d="M4 12h16"></path><path d="M4 18h16"></path></svg><span aria-label="Mises à jour en attente" style="position: absolute; top: -3px; right: -6px; width: 8px; height: 8px; border-radius: 9999px; background: #1d4ed8;"></span></span><span style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px;">Plus</span></a></nav>
+<main class="mi-main" style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 32px 24px 48px;">
+<div style="max-width: 1120px; margin: 0 auto;">
+<nav aria-label="Fil d'Ariane" style="margin-bottom: 16px; display: flex; gap: 8px; color: #57534e;"><a href="#" style="color: #1d4ed8; text-decoration: none;">Applications</a><span aria-hidden="true">/</span><a href="#" style="color: #1d4ed8; text-decoration: none;">Paquets</a><span aria-hidden="true">/</span><span style="color: #1c1917;">nextcloud</span></nav>
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; margin-bottom: 16px;">
+<div style="display: flex; align-items: center; gap: 12px;"><h1 style="margin: 0; font-size: 24px; font-weight: 500; line-height: 1.33;">nextcloud</h1><span style="font-size: 12px; color: #57534e; border: 1px solid #e7e5e4; border-radius: 4px; padding: 0 6px;">brouillon</span></div>
+<div style="display: flex; align-items: center; gap: 12px;">
+<x-import component-from-global-scope="MyInfra.ActionsMenu" label="Plus d'actions"><x-import component-from-global-scope="MyInfra.MenuItem">Exporter en YAML</x-import><x-import component-from-global-scope="MyInfra.MenuItem">Guide</x-import></x-import>
+<x-import component-from-global-scope="MyInfra.Button">Enregistrer</x-import>
+</div>
+</div>
+
+<div id="plan" style="position: sticky; top: 0; z-index: 2; background: #fafaf9; padding-top: 8px; margin-top: -8px;">
+<section aria-label="Plan du paquet" style="background: #ffffff; border: 1px solid #e7e5e4; border-radius: 6px; padding: {{pad}}; margin-bottom: 8px; box-shadow: {{shadow}};">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 16px; margin-bottom: 6px;">
+<span style="display: inline-flex; align-items: center; gap: 8px; font-size: 14px;"><span style="font-weight: 500;">Plan</span><span style="color: #57534e;">Vous êtes sur <span style="color: #1c1917;">{{sel.label}}</span></span></span>
+<span style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; font-size: 12px; color: #57534e;">
+<span style="display: inline-flex; align-items: center; gap: 6px;"><svg width="22" height="6" aria-hidden="true"><line x1="0" y1="3" x2="22" y2="3" stroke="#1c1917" stroke-width="2"></line></svg>Par le proxy</span>
+<span style="display: inline-flex; align-items: center; gap: 6px;"><svg width="22" height="6" aria-hidden="true"><line x1="0" y1="3" x2="22" y2="3" stroke="#92400e" stroke-width="2"></line></svg>Port ouvert directement</span>
+<span style="display: inline-flex; align-items: center; gap: 6px;"><svg width="22" height="6" aria-hidden="true"><line x1="0" y1="3" x2="22" y2="3" stroke="#57534e" stroke-width="1.5" stroke-dasharray="6 4"></line></svg>Interne</span>
+<span style="display: inline-flex; align-items: center; gap: 6px;"><svg width="22" height="6" aria-hidden="true"><line x1="0" y1="3" x2="22" y2="3" stroke="#57534e" stroke-width="3" stroke-dasharray="2 3"></line></svg>Disque monté</span>
+<span style="display: inline-flex; align-items: center; gap: 6px;"><svg width="22" height="6" aria-hidden="true"><line x1="0" y1="3" x2="22" y2="3" stroke="#78716c" stroke-width="1.5" stroke-dasharray="1 4" stroke-linecap="round"></line></svg>Sauvegarde</span>
+</span>
+<span style="position: relative; display: flex; align-items: center; gap: 6px;">
+<button type="button" class="tool" onClick="{{toggleFlows}}" aria-expanded="{{flowsAttr}}" aria-controls="interactions" style="display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border: 1px solid #e7e5e4; border-radius: 6px; background: {{flowsBg}}; color: #1c1917; font-size: 12px;">Interactions · {{flowCount}}<svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px; transform: {{flowsRot}};"><path d="m6 9 6 6 6-6"></path></svg></button>
+<button type="button" class="tool" onClick="{{toggleMenu}}" aria-haspopup="menu" aria-expanded="{{menuAttr}}" style="display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border: 1px solid #e7e5e4; border-radius: 6px; background: {{menuBg}}; color: #1c1917; font-size: 12px;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px;"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>Ajouter</button>
+<sc-if value="{{menuOpen}}" hint-placeholder-val="{{false}}">
+<div role="menu" aria-label="Ajouter au paquet" style="position: absolute; right: 0; top: 100%; margin-top: 6px; z-index: 5; width: 260px; background: #ffffff; border: 1px solid #e7e5e4; border-radius: 6px; box-shadow: 0 4px 12px rgba(28,25,23,.08); padding: 4px; display: flex; flex-direction: column;">
+<button type="button" role="menuitem" class="pick" onClick="{{addSvc}}" style="display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; color: #1c1917;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="margin-top: 2px; color: #57534e;"><path d="M3 5h18v14H3z"></path><path d="M3 9h18"></path></svg><span style="display: flex; flex-direction: column;"><span style="font-size: 14px;">Service</span><span style="font-size: 12px; color: #57534e;">Une image, un modèle ou un dépôt Git</span></span></button>
+<button type="button" role="menuitem" class="pick" onClick="{{addSto}}" style="display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; color: #1c1917;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="margin-top: 2px; color: #57534e;"><path d="M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3"></path><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"></path></svg><span style="display: flex; flex-direction: column;"><span style="font-size: 14px;">Stockage</span><span style="font-size: 12px; color: #57534e;">Un disque, propre à un service ou partagé</span></span></button>
+</div>
+</sc-if>
+</span>
+</div>
+
+<div class="plan-box" role="group" aria-label="{{planLabel}}" style="position: relative; height: {{H}}px;">
+<sc-for list="{{bands}}" as="b" hint-placeholder-count="3">
+<div class="plan-band" aria-hidden="true" style="position: absolute; left: {{b.left}}; width: {{b.width}}; top: {{b.top}}px; height: {{b.height}}px; border-radius: 6px; background: {{b.bg}}; border: 1px solid #f0eeec;"></div>
+<span class="plan-band" aria-hidden="true" style="position: absolute; left: {{b.labelLeft}}; top: {{b.labelTop}}px; font-size: 11px; color: #78716c; letter-spacing: .02em;">{{b.label}}</span>
+</sc-for>
+
+<svg viewBox="0 0 1000 {{H}}" preserveAspectRatio="none" aria-hidden="true" style="position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible;">
+<g fill="none">
+<path class="plan-edge {{E.globeProxy.cls}}" d="{{E.globeProxy.d}}" stroke="#1c1917" stroke-width="{{E.globeProxy.w}}" stroke-dasharray="{{E.globeProxy.dash}}" opacity="{{E.globeProxy.op}}" vector-effect="non-scaling-stroke"></path>
+<path class="plan-edge {{E.proxyNc.cls}}" d="{{E.proxyNc.d}}" stroke="#1c1917" stroke-width="{{E.proxyNc.w}}" stroke-dasharray="{{E.proxyNc.dash}}" opacity="{{E.proxyNc.op}}" vector-effect="non-scaling-stroke"></path>
+<path class="plan-edge {{E.direct.cls}}" d="{{E.direct.d}}" stroke="#92400e" stroke-width="{{E.direct.w}}" stroke-dasharray="{{E.direct.dash}}" opacity="{{E.direct.op}}" vector-effect="non-scaling-stroke"></path>
+<path class="plan-edge {{E.ncRedis.cls}}" d="{{E.ncRedis.d}}" stroke="#57534e" stroke-width="{{E.ncRedis.w}}" stroke-dasharray="6 4" opacity="{{E.ncRedis.op}}" vector-effect="non-scaling-stroke"></path>
+<path class="plan-edge {{E.ncDb.cls}}" d="{{E.ncDb.d}}" stroke="#57534e" stroke-width="{{E.ncDb.w}}" stroke-dasharray="6 4" opacity="{{E.ncDb.op}}" vector-effect="non-scaling-stroke"></path>
+<path class="plan-edge {{E.ncTurn.cls}}" d="{{E.ncTurn.d}}" stroke="#57534e" stroke-width="{{E.ncTurn.w}}" stroke-dasharray="6 4" opacity="{{E.ncTurn.op}}" vector-effect="non-scaling-stroke"></path>
+<path class="plan-edge {{E.cronRedis.cls}}" d="{{E.cronRedis.d}}" stroke="#57534e" stroke-width="{{E.cronRedis.w}}" stroke-dasharray="6 4" opacity="{{E.cronRedis.op}}" vector-effect="non-scaling-stroke"></path>
+<path class="plan-edge {{E.cronDb.cls}}" d="{{E.cronDb.d}}" stroke="#57534e" stroke-width="{{E.cronDb.w}}" stroke-dasharray="6 4" opacity="{{E.cronDb.op}}" vector-effect="non-scaling-stroke"></path>
+<path class="plan-edge {{E.ncFiles.cls}}" d="{{E.ncFiles.d}}" stroke="#57534e" stroke-width="{{E.ncFiles.wm}}" stroke-dasharray="2 3" opacity="{{E.ncFiles.op}}" vector-effect="non-scaling-stroke"></path>
+<path class="plan-edge {{E.cronFiles.cls}}" d="{{E.cronFiles.d}}" stroke="#57534e" stroke-width="{{E.cronFiles.wm}}" stroke-dasharray="2 3" opacity="{{E.cronFiles.op}}" vector-effect="non-scaling-stroke"></path>
+<path class="plan-edge {{E.dbData.cls}}" d="{{E.dbData.d}}" stroke="#57534e" stroke-width="{{E.dbData.wm}}" stroke-dasharray="2 3" opacity="{{E.dbData.op}}" vector-effect="non-scaling-stroke"></path>
+<path class="plan-edge {{E.dataBak.cls}}" d="{{E.dataBak.d}}" stroke="#78716c" stroke-width="{{E.dataBak.w}}" stroke-dasharray="1 5" stroke-linecap="round" opacity="{{E.dataBak.op}}" vector-effect="non-scaling-stroke"></path>
+<path class="plan-edge {{E.filesBak.cls}}" d="{{E.filesBak.d}}" stroke="#78716c" stroke-width="{{E.filesBak.w}}" stroke-dasharray="1 5" stroke-linecap="round" opacity="{{E.filesBak.op}}" vector-effect="non-scaling-stroke"></path>
+</g>
+</svg>
+
+<sc-for list="{{labels}}" as="l" hint-placeholder-count="6">
+<span aria-hidden="true" style="position: absolute; left: {{l.left}}; top: {{l.top}}px; transform: translate(-50%, -50%); padding: 0 4px; border-radius: 4px; background: #ffffff; font-size: 11px; color: {{l.color}}; font-family: 'Geist Mono', monospace; white-space: nowrap; opacity: {{l.op}};">{{l.text}}</span>
+</sc-for>
+
+<sc-for list="{{nodes}}" as="n" hint-placeholder-count="10">
+<button type="button" class="plan-node" onClick="{{n.pick}}" aria-current="{{n.current}}" aria-label="{{n.aria}}" style="position: absolute; left: {{n.left}}; top: {{n.top}}px; width: {{n.width}}; height: {{n.h}}px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: {{n.radius}}; background: {{n.bg}}; border: {{n.border}}; box-shadow: {{n.ring}}; opacity: {{n.op}}; text-align: left; color: #1c1917; overflow: hidden;">
+<span aria-hidden="true" style="display: inline-flex; flex: none; color: {{n.iconColor}};"><svg class="ico" viewBox="0 0 24 24"><path d="{{n.icon1}}"></path><path d="{{n.icon2}}"></path><path d="{{n.icon3}}"></path></svg></span>
+<span style="display: flex; flex-direction: column; min-width: 0; line-height: 1.25;">
+<span style="font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{n.label}}</span>
+<sc-if value="{{n.showMeta}}" hint-placeholder-val="{{true}}"><span style="font-size: 11px; color: #57534e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{n.meta}}</span></sc-if>
+</span>
+</button>
+</sc-for>
+
+<sc-if value="{{showHere}}" hint-placeholder-val="{{true}}">
+<span aria-hidden="true" style="position: absolute; left: {{here.left}}; top: {{here.top}}px; transform: translateY(-100%); margin-top: -4px; padding: 1px 8px; border-radius: 9999px; background: #1c1917; color: #fafaf9; font-size: 11px; white-space: nowrap;">Vous êtes ici</span>
+</sc-if>
+</div>
+</section>
+<div aria-label="Élément en cours" style="background: #ffffff; border: 1px solid #e7e5e4; border-bottom: 0; border-radius: 6px 6px 0 0; padding: {{headPad}}; display: flex; flex-direction: column; gap: {{headGap}}; box-shadow: {{headShadow}};">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 8px;">
+<div style="display: flex; flex-direction: column; gap: 2px;">
+<span style="font-size: 13px; color: #57534e;">{{sel.kind}}</span>
+<h2 style="margin: 0; font-size: {{headSize}}; font-weight: 500; transition: font-size .2s ease;">{{sel.label}}</h2>
+<sc-if value="{{showDesc}}" hint-placeholder-val="{{true}}"><span style="color: #57534e;">{{sel.desc}}</span></sc-if>
+</div>
+<sc-if value="{{sel.removable}}" hint-placeholder-val="{{true}}"><x-import component-from-global-scope="MyInfra.TextButton" tone="danger">Retirer</x-import></sc-if>
+</div>
+<sc-if value="{{sel.isExisting}}" hint-placeholder-val="{{true}}"><x-import component-from-global-scope="MyInfra.Tabs" tabs="{{tabs}}" active="{{tab}}" on-change="{{pickTab}}" label="Parties de l'élément"></x-import></sc-if>
+</div>
+</div>
+<section id="reglages" aria-label="Réglages de {{sel.label}}" style="background: #ffffff; border: 1px solid #e7e5e4; border-top: 0; border-radius: 0 0 6px 6px; padding: 16px 20px 20px; display: flex; flex-direction: column; gap: 16px;">
+<sc-if value="{{flowsOpen}}" hint-placeholder-val="{{false}}">
+<section id="interactions" aria-label="Toutes les interactions" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; padding-bottom: 16px; border-bottom: 1px solid #e7e5e4;">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 8px;"><div style="display: flex; flex-direction: column;"><h2 style="margin: 0; font-size: 16px; font-weight: 400;">Toutes les interactions<span style="color: #57534e;"> · {{flowCount}}</span></h2><span style="font-size: 13px; color: #57534e;">Ce qui parlera à quoi une fois le paquet installé. Le pare-feu des serveurs n'ouvre que 80, 443 et les ports marqués « direct ».</span></div><x-import component-from-global-scope="MyInfra.TextButton" on-click="{{toggleFlows}}">Replier</x-import></div>
+<div style="background: #ffffff; border: 1px solid #e7e5e4; border-radius: 6px; overflow-x: auto;">
+<div style="min-width: 780px;">
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1.6fr) minmax(0, 1.2fr); gap: 12px; padding: 8px 16px; font-size: 13px; color: #57534e; border-bottom: 1px solid #e7e5e4;"><span>De</span><span></span><span>Vers</span><span>Type</span><span>Détail</span><span>Ouvert à</span></div>
+<sc-for list="{{flows}}" as="r" hint-placeholder-count="13">
+<button type="button" onClick="{{r.pick}}" class="pick" style="display: grid; width: 100%; grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1.6fr) minmax(0, 1.2fr); gap: 12px; align-items: center; padding: 10px 16px; border: 0; border-top: {{r.top}}; background: {{r.bg}}; text-align: left; color: #1c1917; font: inherit; font-size: 14px;">
+<span>{{r.from}}</span><span aria-hidden="true" style="color: #78716c;">→</span><span>{{r.to}}</span>
+<span style="color: {{r.typeColor}};">{{r.type}}</span>
+<span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #57534e;">{{r.detail}}</span>
+<span style="font-size: 13px; color: {{r.openColor}};">{{r.open}}</span>
+</button>
+</sc-for>
+</div>
+</div>
+</section>
+</sc-if>
+<sc-if value="{{sel.isExisting}}" hint-placeholder-val="{{true}}">
+<div style="display: flex; flex-direction: column; gap: 16px;">
+<sc-for list="{{cards}}" as="c" hint-placeholder-count="2">
+<div style="border: 1px solid #e7e5e4; border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 8px;">
+<div style="display: flex; flex-direction: column; max-width: 620px;"><span style="font-weight: 500;">{{c.title}}</span><sc-if value="{{c.hasHint}}" hint-placeholder-val="{{true}}"><span style="font-size: 13px; color: #57534e;">{{c.hint}}</span></sc-if></div>
+<sc-if value="{{c.hasAction}}" hint-placeholder-val="{{false}}"><x-import component-from-global-scope="MyInfra.Button" variant="secondary">{{c.action}}</x-import></sc-if>
+</div>
+<sc-for list="{{c.fields}}" as="f" hint-placeholder-count="2">
+<sc-if value="{{f.isInput}}" hint-placeholder-val="{{true}}"><div style="max-width: {{f.maxW}};"><x-import component-from-global-scope="MyInfra.Field" label="{{f.label}}"><x-import component-from-global-scope="MyInfra.Input" default-value="{{f.value}}" placeholder="{{f.placeholder}}"></x-import></x-import></div></sc-if>
+<sc-if value="{{f.isSelect}}" hint-placeholder-val="{{false}}"><label style="display: flex; flex-direction: column; gap: 4px; max-width: 320px;"><span style="font-size: 14px; font-weight: 500;">{{f.label}}</span><select style="padding: 6px 10px; border: 1px solid #d6d3d1; border-radius: 6px; background: #ffffff; color: #1c1917; font: inherit;"><sc-for list="{{f.options}}" as="o" hint-placeholder-count="2"><option>{{o}}</option></sc-for></select></label></sc-if>
+<sc-if value="{{f.isRadio}}" hint-placeholder-val="{{false}}"><div style="display: flex; flex-direction: column; gap: 6px;"><sc-if value="{{f.hasLabel}}" hint-placeholder-val="{{false}}"><span style="font-size: 14px; font-weight: 500;">{{f.label}}</span></sc-if><div role="radiogroup" aria-label="{{f.label}}" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px;"><sc-for list="{{f.choices}}" as="o" hint-placeholder-count="2"><button type="button" role="radio" aria-checked="{{o.on}}" style="text-align: left; padding: 10px 12px; border-radius: 6px; background: #ffffff; border: 1px solid {{o.border}}; color: #1c1917; display: flex; flex-direction: column;"><span>{{o.t}}</span><span style="font-size: 13px; color: #57534e;">{{o.d}}</span></button></sc-for></div></div></sc-if>
+<sc-if value="{{f.isCheck}}" hint-placeholder-val="{{false}}"><button type="button" role="checkbox" aria-checked="{{f.on}}" style="display: flex; align-items: flex-start; gap: 10px; padding: 0; border: 0; background: transparent; text-align: left; color: #1c1917;"><span aria-hidden="true" style="flex: none; margin-top: 3px; width: 16px; height: 16px; box-sizing: border-box; border-radius: 4px; border: 1px solid {{f.boxBorder}}; background: {{f.boxBg}}; display: inline-flex; align-items: center; justify-content: center; color: #ffffff;"><svg viewBox="0 0 24 24" style="width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 3; opacity: {{f.tick}};"><path d="M20 6 9 17l-5-5"></path></svg></span><span style="display: flex; flex-direction: column;"><span>{{f.label}}</span><span style="font-size: 13px; color: #57534e;">{{f.value}}</span></span></button></sc-if>
+<sc-if value="{{f.isText}}" hint-placeholder-val="{{false}}"><div style="display: grid; grid-template-columns: minmax(150px, 200px) 1fr; gap: 16px; font-size: 14px;"><span style="color: #57534e;">{{f.label}}</span><span style="font-family: {{f.font}};">{{f.value}}</span></div></sc-if>
+<sc-if value="{{f.isNote}}" hint-placeholder-val="{{false}}"><p style="margin: 0; padding: 10px 12px; background: #fafaf9; border-radius: 6px; font-size: 13px; color: {{f.color}};">{{f.value}}</p></sc-if>
+<sc-if value="{{f.isTable}}" hint-placeholder-val="{{false}}"><div style="border: 1px solid #e7e5e4; border-radius: 6px; overflow-x: auto;"><div style="min-width: 520px;">
+<div style="display: grid; grid-template-columns: {{f.cols}}; gap: 12px; padding: 6px 12px; font-size: 13px; color: #57534e; border-bottom: 1px solid #e7e5e4;"><sc-for list="{{f.head}}" as="h" hint-placeholder-count="3"><span>{{h}}</span></sc-for></div>
+<sc-for list="{{f.rows}}" as="r" hint-placeholder-count="2"><div style="display: grid; grid-template-columns: {{f.cols}}; gap: 12px; padding: 8px 12px; font-size: 14px; border-top: {{r.top}}; align-items: center;"><sc-for list="{{r.cells}}" as="x" hint-placeholder-count="3"><span style="font-family: {{x.font}}; font-size: {{x.size}}; color: {{x.color}}; overflow-wrap: anywhere;">{{x.v}}</span></sc-for></div></sc-for>
+</div></div></sc-if>
+</sc-for>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{sel.isNewSvc}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 16px; max-width: 640px;">
+<x-import component-from-global-scope="MyInfra.Field" label="Nom"><x-import component-from-global-scope="MyInfra.Input" default-value="service-1"></x-import></x-import>
+<x-import component-from-global-scope="MyInfra.Field" label="Image"><div style="display: flex; gap: 8px;"><div style="flex: 1;"><x-import component-from-global-scope="MyInfra.Input" placeholder="ghcr.io/editeur/app:1.0"></x-import></div><x-import component-from-global-scope="MyInfra.Button" variant="secondary">Lire l'image</x-import></div></x-import>
+<div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: #57534e;">Ou partir d'un modèle :<sc-for list="{{presets}}" as="p" hint-placeholder-count="4"><button type="button" class="pick" style="padding: 2px 8px; border: 1px solid #e7e5e4; border-radius: 6px; background: #ffffff; color: #1c1917; font-size: 13px;">{{p}}</button></sc-for></div>
+<div role="radiogroup" aria-label="Accès" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+<button type="button" role="radio" aria-checked="false" style="text-align: left; padding: 10px 12px; border-radius: 6px; background: #ffffff; border: 1px solid #e7e5e4; color: #1c1917; display: flex; flex-direction: column;"><span>Public, par le proxy</span><span style="font-size: 13px; color: #57534e;">Reçoit un domaine et son certificat HTTPS.</span></button>
+<button type="button" role="radio" aria-checked="true" style="text-align: left; padding: 10px 12px; border-radius: 6px; background: #ffffff; border: 1px solid #1c1917; color: #1c1917; display: flex; flex-direction: column;"><span>Interne</span><span style="font-size: 13px; color: #57534e;">Joignable seulement par les autres services.</span></button>
+</div>
+<span style="font-size: 13px; color: #57534e;">Ports ouverts sur Internet, disques et variables se règlent ensuite dans les onglets du service.</span>
+<div style="display: flex; gap: 12px; align-items: center;"><x-import component-from-global-scope="MyInfra.Button" on-click="{{confirmSvc}}">Ajouter le service</x-import><x-import component-from-global-scope="MyInfra.TextButton" on-click="{{cancelSvc}}">Annuler</x-import></div>
+</div>
+</sc-if>
+
+<sc-if value="{{sel.isNewSto}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 16px; max-width: 640px;">
+<div style="display: flex; flex-wrap: wrap; gap: 12px;"><div style="flex: 1 1 240px;"><x-import component-from-global-scope="MyInfra.Field" label="Nom"><x-import component-from-global-scope="MyInfra.Input" default-value="stockage-1"></x-import></x-import></div><div style="width: 140px;"><x-import component-from-global-scope="MyInfra.Field" label="Taille (Gio)"><x-import component-from-global-scope="MyInfra.Input" default-value="10"></x-import></x-import></div></div>
+<div role="radiogroup" aria-label="Type de stockage" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+<button type="button" role="radio" aria-checked="true" style="text-align: left; padding: 10px 12px; border-radius: 6px; background: #ffffff; border: 1px solid #1c1917; color: #1c1917; display: flex; flex-direction: column;"><span>Disque d'un service</span><span style="font-size: 13px; color: #57534e;">Un seul service l'utilise ; chaque copie a le sien.</span></button>
+<button type="button" role="radio" aria-checked="false" style="text-align: left; padding: 10px 12px; border-radius: 6px; background: #ffffff; border: 1px solid #e7e5e4; color: #1c1917; display: flex; flex-direction: column;"><span>Partagé</span><span style="font-size: 13px; color: #57534e;">Plusieurs services lisent et écrivent les mêmes fichiers.</span></button>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 12px;"><div style="flex: 1 1 200px;"><x-import component-from-global-scope="MyInfra.Field" label="Monté par"><x-import component-from-global-scope="MyInfra.Select"><option>nextcloud</option><option>cron</option><option>db</option><option>redis</option><option>turn</option></x-import></x-import></div><div style="flex: 1 1 200px;"><x-import component-from-global-scope="MyInfra.Field" label="Chemin dans le service"><x-import component-from-global-scope="MyInfra.Input" placeholder="/data"></x-import></x-import></div></div>
+<span style="font-size: 13px; color: #57534e;">Redondance et sauvegardes se règlent ensuite dans l'onglet Stockage.</span>
+<div style="display: flex; gap: 12px; align-items: center;"><x-import component-from-global-scope="MyInfra.Button" on-click="{{confirmSto}}">Ajouter le stockage</x-import><x-import component-from-global-scope="MyInfra.TextButton" on-click="{{cancelSto}}">Annuler</x-import></div>
+</div>
+</sc-if>
+</section>
+</div>
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"compact":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":1400}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { sel: 'nextcloud', tab: 'general', scrolled: false, menu: false, flows: false, newSvc: null, newSto: null }; this.onScroll = this.onScroll.bind(this); this.onResize = function () { var n = window.innerWidth < 720; if (n !== this.state.narrow) this.setState({ narrow: n }); }.bind(this); this.state.narrow = typeof window !== 'undefined' && window.innerWidth < 720; }
+  componentDidMount() {
+    if (window.MyInfra && window.MyInfra.setLang) window.MyInfra.setLang('fr');
+    window.addEventListener('scroll', this.onScroll, { passive: true });
+    window.addEventListener('resize', this.onResize);
+  }
+  componentWillUnmount() { window.removeEventListener('scroll', this.onScroll); window.removeEventListener('resize', this.onResize); }
+  onScroll() {
+    // Hysteresis so the plan does not flicker when its own height changes.
+    var y = window.scrollY || 0, sc = this.state.scrolled;
+    if (!sc && y > 200) this.setState({ scrolled: true });
+    else if (sc && y < 40) this.setState({ scrolled: false });
+  }
+  pickTab(k) { this.setState({ tab: k }); this.keepInView(); }
+  keepInView() {
+    requestAnimationFrame(function () {
+      var el = document.getElementById('reglages'), plan = document.getElementById('plan');
+      if (!el || !plan) return;
+      var top = el.getBoundingClientRect().top, ph = plan.getBoundingClientRect().height;
+      if (top < ph) window.scrollTo({ top: window.scrollY + top - ph, behavior: 'smooth' });
+    });
+  }
+  pickEl(k) {
+    var self = this;
+    this.setState({ sel: k, menu: false });
+    requestAnimationFrame(function () {
+      var el = document.getElementById('reglages'), plan = document.getElementById('plan');
+      if (!el || !plan) return;
+      var top = el.getBoundingClientRect().top, ph = plan.getBoundingClientRect().height;
+      if (top < ph) window.scrollTo({ top: window.scrollY + top - ph - 16, behavior: 'smooth' });
+    });
+  }
+  renderVals() {
+    var self = this, st = this.state, cur = st.sel;
+    var M = window.MyInfra || {};
+    var compact = !!(this.props.compact || st.scrolled);
+    var mono = "'Geist Mono', monospace", sans = "'Geist', sans-serif";
+    var ICON = {
+      globe: ['M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20', 'M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20', 'M2 12h20'],
+      proxy: ['M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z', 'M9 12l2 2 4-4', ''],
+      svc: ['M3 5h18v14H3z', 'M3 9h18', 'M7 7h.01'],
+      disk: ['M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3', 'M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6', 'M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3'],
+      bak: ['M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8', 'M3 3v5h5', 'M12 7v5l4 2']
+    };
+    // x and w in 1000ths of the width; y and h in px. Full and compact layouts.
+    var L = compact ? {
+      H: 148, nh: 34,
+      globe: [10, 8], proxy: [10, 56], turn: [210, 8], nextcloud: [210, 56], redis: [470, 8], db: [470, 56], cron: [730, 56],
+      files: [210, 108], dbdata: [400, 108], newsto: [590, 108], backup: [790, 108], newsvc: [730, 8],
+      bands: [[0, 0, 190, 98, 'Entrée'], [200, 0, 800, 98, 'Services'], [200, 102, 800, 46, 'Stockage']]
+    } : {
+      H: 404, nh: 60,
+      globe: [16, 46], proxy: [16, 176], turn: [220, 46], nextcloud: [220, 176], redis: [480, 46], db: [480, 176], cron: [740, 176],
+      files: [220, 318], dbdata: [400, 318], newsto: [590, 318], backup: [800, 318], newsvc: [740, 46],
+      bands: [[0, 22, 196, 252, 'Entrée'], [206, 22, 794, 252, 'Services'], [206, 296, 794, 104, 'Stockage']]
+    };
+    var narrow = !!st.narrow;
+    if (narrow) L = compact ? { H: 200, nh: 26, globe: [10, 4], proxy: [520, 4], turn: [10, 42], nextcloud: [520, 42], redis: [10, 72], db: [520, 72], cron: [10, 102], newsvc: [520, 102], files: [10, 140], dbdata: [520, 140], newsto: [10, 170], backup: [520, 170], bands: [[0, 0, 1000, 34, ''], [0, 38, 1000, 94, ''], [0, 136, 1000, 64, '']] } : { H: 420, nh: 48, globe: [10, 22], proxy: [520, 22], turn: [10, 106], nextcloud: [520, 106], redis: [10, 162], db: [520, 162], cron: [10, 218], newsvc: [520, 218], files: [10, 304], dbdata: [520, 304], newsto: [10, 360], backup: [520, 360], bands: [[0, 0, 1000, 76, 'Entrée'], [0, 84, 1000, 190, 'Services'], [0, 282, 1000, 134, 'Stockage']] };
+    var W = { globe: 170, proxy: 170, files: 160, dbdata: 160, newsto: 160, backup: 160 };
+    var items = {
+      globe: { label: 'Internet', meta: 'cloud.example.com', kind: 'Entrée', icon: 'globe', desc: 'Les visiteurs et les clients arrivent par l’adresse de l’application.', fields: [['Adresse', 'cloud.example.com', mono], ['Pointe vers', 'chaque serveur du cluster', sans]], note: '' },
+      proxy: { label: 'Proxy', meta: 'HTTPS 443 · 80', kind: 'Entrée', icon: 'proxy', desc: 'Tient les ports 80 et 443 de chaque serveur, présente le certificat et transmet chaque domaine à son service public.', fields: [['Domaines', 'cloud.example.com → nextcloud :80', mono], ['Certificat', 'Créé et renouvelé par MyInfra', sans]], note: 'Un service public passe toujours par le proxy. Pour un protocole qui n’est pas du HTTP (VPN, relais, TURN), ouvrez plutôt un port direct sur le service.' },
+      turn: { label: 'turn', meta: 'direct · 3478 tcp+udp', kind: 'Service · ports ouverts directement', icon: 'svc', desc: 'Le relais audio et vidéo de Nextcloud Talk. Il ne parle pas HTTP : ses ports sont ouverts sur l’adresse de chaque serveur, sans passer par le proxy.', fields: [['Image', 'coturn/coturn:4.6', mono], ['Ports ouverts sur Internet', '3478 UDP → 3478, 3478 TCP → 3478', mono], ['Copies', '1 par serveur ouvrant le port', sans]], note: 'Refusés car tenus par MyInfra : TCP 22, 80, 443, 2379, 2380, 6443, 10250 ; UDP 67, 68, 8472, 51820. Un port ouvert l’est pour une seule application du cluster.' },
+      nextcloud: { label: 'nextcloud', meta: 'public · :80 · 2 copies', kind: 'Service public · par le proxy', icon: 'svc', desc: 'L’application elle-même : le proxy lui transmet cloud.example.com.', fields: [['Image', 'nextcloud:30-apache', mono], ['Port', '80', mono], ['Copies', '2, sur 2 serveurs', sans]], note: '' },
+      cron: { label: 'cron', meta: 'interne · aucun port', kind: 'Service interne', icon: 'svc', desc: 'Les tâches planifiées de Nextcloud, toutes les 5 minutes.', fields: [['Image', 'nextcloud:30-apache', mono], ['Commande', '/cron.sh', mono]], note: '' },
+      redis: { label: 'redis', meta: 'interne · :6379', kind: 'Service interne', icon: 'svc', desc: 'Le cache et les verrous. Rien n’est écrit sur disque.', fields: [['Image', 'redis:7', mono], ['Port', '6379', mono]], note: '' },
+      db: { label: 'db', meta: 'interne · :5432 · 2 copies', kind: 'Service interne', icon: 'svc', desc: 'La base de données, joignable seulement par nextcloud et cron.', fields: [['Image', 'postgres:16', mono], ['Port', '5432', mono], ['Redondance', 'Base répliquée, 2 copies', sans]], note: '' },
+      files: { label: 'fichiers', meta: 'partagé · 50 Gio', kind: 'Stockage · disque partagé', icon: 'disk', desc: 'Les fichiers des utilisateurs, lus et écrits par nextcloud et cron.', fields: [['Taille', '50 Gio', sans], ['Redondance', 'Stockage du cluster, 3 exemplaires', sans], ['Monté par', 'nextcloud, cron', sans]], note: '' },
+      dbdata: { label: 'db-data', meta: 'disque · 10 Gio × 2', kind: 'Stockage · disque', icon: 'disk', desc: 'Les données de la base, une par copie de db.', fields: [['Taille', '10 Gio par copie', sans], ['Chemin', '/var/lib/postgresql/data', mono]], note: '' },
+      backup: { label: 'Sauvegardes', meta: 'cluster + S3 · 04:00', kind: 'Stockage · sauvegardes', icon: 'bak', desc: 'Les copies de secours de db-data et fichiers.', fields: [['Quand', 'Chaque nuit à 04:00', sans], ['Où', 'Stockage du cluster, S3 externe', sans]], note: '' }
+    };
+    if (st.newSvc) items.newsvc = st.newSvc === 'draft'
+      ? { label: 'nouveau service', meta: 'à configurer', kind: 'Nouveau service', icon: 'svc', desc: 'Il apparaît dans le plan en pointillé tant qu\u2019il n\u2019est pas ajouté.', fields: [], note: '', draft: true }
+      : { label: 'service-1', meta: 'interne · image à choisir', kind: 'Service interne', icon: 'svc', desc: 'Ajouté au paquet. Reliez-le aux autres depuis ses onglets.', fields: [['Image', 'à choisir', sans]], note: '' };
+    if (st.newSto) items.newsto = st.newSto === 'draft'
+      ? { label: 'nouveau stockage', meta: 'à configurer', kind: 'Nouveau stockage', icon: 'disk', desc: 'Il apparaît dans le plan en pointillé tant qu\u2019il n\u2019est pas ajouté.', fields: [], note: '', draft: true }
+      : { label: 'stockage-1', meta: 'disque · 10 Gio', kind: 'Stockage · disque', icon: 'disk', desc: 'Ajouté au paquet.', fields: [['Taille', '10 Gio', sans], ['Monté par', 'nextcloud', sans]], note: '' };
+    function bakCurve(src) { return function () {
+      if (narrow && Math.abs(box(src).x - box('backup').x) < 40) return curve(src, 'backup');
+      var A = box(src), B = box('backup'), y = A.y + A.h - 6, o = compact ? 8 : 30;
+      return { d: 'M' + (A.x + A.w) + ' ' + y + ' C' + (A.x + A.w + 120) + ' ' + (y + o) + ' ' + (B.x - 120) + ' ' + (y + o) + ' ' + B.x + ' ' + (B.y + B.h - 6), mx: (A.x + A.w + B.x) / 2, my: y + o * 0.75 };
+    }; }
+    function box(k) { var p = L[k], w = narrow ? 470 : (W[k] || 220); return { x: p[0], y: p[1], w: w, h: L.nh }; }
+    function curve(a, b) {
+      var A = box(a), B = box(b);
+      if (Math.abs((A.x + A.w / 2) - (B.x + B.w / 2)) < 40) {
+        var top = A.y < B.y ? A : B, bot = A.y < B.y ? B : A, cx = top.x + top.w / 2;
+        return { d: 'M' + cx + ' ' + (top.y + top.h) + ' L' + cx + ' ' + bot.y, mx: cx, my: (top.y + top.h + bot.y) / 2 };
+      }
+      var L1 = A.x < B.x ? A : B, R1 = A.x < B.x ? B : A;
+      var x1 = L1.x + L1.w, y1 = L1.y + L1.h / 2, x2 = R1.x, y2 = R1.y + R1.h / 2, m = (x1 + x2) / 2;
+      return { d: 'M' + x1 + ' ' + y1 + ' C' + m + ' ' + y1 + ' ' + m + ' ' + y2 + ' ' + x2 + ' ' + y2, mx: m, my: (y1 + y2) / 2 };
+    }
+    function down(a, b, dx) {
+      var A = box(a), B = box(b), x = A.x + A.w / 2 + (dx || 0);
+      var x2 = B.x + B.w / 2 + (dx || 0);
+      return { d: 'M' + x + ' ' + (A.y + A.h) + ' C' + x + ' ' + (A.y + A.h + 30) + ' ' + x2 + ' ' + (B.y - 30) + ' ' + x2 + ' ' + B.y, mx: (x + x2) / 2, my: (A.y + A.h + B.y) / 2 };
+    }
+    var defs = {
+      globeProxy: ['globe', 'proxy', 'proxy', 'Par le proxy', 'HTTPS 443 · cloud.example.com', 'Internet', 'HTTPS 443', down],
+      proxyNc: ['proxy', 'nextcloud', 'proxy', 'Par le proxy', 'cloud.example.com → :80', 'Internet, par le proxy', ':80', curve],
+      direct: ['globe', 'turn', 'direct', 'Port ouvert directement', '3478 UDP, 3478 TCP · chaque serveur', 'Internet, en direct', '3478 tcp+udp', curve],
+      ncRedis: ['nextcloud', 'redis', 'int', 'Réseau interne', ':6379', 'nextcloud, cron', ':6379', curve],
+      ncDb: ['nextcloud', 'db', 'int', 'Réseau interne', ':5432', 'nextcloud, cron', ':5432', curve],
+      ncTurn: ['nextcloud', 'turn', 'int', 'Réseau interne', ':3478 (réglages du relais)', 'nextcloud', '', curve],
+      cronRedis: ['cron', 'redis', 'int', 'Réseau interne', ':6379', 'nextcloud, cron', '', curve],
+      cronDb: ['cron', 'db', 'int', 'Réseau interne', ':5432', 'nextcloud, cron', '', curve],
+      ncFiles: ['nextcloud', 'files', 'mount', 'Disque monté', '/var/www/html/data · lecture et écriture', 'nextcloud, cron', '/var/www/html/data', down],
+      cronFiles: ['cron', 'files', 'mount', 'Disque monté', '/var/www/html/data · lecture et écriture', 'nextcloud, cron', '', curve],
+      dbData: ['db', 'dbdata', 'mount', 'Disque monté', '/var/lib/postgresql/data', 'db seulement', '/var/lib/postgresql/data', down],
+      dataBak: ['dbdata', 'backup', 'bak', 'Sauvegarde', 'chaque nuit à 04:00', 'MyInfra', '04:00', bakCurve('dbdata')],
+      filesBak: ['files', 'backup', 'bak', 'Sauvegarde', 'chaque nuit à 04:00', 'MyInfra', '', bakCurve('files')]
+    };
+    var linked = {}; linked[cur] = true;
+    Object.keys(defs).forEach(function (k) { var d = defs[k]; if (d[0] === cur) linked[d[1]] = true; if (d[1] === cur) linked[d[0]] = true; });
+    var E = {}, labels = [], flows = [], selFlows = [];
+    Object.keys(defs).forEach(function (k, i) {
+      var d = defs[k], hit = d[0] === cur || d[1] === cur, g = d[7](d[0], d[1]);
+      var animated = hit && (d[2] === 'proxy' || d[2] === 'direct' || d[2] === 'int' || d[2] === 'bak');
+      E[k] = { d: g.d, op: hit ? '1' : (compact ? '0.35' : '0.25'), cls: animated ? 'flow' : '', w: hit ? '2.25' : '1.5', wm: hit ? '3.5' : '2.5', dash: (d[2] === 'proxy' || d[2] === 'direct') ? (hit ? '8 6' : 'none') : 'none' };
+      if (d[6] && !compact && !narrow) labels.push({ left: (g.mx / 10) + '%', top: g.my, text: d[6], op: hit ? '1' : '0.5', color: d[2] === 'direct' ? '#92400e' : '#57534e' });
+      var typeColor = d[2] === 'direct' ? '#92400e' : '#57534e';
+      flows.push({ from: items[d[0]].label, to: items[d[1]].label, type: d[3], typeColor: typeColor, detail: d[4], open: d[5], openColor: d[2] === 'direct' ? '#92400e' : (d[2] === 'proxy' ? '#1c1917' : '#57534e'), bg: hit ? '#f5f5f4' : 'transparent', top: i === 0 ? '0' : '1px solid #e7e5e4', pick: function () { self.pickEl(d[1] === 'proxy' || d[1] === 'turn' && d[0] === 'globe' ? d[1] : d[0]); } });
+      if (hit) selFlows.push({ line: d[0] === cur ? 'vers ' + items[d[1]].label : 'depuis ' + items[d[0]].label, detail: d[3] + ' · ' + d[4], dir: d[0] === cur ? 'vers' : 'depuis', other: items[d[0] === cur ? d[1] : d[0]].label, type: d[3], det: d[4] });
+    });
+    var nodes = Object.keys(items).map(function (k) {
+      var b = box(k), it = items[k], on = k === cur, storage = it.icon === 'disk' || it.icon === 'bak';
+      var ic = ICON[it.icon];
+      return {
+        left: (b.x / 10) + '%', width: (b.w / 10) + '%', top: b.y, h: b.h,
+        radius: it.icon === 'globe' ? '9999px' : '6px',
+        bg: storage ? '#fafaf9' : '#ffffff',
+        border: on ? (it.draft ? '2px dashed #1c1917' : '2px solid #1c1917') : (it.draft ? '1px dashed #78716c' : null) || (it.icon === 'bak' ? '1px dashed #a8a29e' : (k === 'turn' ? '1px solid #92400e' : '1px solid #d6d3d1')),
+        ring: on ? '0 0 0 4px rgba(28,25,23,.08)' : 'none',
+        op: linked[k] ? '1' : '0.4',
+        iconColor: k === 'turn' ? '#92400e' : '#57534e',
+        icon1: ic[0], icon2: ic[1], icon3: ic[2],
+        label: it.label, meta: it.meta, showMeta: !compact,
+        current: on ? 'true' : 'false', aria: it.kind + ' ' + it.label,
+        pick: function () { self.pickEl(k); }
+      };
+    });
+    var hb = box(cur);
+    var s = items[cur];
+
+    var svcKeys = { turn: 1, nextcloud: 1, cron: 1, redis: 1, db: 1, newsvc: 1 }, stoKeys = { files: 1, dbdata: 1, newsto: 1 };
+    var SV = {
+      nextcloud: { image: 'nextcloud:30-apache', read: 'Lu : port 80, dossier /var/www/html.', pub: true, domain: 'cloud.example.com', port: '80', copies: ['2, sur 2 serveurs', '1', '3, sur 3 serveurs'], exposed: [], mounts: [['fichiers', '/var/www/html/data', 'lecture et écriture']], env: [['POSTGRES_HOST', 'db'], ['REDIS_HOST', 'redis'], ['NEXTCLOUD_TRUSTED_DOMAINS', 'cloud.example.com']], health: 'Requête HTTP /status.php', wait: 'Attend que db et redis répondent avant de démarrer.', cpu: '1', mem: '1 Gio' },
+      turn: { image: 'coturn/coturn:4.6', read: 'Lu : ports 3478 TCP et UDP.', pub: false, port: '3478', copies: ['1 par serveur qui ouvre le port'], exposed: [['3478', 'UDP', '3478'], ['3478', 'TCP', '3478']], mounts: [], env: [['TURN_SECRET', '•••••• (généré à l’installation)']], health: 'Port 3478 ouvert', wait: 'Démarre sans attendre.', cpu: '0,5', mem: '256 Mio' },
+      cron: { image: 'nextcloud:30-apache', read: 'Commande : /cron.sh', pub: false, port: '', copies: ['1'], exposed: [], mounts: [['fichiers', '/var/www/html/data', 'lecture et écriture']], env: [['POSTGRES_HOST', 'db'], ['REDIS_HOST', 'redis']], health: 'Aucun', wait: 'Attend que nextcloud démarre.', cpu: '0,25', mem: '256 Mio' },
+      redis: { image: 'redis:7', read: 'Lu : port 6379, rien n’est écrit sur disque.', pub: false, port: '6379', copies: ['1'], exposed: [], mounts: [], env: [], health: 'Commande redis-cli ping', wait: 'Démarre en premier.', cpu: '0,25', mem: '256 Mio' },
+      db: { image: 'postgres:16', read: 'Lu : port 5432, dossier de données /var/lib/postgresql/data.', pub: false, port: '5432', copies: ['Base répliquée, 2 copies', '1'], exposed: [], mounts: [['db-data', '/var/lib/postgresql/data', 'lecture et écriture']], env: [['POSTGRES_DB', 'nextcloud'], ['POSTGRES_PASSWORD', '•••••• (généré à l’installation)']], health: 'Commande pg_isready', wait: 'Démarre en premier.', cpu: '1', mem: '1 Gio' },
+      newsvc: { image: '', read: 'Saisissez une image puis « Lire l’image ».', pub: false, port: '', copies: ['1'], exposed: [], mounts: [], env: [], health: 'Aucun', wait: 'Démarre sans attendre.', cpu: '0,5', mem: '512 Mio' }
+    };
+    var SO = {
+      files: { size: '50', shared: true, red: 1, by: [['nextcloud', '/var/www/html/data'], ['cron', '/var/www/html/data']], when: 1, s3: true, pg: false },
+      dbdata: { size: '10', shared: false, red: 2, by: [['db', '/var/lib/postgresql/data']], when: 1, s3: true, pg: true },
+      newsto: { size: '10', shared: false, red: 0, by: [['nextcloud', '/data']], when: 4, s3: false, pg: false }
+    };
+    function T(head, cols, rows) { return { isTable: true, head: head, cols: cols, rows: rows.map(function (r, i) { return { top: i ? '1px solid #e7e5e4' : '0', cells: r.map(function (c) { var o = typeof c === 'string' ? { v: c } : c; return { v: o.v, font: o.mono ? mono : sans, size: o.mono ? '13px' : '14px', color: o.color || '#1c1917' }; }) }; }) }; }
+    function I(label, value, ph, maxW) { return { isInput: true, label: label, value: value, placeholder: ph || '', maxW: maxW || '520px' }; }
+    function S(label, options) { return { isSelect: true, label: label, options: options }; }
+    function R(label, choices, on) { return { isRadio: true, label: label, hasLabel: !!label, choices: choices.map(function (c, i) { return { t: c[0], d: c[1], on: i === on ? 'true' : 'false', border: i === on ? '#1c1917' : '#e7e5e4' }; }) }; }
+    function C(label, value, on) { return { isCheck: true, label: label, value: value, on: on ? 'true' : 'false', boxBorder: on ? '#1c1917' : '#a8a29e', boxBg: on ? '#1c1917' : '#ffffff', tick: on ? '1' : '0' }; }
+    function X(label, value, font) { return { isText: true, label: label, value: value, font: font || sans }; }
+    function N(value, color) { return { isNote: true, value: value, color: color || '#57534e' }; }
+    function card(title, hint, fields, action) { return { title: title, hint: hint || '', hasHint: !!hint, fields: fields, action: action || '', hasAction: !!action }; }
+    var RESERVED = 'Gardés par MyInfra, donc refusés : TCP 22, 80, 443, 2379, 2380, 6443, 10250 ; UDP 67, 68, 8472, 51820. Un port public sert une seule application par serveur ou cluster ; sur un serveur seul, le service tourne en une seule copie.';
+    var connCard = card('Connexions', 'Ce que cet élément échange avec le reste du paquet. Elles se dessinent sur le plan.', selFlows.length ? [T(['Sens', 'Avec', 'Type', 'Détail'], '90px 1fr 1fr 1.6fr', selFlows.map(function (r) { return [r.dir, r.other, { v: r.type, color: r.type === 'Port ouvert directement' ? '#92400e' : '#57534e' }, { v: r.det, mono: true }]; }))] : [N('Aucune pour l’instant.')]);
+    var TABS = {}, edTabs = [];
+    if (svcKeys[cur]) {
+      var v = SV[cur], peers = selFlows.filter(function (r) { return r.type === 'Réseau interne'; }).map(function (r) { return r.other; });
+      edTabs = [['general', 'Général'], ['network', 'Réseau'], ['storage', 'Stockage'], ['env', 'Variables'], ['health', 'Santé'], ['resources', 'Ressources'], ['links', 'Connexions']];
+      TABS.general = [
+        card('Image', 'Ce que le service fait tourner.', [I('Image', v.image, 'ghcr.io/editeur/app:1.0', '100%'), N(v.read)], 'Lire l’image'),
+        card('Accès', 'Comment on joint ce service.', [R('', [['Public, par le proxy', 'Reçoit un domaine et son certificat HTTPS.'], ['Interne', 'Joignable seulement par les autres services.']], v.pub ? 0 : 1)].concat(v.pub ? [I('Domaine', v.domain, '', '360px')] : []).concat(v.port ? [I('Port du service', v.port, '', '160px')] : [])),
+        card('Copies', '', [S('Nombre de copies', v.copies)])
+      ];
+      TABS.network = [
+        card('Ports ouverts sur Internet', 'Sans passer par le proxy : pour un VPN, un relais ou un jeu. Ouverts sur l’adresse de chaque serveur de l’application.', (v.exposed.length ? [T(['Port du service', 'Protocole', 'Port public', 'Ouvert sur'], '1fr 1fr 1fr 1.4fr', v.exposed.map(function (e) { return [{ v: e[0], mono: true }, e[1], { v: e[2], mono: true }, { v: 'chaque serveur', color: '#92400e' }]; }))] : [N('Aucun. Depuis Internet, ' + items[cur].label + (v.pub ? ' n’est joignable que par son domaine.' : ' n’est pas joignable.'))]).concat([N(RESERVED)]), 'Ajouter un port'),
+        card('Réseau interne', 'Les autres services le joignent par son nom.', [X('Adresse interne', items[cur].label + (v.port ? ':' + v.port : ''), mono), X('Échange avec', peers.length ? peers.join(', ') : 'aucun service')])
+      ];
+      TABS.storage = [card('Disques montés', 'Sans disque, rien n’est gardé quand le service redémarre.', v.mounts.length ? [T(['Disque', 'Chemin dans le service', 'Accès'], '1fr 1.6fr 1fr', v.mounts.map(function (m) { return [m[0], { v: m[1], mono: true }, m[2]]; }))] : [N('Aucun disque monté.')], 'Monter un disque')];
+      TABS.env = [card('Variables', 'Les secrets sont générés à l’installation et ne s’affichent plus ensuite.', v.env.length ? [T(['Nom', 'Valeur'], '1fr 1.4fr', v.env.map(function (e) { return [{ v: e[0], mono: true }, { v: e[1], mono: true }]; }))] : [N('Aucune variable.')], 'Ajouter une variable')];
+      TABS.health = [card('Contrôle de santé', 'MyInfra redémarre le service s’il ne répond plus.', [I('Contrôle', v.health, '', '360px'), S('Fréquence', ['Toutes les 30 s', 'Toutes les 10 s', 'Toutes les minutes'])]), card('Démarrage', '', [X('Ordre', v.wait), I('Commande', '', 'Celle de l’image', '520px')])];
+      TABS.resources = [card('Ressources', 'Ce que le service peut utiliser au plus, par copie.', [I('Processeur (cœurs)', v.cpu, '', '200px'), I('Mémoire', v.mem, '', '200px')])];
+    } else if (stoKeys[cur]) {
+      var o = SO[cur];
+      edTabs = [['size', 'Taille et redondance'], ['backups', 'Sauvegardes'], ['links', 'Connexions']];
+      var MODES = [
+        ['Aucune', 'Une copie, sur un seul serveur.', 'Inaccessible jusqu’au retour du serveur', 'Au retour du serveur', o.size + ' Gio'],
+        ['Copie continue et bascule', 'Une copie, sauvegardée en continu sur trois serveurs ; si son serveur tombe, elle redémarre sur un autre avec ses données.', 'Repart sur un autre serveur avec ses données', '1 à 2 minutes', o.size + ' Gio + copies dans le stockage du cluster'],
+        ['Base répliquée', 'Deux copies sur deux serveurs : la base PostgreSQL se réplique elle-même. Si un serveur tombe, l’autre copie répond.', 'L’autre copie répond', 'Quelques secondes', o.size + ' Gio × 2']
+      ];
+      var choices = cur === 'dbdata' ? MODES : MODES.slice(0, 2), m = MODES[o.red];
+      TABS.size = [
+        card('Disque', 'Ce qui y est écrit survit aux redémarrages et aux mises à jour.', [I('Taille (Gio)', o.size, '', '160px'), R('Type', [['Disque d’un service', 'Un seul service l’utilise ; chaque copie a le sien.'], ['Partagé', 'Plusieurs services lisent et écrivent les mêmes fichiers.']], o.shared ? 1 : 0)]),
+        card('Redondance', 'Ce qui arrive aux données si un serveur tombe.' + (cur === 'dbdata' ? ' Conseillé pour postgres : base répliquée.' : ''), [R('', choices.map(function (c) { return [c[0], c[1]]; }), o.red), X('Si un serveur tombe', m[2]), X('Reprise', m[3]), X('Place utilisée', m[4])]),
+        card('Monté par', '', [T(['Service', 'Chemin dans le service'], '1fr 2fr', o.by.map(function (b) { return [b[0], { v: b[1], mono: true }]; }))], 'Monter dans un service')
+      ];
+      var FREQ = ['Toutes les heures', 'Chaque nuit à 04:00', 'Chaque semaine', 'Personnalisée', 'Jamais'];
+      TABS.backups = [
+        card('Quand', 'Réglages par défaut du paquet : chaque application installée peut les changer et retrouve ses sauvegardes sur sa page, prêtes à télécharger ou à restaurer.', [S('Rythme', [FREQ[o.when]].concat(FREQ.filter(function (_, i) { return i !== o.when; }))), N(o.pg ? 'Les journaux de la base sont copiés en continu ; une sauvegarde complète s’ajoute à ce rythme.' : 'Une copie complète à ce rythme, puis seulement ce qui a changé.'), X('Gardées', 'chaque jour sur une semaine, chaque semaine sur un mois, chaque mois sur trois mois')]),
+        card('Où', 'Plusieurs endroits, pour ne pas tout perdre d’un coup.', [C('Stockage du cluster', 'Toujours actif.', true), C('S3 externe', 's3.fr-par.scw.cloud · myinfra-offsite. Copie de secours si le cluster entier disparaît.', o.s3)].concat(o.pg ? [C('Export PostgreSQL lisible', 'Un fichier pg_dump en plus, à rouvrir sans MyInfra.', true)] : [])),
+        card('Vérifier', 'Une sauvegarde jamais relue est une promesse.', [C('Tester une restauration chaque mois', 'MyInfra restaure la dernière sauvegarde à part, vérifie qu’elle s’ouvre puis l’efface. Le résultat va dans l’Activité.', o.when !== 4), C('Prévenir si une sauvegarde échoue', 'Par les alertes de MyInfra, si elles sont réglées.', true)])
+      ];
+    } else if (cur === 'backup') {
+      edTabs = [['plan', 'Programme'], ['dest', 'Destinations'], ['links', 'Connexions']];
+      TABS.plan = [card('Disques sauvegardés', 'Le réglage de chaque disque se fait aussi depuis le disque.', [T(['Disque', 'Quand', 'Garder'], '1fr 1.4fr 1fr', [['fichiers', 'Chaque nuit à 04:00', '3 mois'], ['db-data', 'Chaque nuit à 04:00 + journaux en continu', '3 mois']].concat(st.newSto === 'done' ? [['stockage-1', 'Jamais', '—']] : []))])];
+      TABS.dest = [card('Où', '', [C('Stockage du cluster', 'Trois exemplaires, sur les serveurs du cluster.', true), C('S3 externe', 's3.fr-par.scw.cloud · myinfra-offsite. Survit à la perte du cluster.', true)])];
+    } else if (cur === 'proxy') {
+      edTabs = [['domains', 'Domaines'], ['certs', 'Certificats'], ['links', 'Connexions']];
+      TABS.domains = [card('Domaines', 'Chaque domaine mène à un service public.', [T(['Domaine', 'Service', 'Port'], '1.4fr 1fr 80px', [[{ v: 'cloud.example.com', mono: true }, 'nextcloud', { v: '80', mono: true }]]), N(items.proxy.note)], 'Ajouter un domaine')];
+      TABS.certs = [card('Certificats HTTPS', '', [R('', [['Automatiques', 'Créés et renouvelés par MyInfra.'], ['Les vôtres', 'À importer et renouveler vous-même.']], 0), C('Rediriger HTTP vers HTTPS', 'Le port 80 ne sert qu’à cette redirection.', true)])];
+    } else if (cur === 'globe') {
+      edTabs = [['addr', 'Adresses'], ['links', 'Connexions']];
+      TABS.addr = [card('Comment on joint l’application', '', [T(['Par', 'Adresse', 'Vers'], '1fr 1.6fr 1fr', [['le proxy, en HTTPS', { v: 'cloud.example.com', mono: true }, 'nextcloud'], [{ v: 'port direct', color: '#92400e' }, { v: 'adresse de chaque serveur : 3478 UDP, 3478 TCP', mono: true }, 'turn']])])];
+    }
+    TABS.links = [connCard];
+    var tabKeys = edTabs.map(function (t) { return t[0]; });
+    var tab = tabKeys.indexOf(st.tab) >= 0 ? st.tab : tabKeys[0];
+    return {
+      icons: M.icons || {},
+      H: L.H,
+      headPad: compact ? '10px 16px 0' : '16px 20px 0',
+      headGap: compact ? '2px' : '10px',
+      headSize: compact ? '16px' : '20px',
+      showDesc: !compact,
+      pad: compact ? '8px 12px 8px' : '12px 16px 12px',
+      shadow: 'none',
+      headShadow: compact ? '0 8px 8px -8px rgba(28,25,23,.18)' : 'none',
+      bands: L.bands.map(function (b) { return { left: (b[0] / 10) + '%', width: (b[2] / 10) + '%', top: b[1], height: b[3], label: b[4], bg: b[4] === 'Stockage' ? '#f7f6f5' : (b[4] === 'Entrée' ? '#fbfaf9' : '#fcfcfb'), labelLeft: 'calc(' + (b[0] / 10) + '% + 8px)', labelTop: compact ? b[1] + b[3] - 14 : b[1] + 4 }; }),
+      E: E, labels: labels, nodes: nodes,
+      showHere: !compact,
+      here: { left: (hb.x / 10) + '%', top: hb.y },
+      planLabel: 'Plan du paquet nextcloud. Élément en cours : ' + s.label + '.',
+      sel: { label: s.label, kind: s.kind, desc: s.desc, note: s.note, hasNote: !!s.note, isExisting: !s.draft, isNewSvc: cur === 'newsvc' && !!s.draft, isNewSto: cur === 'newsto' && !!s.draft, removable: !s.draft && cur !== 'globe' && cur !== 'proxy',  fields: s.fields.map(function (f) { return { k: f[0], v: f[1], font: f[2] }; }) },
+      tabs: edTabs.map(function (t) { return { key: t[0], label: t[1] }; }),
+      tab: tab || '',
+      pickTab: function (k) { self.pickTab(k); },
+      cards: TABS[tab] || [],
+      flowsOpen: st.flows, flowsAttr: st.flows ? 'true' : 'false', flowsBg: st.flows ? '#f5f5f4' : '#ffffff', flowsRot: st.flows ? 'rotate(180deg)' : 'none',
+      toggleFlows: function () { self.setState({ flows: !st.flows, menu: false }); },
+      menuOpen: st.menu, menuAttr: st.menu ? 'true' : 'false', menuBg: st.menu ? '#f5f5f4' : '#ffffff',
+      toggleMenu: function () { self.setState({ menu: !st.menu }); },
+      addSvc: function () { self.setState({ menu: false, newSvc: st.newSvc || 'draft', sel: 'newsvc' }); },
+      addSto: function () { self.setState({ menu: false, newSto: st.newSto || 'draft', sel: 'newsto' }); },
+      confirmSvc: function () { self.setState({ newSvc: 'done' }); },
+      cancelSvc: function () { self.setState({ newSvc: null, sel: 'nextcloud' }); },
+      confirmSto: function () { self.setState({ newSto: 'done' }); },
+      cancelSto: function () { self.setState({ newSto: null, sel: 'nextcloud' }); },
+      presets: ['PostgreSQL', 'MariaDB', 'Redis', 'Depuis un dépôt Git'],
+      flows: flows, flowCount: flows.length, selFlows: selFlows, selFlowCount: selFlows.length
+    };
+  }
+}
+</script>
+</body>
+</html>

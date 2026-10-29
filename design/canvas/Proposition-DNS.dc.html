@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Domaines · MyInfra (proposition)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/myinfra/components/bundle.css">
+<script src="ds/myinfra/components/bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+:root{--font-sans:"Geist",ui-sans-serif,system-ui,sans-serif;--font-mono:"Geist Mono",ui-monospace,monospace;--color-canvas:#fafaf9;--color-surface:#ffffff;--color-line:#e7e5e4;--color-ink:#1c1917;--color-muted:#57534e;--color-faint:#78716c;--color-focus:#57534e;--color-ok:#3f6212;--color-warn:#92400e;--color-bad:#991b1b;--color-status:#f5f5f4;--color-link:#1d4ed8;--radius-md:6px}
+a{color:#1d4ed8}a:hover{color:#1e40af;text-underline-offset:3px}
+.ico{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.nav:hover{background:#f5f5f4}
+.row:hover{background:#f5f5f4}
+a.primary:hover{opacity:.84;color:#fafaf9;text-decoration:none}
+
+.mi-tabs{display:none}
+@media (max-width: 720px){
+.mi-top{padding:10px 16px!important;gap:8px!important;flex-wrap:nowrap!important}
+.mi-search{min-width:0!important;padding:6px!important;border:0!important;background:transparent!important}
+.mi-search>span,.mi-search>kbd{display:none!important}
+.mi-lang{display:none!important}
+.mi-side{display:none!important}
+.mi-main{padding:16px 16px 96px!important}
+.mi-tabs{display:grid!important}
+h1{font-size:20px!important;line-height:1.4!important}
+[style*="grid-template-columns: repeat(4"]{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+[style*="grid-template-columns: repeat(3"]:not([style*="padding: 4px"]),[style*="grid-template-columns: repeat(2"]:not([style*="padding: 4px"]),[style*="repeat(auto-fit, minmax(220px"]{grid-template-columns:minmax(0,1fr)!important}
+[style*="1.4fr) minmax(0px, 1fr) minmax(0px, 1.6fr) auto"]{grid-template-columns:minmax(0,1fr) auto!important}
+[style*="minmax(150px, 200px) 1fr"],[style*="minmax(150px, auto) 1fr"]{grid-template-columns:minmax(0,1fr)!important;row-gap:2px!important}
+span:has(> svg[width="22"][height="6"]){display:none!important}
+#plan > section:first-child{display:none!important}
+}
+</style>
+</helmet>
+<div style="min-height: 1400px; display: flex; flex-direction: column; background: #fafaf9; color: #1c1917; font-family: 'Geist', ui-sans-serif, system-ui, sans-serif; font-size: 15px; line-height: 1.5;">
+
+<header class="mi-top" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 24px; border-bottom: 1px solid #e7e5e4; flex-wrap: wrap;">
+<a href="#" style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500; color: #1c1917; text-decoration: none;"><x-import component-from-global-scope="MyInfra.Icon" icon="{{icons.Boxes}}"></x-import>MyInfra</a>
+<div style="display: flex; align-items: center; gap: 12px;">
+<button type="button" class="mi-search" aria-label="Rechercher" style="display: inline-flex; align-items: center; gap: 8px; padding: 4px 6px 4px 10px; border: 1px solid #e7e5e4; border-radius: 6px; background: #ffffff; color: #57534e; min-width: 240px;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><span style="flex: 1; text-align: left;">Rechercher une app, un serveur…</span><kbd style="font-family: 'Geist Mono', monospace; font-size: 12px; border: 1px solid #e7e5e4; border-radius: 4px; padding: 0 4px; color: #57534e;">⌘K</kbd></button>
+<select class="mi-lang" aria-label="Langue" style="background: transparent; border: 0; color: #1c1917; font: inherit;"><option>Français</option><option>English</option></select>
+<button type="button" aria-label="Thème sombre" style="display: inline-flex; padding: 4px; border: 0; border-radius: 6px; background: transparent; color: #1c1917;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg></button>
+</div>
+</header>
+
+<div style="display: flex; flex-wrap: wrap; flex: 1;">
+<aside class="mi-side" style="flex: 1 1 224px; max-width: 224px; box-sizing: border-box; border-right: 1px solid #e7e5e4; padding: 16px; display: flex; flex-direction: column; gap: 4px;">
+<nav aria-label="Navigation principale" style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
+<a class="nav" href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #57534e;"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg><span style="flex: 1;">Vue d'ensemble</span><span title="2 points à traiter" style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #92400e;"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 9999px; background: #92400e;"></span>2</span></a>
+<a class="nav" href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #57534e;"><rect width="7" height="7" x="3" y="3" rx="1"></rect><rect width="7" height="7" x="14" y="3" rx="1"></rect><rect width="7" height="7" x="14" y="14" rx="1"></rect><rect width="7" height="7" x="3" y="14" rx="1"></rect></svg><span style="flex: 1;">Applications</span><span style="font-size: 13px; color: #57534e;">8</span></a>
+<a class="nav" href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #57534e;"><rect x="16" y="16" width="6" height="6" rx="1"></rect><rect x="2" y="16" width="6" height="6" rx="1"></rect><rect x="9" y="2" width="6" height="6" rx="1"></rect><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"></path><path d="M12 12V8"></path></svg><span style="flex: 1;">Serveurs</span><span style="font-size: 13px; color: #57534e;">4</span></a>
+<a class="nav" href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #57534e;"><rect width="18" height="7" x="3" y="3" rx="1"></rect><rect width="9" height="7" x="3" y="14" rx="1"></rect><rect width="5" height="7" x="16" y="14" rx="1"></rect></svg>Templates</a>
+<a class="nav" href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #57534e;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M12 7v5l4 2"></path></svg>Activité</a>
+<a class="nav" href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #57534e;"><circle cx="12" cy="12" r="10"></circle><path d="m16 12-4-4-4 4"></path><path d="M12 16V8"></path></svg>Mises à jour</a>
+<div style="margin-top: auto; border-top: 1px solid #e7e5e4; padding-top: 16px; display: flex; flex-direction: column; gap: 4px;">
+<a class="nav" href="#" aria-current="page" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none; background: #f5f5f4;"><x-import component-from-global-scope="MyInfra.Icon" icon="{{icons.Settings}}" style="color: #57534e;"></x-import><span style="flex: 1;">Réglages</span><span title="1 réglage à revoir" style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #92400e;"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 9999px; background: #92400e;"></span>1</span></a>
+</div>
+</nav>
+<p style="margin: 8px 0 0; font-size: 11px; line-height: 1.25; color: #78716c;">Licence Apache-2.0</p>
+</aside>
+
+<nav class="mi-tabs" aria-label="Navigation principale" style="position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; grid-template-columns: repeat(5, minmax(0, 1fr)); background: #ffffff; border-top: 1px solid #e7e5e4;"><a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 56px; font-size: 11px; text-decoration: none; color: #57534e;"><span style="position: relative; display: inline-flex;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg></span><span style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px;">Vue d'ensemble</span></a><a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 56px; font-size: 11px; text-decoration: none; color: #57534e;"><span style="position: relative; display: inline-flex;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"></rect><rect width="7" height="7" x="14" y="3" rx="1"></rect><rect width="7" height="7" x="14" y="14" rx="1"></rect><rect width="7" height="7" x="3" y="14" rx="1"></rect></svg></span><span style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px;">Applications</span></a><a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 56px; font-size: 11px; text-decoration: none; color: #57534e;"><span style="position: relative; display: inline-flex;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="16" y="16" width="6" height="6" rx="1"></rect><rect x="2" y="16" width="6" height="6" rx="1"></rect><rect x="9" y="2" width="6" height="6" rx="1"></rect><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"></path><path d="M12 12V8"></path></svg></span><span style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px;">Serveurs</span></a><a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 56px; font-size: 11px; text-decoration: none; color: #57534e;"><span style="position: relative; display: inline-flex;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M12 7v5l4 2"></path></svg></span><span style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px;">Activité</span></a><a href="#" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 56px; font-size: 11px; text-decoration: none; color: #1c1917;"><span style="position: relative; display: inline-flex;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16"></path><path d="M4 12h16"></path><path d="M4 18h16"></path></svg><span aria-label="Mises à jour en attente" style="position: absolute; top: -3px; right: -6px; width: 8px; height: 8px; border-radius: 9999px; background: #1d4ed8;"></span></span><span style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px;">Plus</span></a></nav>
+<main class="mi-main" style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 48px 24px;">
+<div style="max-width: 960px; margin: 0 auto;">
+<nav aria-label="Fil d'Ariane" style="margin-bottom: 24px; display: flex; gap: 8px; color: #57534e;"><a href="#" style="color: #1d4ed8; text-decoration: none;">Réglages</a><span aria-hidden="true">/</span><span style="color: #1c1917;">Domaines</span></nav>
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; margin-bottom: 32px;">
+<div style="display: flex; flex-direction: column; gap: 4px; max-width: 600px;"><h1 style="margin: 0; font-size: 24px; font-weight: 500; line-height: 1.33;">Domaines</h1><span style="color: #57534e;">Vos comptes DNS, et pour chaque domaine les adresses que MyInfra y écrit ou qu'il a laissées.</span></div>
+<a href="Proposition-DNSAjout.dc.html" class="primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 6px; background: #1c1917; color: #fafaf9; text-decoration: none;"><x-import component-from-global-scope="MyInfra.Icon" icon="{{icons.Plus}}"></x-import>Connecter un compte DNS</a>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; padding: 14px 16px; background: #ffffff; border: 1px solid #e7e5e4; border-radius: 6px; margin-bottom: 32px;">
+<span aria-hidden="true" style="width: 36px; height: 36px; border-radius: 6px; border: 1px solid #e7e5e4; display: inline-flex; align-items: center; justify-content: center; font-weight: 500;">C</span>
+<div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
+<span><span style="font-weight: 500;">Cloudflare</span><span style="color: #57534e;"> · clé ····c0de</span></span>
+<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #3f6212;"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 9999px; background: #3f6212;"></span>Connecté<span style="color: #57534e;"> · lu il y a 2 min</span></span>
+</div>
+<x-import component-from-global-scope="MyInfra.TextButton"><x-import component-from-global-scope="MyInfra.Icon" icon="{{icons.RotateCw}}"></x-import>Actualiser</x-import>
+<x-import component-from-global-scope="MyInfra.ActionsMenu" label="Actions de Cloudflare"><x-import component-from-global-scope="MyInfra.MenuItem">Changer la clé</x-import><x-import component-from-global-scope="MyInfra.MenuItem" tone="danger">Supprimer</x-import></x-import>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start;">
+<nav aria-label="Domaines du compte" style="flex: 1 1 180px; max-width: 220px; display: flex; flex-direction: column; gap: 4px;">
+<sc-for list="{{zones}}" as="z" hint-placeholder-count="2">
+<button type="button" aria-pressed="{{z.on}}" onClick="{{z.pick}}" class="row" style="display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 12px; border: 0; border-radius: 6px; background: {{z.bg}}; text-align: left; color: #1c1917;">
+<span style="font-family: 'Geist Mono', monospace; font-size: 14px;">{{z.name}}</span>
+<span style="font-size: 13px; color: {{z.noteColor}};">{{z.note}}</span>
+</button>
+</sc-for>
+</nav>
+
+<section style="flex: 999 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 16px;">
+<sc-if value="{{hasRecords}}" hint-placeholder-val="{{true}}">
+<div style="display: flex; flex-direction: column; gap: 16px;">
+<div role="group" aria-label="Afficher" style="display: flex; flex-wrap: wrap; gap: 8px;">
+<sc-for list="{{filters}}" as="f" hint-placeholder-count="4">
+<button type="button" aria-pressed="{{f.on}}" onClick="{{f.pick}}" style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 6px; border: 1px solid {{f.border}}; background: {{f.bg}}; color: {{f.color}};">{{f.label}}<span style="font-size: 13px; opacity: .8;">{{f.count}}</span></button>
+</sc-for>
+</div>
+<div style="background: #ffffff; border: 1px solid #e7e5e4; border-radius: 6px; overflow-x: auto;">
+<div style="min-width: 640px;">
+<div style="display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.2fr) minmax(0, 1.1fr) minmax(0, 1.1fr) 120px; gap: 12px; padding: 8px 16px; font-size: 13px; color: #57534e; border-bottom: 1px solid #e7e5e4;"><span>Adresse</span><span>Pointe vers</span><span>Application</span><span>État</span><span></span></div>
+<sc-for list="{{records}}" as="r" hint-placeholder-count="8">
+<div class="row" style="display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.2fr) minmax(0, 1.1fr) minmax(0, 1.1fr) 120px; gap: 12px; align-items: center; padding: 12px 16px; border-top: {{r.top}};">
+<span style="font-family: 'Geist Mono', monospace; font-size: 13px; overflow: hidden; text-overflow: ellipsis;">{{r.name}}</span>
+<span style="display: flex; flex-direction: column; font-family: 'Geist Mono', monospace; font-size: 12px; color: #57534e;"><span>{{r.target}}</span><span style="color: #92400e; font-family: 'Geist', sans-serif;">{{r.expected}}</span></span>
+<span style="font-size: 13px; color: {{r.appColor}};">{{r.app}}</span>
+<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: {{r.color}};"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 9999px; background: {{r.dot}}; flex: none;"></span>{{r.state}}</span>
+<span style="display: flex; justify-content: flex-end;"><sc-if value="{{r.fix}}" hint-placeholder-val="{{false}}"><x-import component-from-global-scope="MyInfra.TextButton">Republier</x-import></sc-if><sc-if value="{{r.drop}}" hint-placeholder-val="{{false}}"><x-import component-from-global-scope="MyInfra.TextButton" tone="danger">Supprimer</x-import></sc-if></span>
+</div>
+</sc-for>
+</div>
+</div>
+<p style="margin: 0; font-size: 13px; color: #57534e;">MyInfra compare chaque adresse qu'il utilise avec ce qu'elle devrait annoncer. Supprimer une adresse non gérée la retire chez Cloudflare : ce qui l'utilise encore ne sera plus joignable.</p>
+</div>
+</sc-if>
+<sc-if value="{{noRecords}}" hint-placeholder-val="{{false}}">
+<div style="padding: 24px; background: #ffffff; border: 1px solid #e7e5e4; border-radius: 6px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start;">
+<span>Aucune adresse sur example.org.</span>
+<span style="font-size: 13px; color: #57534e;">Choisissez ce domaine en installant une application : MyInfra y écrira son adresse.</span>
+<x-import component-from-global-scope="MyInfra.TextButton"><x-import component-from-global-scope="MyInfra.Icon" icon="{{icons.Plus}}"></x-import>Nouvelle application</x-import>
+</div>
+</sc-if>
+</section>
+</div>
+</div>
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1400}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { zone: 'example.com', f: 'all' }; }
+  componentDidMount() { if (window.MyInfra && window.MyInfra.setLang) window.MyInfra.setLang('fr'); }
+  renderVals() {
+    var self = this, st = this.state;
+    var M = window.MyInfra || {};
+    var ok = '#3f6212', warn = '#92400e', mu = '#57534e';
+    function rec(name, target, app, kind, expected) {
+      var map = { ok: ['À jour', ok], diff: ['Différent', warn], other: ['Non géré par MyInfra', mu] };
+      return { name: name, target: target, app: app || 'Aucune', appColor: app ? '#1c1917' : '#78716c', kind: kind, state: map[kind][0], color: map[kind][1], dot: kind === 'other' ? '#a8a29e' : map[kind][1], expected: expected || '', fix: kind === 'diff', drop: kind === 'other' };
+    }
+    var all = [
+      rec('api.example.com', 'A 203.0.113.40', 'Billing API', 'diff', 'Attendu : 203.0.113.11, 203.0.113.12'),
+      rec('wiki.example.com', 'A 203.0.113.31', '', 'other'),
+      rec('cloud.example.com', 'A 203.0.113.31', '', 'other'),
+      rec('staging.example.com', 'A 198.51.100.7', '', 'other'),
+      rec('www.example.com', 'A 203.0.113.10, .12', 'Site vitrine', 'ok'),
+      rec('status.example.com', 'A 203.0.113.10', 'Uptime Kuma', 'ok'),
+      rec('tasks.example.com', 'A 203.0.113.10, .11', 'Vikunja', 'ok'),
+      rec('notes.example.com', 'A 203.0.113.11, .12', 'HedgeDoc', 'ok'),
+      rec('draw.example.com', 'A 203.0.113.10, .11, .12', 'Excalidraw', 'ok'),
+      rec('videos.example.com', 'A 203.0.113.12', 'MeTube', 'ok'),
+      rec('edge.example.com', 'A 203.0.113.20', 'whoami', 'ok')
+    ];
+    var defs = [
+      { k: 'all', l: 'Toutes', test: function () { return true; } },
+      { k: 'check', l: 'À vérifier', test: function (r) { return r.kind !== 'ok'; } },
+      { k: 'used', l: 'Utilisées par MyInfra', test: function (r) { return r.kind !== 'other'; } },
+      { k: 'other', l: 'Non gérées', test: function (r) { return r.kind === 'other'; } }
+    ];
+    var cur = defs.filter(function (d) { return d.k === st.f; })[0];
+    var rows = all.filter(cur.test).map(function (r, i) { return Object.assign({}, r, { top: i === 0 ? '0' : '1px solid #e7e5e4' }); });
+    var com = st.zone === 'example.com';
+    return {
+      icons: M.icons || {},
+      hasRecords: com, noRecords: !com,
+      zones: [
+        { name: 'example.com', note: '11 adresses · 4 à vérifier', noteColor: warn },
+        { name: 'example.org', note: 'Aucune adresse', noteColor: mu }
+      ].map(function (z) { var on = z.name === st.zone; return Object.assign(z, { on: on ? 'true' : 'false', bg: on ? '#f5f5f4' : 'transparent', pick: function () { self.setState({ zone: z.name }); } }); }),
+      filters: defs.map(function (d) { var on = d.k === st.f; return { label: d.l, count: all.filter(d.test).length, on: on ? 'true' : 'false', border: on ? '#1c1917' : '#e7e5e4', bg: on ? '#1c1917' : '#ffffff', color: on ? '#fafaf9' : '#57534e', pick: function () { self.setState({ f: d.k }); } }; }),
+      records: rows
+    };
+  }
+}
+</script>
+</body>
+</html>

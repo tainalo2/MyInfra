@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Connecter un compte Git · MyInfra (proposition)</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/myinfra/components/bundle.css">
+<script src="ds/myinfra/components/bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+:root{--font-sans:"Geist",ui-sans-serif,system-ui,sans-serif;--font-mono:"Geist Mono",ui-monospace,monospace;--color-canvas:#fafaf9;--color-surface:#ffffff;--color-line:#e7e5e4;--color-ink:#1c1917;--color-muted:#57534e;--color-faint:#78716c;--color-focus:#57534e;--color-ok:#3f6212;--color-warn:#92400e;--color-bad:#991b1b;--color-status:#f5f5f4;--color-link:#1d4ed8;--radius-md:6px}
+a{color:#1d4ed8}a:hover{color:#1e40af;text-underline-offset:3px}
+.ico{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.nav:hover{background:#f5f5f4}
+.pick:hover{background:#f5f5f4}
+mark{background:#f5f5f4;color:#1c1917;border:1px solid #e7e5e4;border-radius:4px;padding:0 4px;font-family:'Geist Mono',monospace;font-size:13px}
+
+.mi-tabs{display:none}
+@media (max-width: 720px){
+.mi-top{padding:10px 16px!important;gap:8px!important;flex-wrap:nowrap!important}
+.mi-search{min-width:0!important;padding:6px!important;border:0!important;background:transparent!important}
+.mi-search>span,.mi-search>kbd{display:none!important}
+.mi-lang{display:none!important}
+.mi-side{display:none!important}
+.mi-main{padding:16px 16px 96px!important}
+.mi-tabs{display:grid!important}
+h1{font-size:20px!important;line-height:1.4!important}
+[style*="grid-template-columns: repeat(4"]{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+[style*="grid-template-columns: repeat(3"]:not([style*="padding: 4px"]),[style*="grid-template-columns: repeat(2"]:not([style*="padding: 4px"]),[style*="repeat(auto-fit, minmax(220px"]{grid-template-columns:minmax(0,1fr)!important}
+[style*="1.4fr) minmax(0px, 1fr) minmax(0px, 1.6fr) auto"]{grid-template-columns:minmax(0,1fr) auto!important}
+[style*="minmax(150px, 200px) 1fr"],[style*="minmax(150px, auto) 1fr"]{grid-template-columns:minmax(0,1fr)!important;row-gap:2px!important}
+span:has(> svg[width="22"][height="6"]){display:none!important}
+#plan > section:first-child{display:none!important}
+}
+</style>
+</helmet>
+<div style="min-height: 1200px; display: flex; flex-direction: column; background: #fafaf9; color: #1c1917; font-family: 'Geist', ui-sans-serif, system-ui, sans-serif; font-size: 15px; line-height: 1.5;">
+
+<header class="mi-top" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 24px; border-bottom: 1px solid #e7e5e4; flex-wrap: wrap;">
+<a href="#" style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500; color: #1c1917; text-decoration: none;"><x-import component-from-global-scope="MyInfra.Icon" icon="{{icons.Boxes}}"></x-import>MyInfra</a>
+<div style="display: flex; align-items: center; gap: 12px;">
+<button type="button" class="mi-search" aria-label="Rechercher" style="display: inline-flex; align-items: center; gap: 8px; padding: 4px 6px 4px 10px; border: 1px solid #e7e5e4; border-radius: 6px; background: #ffffff; color: #57534e; min-width: 240px;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><span style="flex: 1; text-align: left;">Rechercher une app, un serveur…</span><kbd style="font-family: 'Geist Mono', monospace; font-size: 12px; border: 1px solid #e7e5e4; border-radius: 4px; padding: 0 4px; color: #57534e;">⌘K</kbd></button>
+<select class="mi-lang" aria-label="Langue" style="background: transparent; border: 0; color: #1c1917; font: inherit;"><option>Français</option><option>English</option></select>
+<button type="button" aria-label="Thème sombre" style="display: inline-flex; padding: 4px; border: 0; border-radius: 6px; background: transparent; color: #1c1917;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg></button>
+</div>
+</header>
+
+<div style="display: flex; flex-wrap: wrap; flex: 1;">
+<aside class="mi-side" style="flex: 1 1 224px; max-width: 224px; box-sizing: border-box; border-right: 1px solid #e7e5e4; padding: 16px; display: flex; flex-direction: column; gap: 4px;">
+<nav aria-label="Navigation principale" style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
+<a class="nav" href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #57534e;"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg><span style="flex: 1;">Vue d'ensemble</span><span title="2 points à traiter" style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #92400e;"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 9999px; background: #92400e;"></span>2</span></a>
+<a class="nav" href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #57534e;"><rect width="7" height="7" x="3" y="3" rx="1"></rect><rect width="7" height="7" x="14" y="3" rx="1"></rect><rect width="7" height="7" x="14" y="14" rx="1"></rect><rect width="7" height="7" x="3" y="14" rx="1"></rect></svg><span style="flex: 1;">Applications</span><span style="font-size: 13px; color: #57534e;">8</span></a>
+<a class="nav" href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #57534e;"><rect x="16" y="16" width="6" height="6" rx="1"></rect><rect x="2" y="16" width="6" height="6" rx="1"></rect><rect x="9" y="2" width="6" height="6" rx="1"></rect><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"></path><path d="M12 12V8"></path></svg><span style="flex: 1;">Serveurs</span><span style="font-size: 13px; color: #57534e;">4</span></a>
+<a class="nav" href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #57534e;"><rect width="18" height="7" x="3" y="3" rx="1"></rect><rect width="9" height="7" x="3" y="14" rx="1"></rect><rect width="5" height="7" x="16" y="14" rx="1"></rect></svg>Templates</a>
+<a class="nav" href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #57534e;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M12 7v5l4 2"></path></svg>Activité</a>
+<a class="nav" href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #57534e;"><circle cx="12" cy="12" r="10"></circle><path d="m16 12-4-4-4 4"></path><path d="M12 16V8"></path></svg>Mises à jour</a>
+<div style="margin-top: auto; border-top: 1px solid #e7e5e4; padding-top: 16px; display: flex; flex-direction: column; gap: 4px;">
+<a class="nav" href="#" aria-current="page" style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #1c1917; text-decoration: none; background: #f5f5f4;"><x-import component-from-global-scope="MyInfra.Icon" icon="{{icons.Settings}}" style="color: #57534e;"></x-import>Réglages</a>
+</div>
+</nav>
+<p style="margin: 8px 0 0; font-size: 11px; line-height: 1.25; color: #78716c;">Licence Apache-2.0</p>
+</aside>
+
+<nav class="mi-tabs" aria-label="Navigation principale" style="position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; grid-template-columns: repeat(5, minmax(0, 1fr)); background: #ffffff; border-top: 1px solid #e7e5e4;"><a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 56px; font-size: 11px; text-decoration: none; color: #57534e;"><span style="position: relative; display: inline-flex;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg></span><span style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px;">Vue d'ensemble</span></a><a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 56px; font-size: 11px; text-decoration: none; color: #57534e;"><span style="position: relative; display: inline-flex;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"></rect><rect width="7" height="7" x="14" y="3" rx="1"></rect><rect width="7" height="7" x="14" y="14" rx="1"></rect><rect width="7" height="7" x="3" y="14" rx="1"></rect></svg></span><span style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px;">Applications</span></a><a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 56px; font-size: 11px; text-decoration: none; color: #57534e;"><span style="position: relative; display: inline-flex;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="16" y="16" width="6" height="6" rx="1"></rect><rect x="2" y="16" width="6" height="6" rx="1"></rect><rect x="9" y="2" width="6" height="6" rx="1"></rect><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"></path><path d="M12 12V8"></path></svg></span><span style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px;">Serveurs</span></a><a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 56px; font-size: 11px; text-decoration: none; color: #57534e;"><span style="position: relative; display: inline-flex;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M12 7v5l4 2"></path></svg></span><span style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px;">Activité</span></a><a href="#" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 56px; font-size: 11px; text-decoration: none; color: #1c1917;"><span style="position: relative; display: inline-flex;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16"></path><path d="M4 12h16"></path><path d="M4 18h16"></path></svg><span aria-label="Mises à jour en attente" style="position: absolute; top: -3px; right: -6px; width: 8px; height: 8px; border-radius: 9999px; background: #1d4ed8;"></span></span><span style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px;">Plus</span></a></nav>
+<main class="mi-main" style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 48px 24px;">
+<div style="max-width: 896px; margin: 0 auto;">
+<nav aria-label="Fil d'Ariane" style="margin-bottom: 24px; display: flex; gap: 8px; color: #57534e;"><a href="#" style="color: #1d4ed8; text-decoration: none;">Réglages</a><span aria-hidden="true">/</span><a href="Proposition-Git.dc.html" style="color: #1d4ed8; text-decoration: none;">Dépôts Git</a><span aria-hidden="true">/</span><span style="color: #1c1917;">Connecter</span></nav>
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; margin-bottom: 40px;">
+<h1 style="margin: 0; font-size: 24px; font-weight: 500; line-height: 1.33;">Connecter un compte Git</h1>
+<x-import component-from-global-scope="MyInfra.TextButton">Annuler</x-import>
+</div>
+
+<form style="max-width: 720px; display: flex; flex-direction: column; gap: 40px;">
+<section style="display: flex; flex-direction: column; gap: 12px;">
+<h2 style="margin: 0; font-size: 16px; font-weight: 400;"><span style="color: #78716c;">1</span>  Où est votre code ?</h2>
+<div role="radiogroup" aria-label="Hôte Git" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+<button type="button" role="radio" aria-checked="true" class="pick" style="display: flex; align-items: center; gap: 12px; text-align: left; padding: 12px; border-radius: 6px; background: #ffffff; border: 1px solid #1c1917; box-shadow: inset 0 0 0 1px #1c1917; color: #1c1917;"><span aria-hidden="true" style="width: 32px; height: 32px; border-radius: 6px; border: 1px solid #e7e5e4; display: inline-flex; align-items: center; justify-content: center; font-weight: 500;">G</span><span style="display: flex; flex-direction: column;"><span>GitHub</span><span style="font-size: 13px; color: #57534e;">github.com</span></span></button>
+<button type="button" role="radio" aria-checked="false" class="pick" style="display: flex; align-items: center; gap: 12px; text-align: left; padding: 12px; border-radius: 6px; background: #ffffff; border: 1px solid #e7e5e4; color: #1c1917;"><span aria-hidden="true" style="width: 32px; height: 32px; border-radius: 6px; border: 1px solid #e7e5e4; display: inline-flex; align-items: center; justify-content: center; font-weight: 500;">G</span><span style="display: flex; flex-direction: column;"><span>GitLab</span><span style="font-size: 13px; color: #57534e;">gitlab.com ou votre instance</span></span></button>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 12px;">
+<h2 style="margin: 0; font-size: 16px; font-weight: 400;"><span style="color: #78716c;">2</span>  Créez une clé en lecture seule</h2>
+<div style="background: #ffffff; border: 1px solid #e7e5e4; border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+<a href="#" style="display: inline-flex; align-items: center; gap: 6px; color: #1c1917; align-self: flex-start;">Ouvrir « Nouveau jeton » sur GitHub<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg></a>
+<ol style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px;">
+<li>Créez un jeton <mark>fine-grained</mark> et donnez-lui accès aux dépôts à déployer.</li>
+<li>Dans <mark>Repository permissions</mark>, mettez <mark>Contents</mark> sur <mark>Read-only</mark>.</li>
+<li>Copiez le jeton tout de suite : GitHub ne le réaffiche pas.</li>
+</ol>
+<span style="font-size: 13px; color: #57534e; border-top: 1px solid #e7e5e4; padding-top: 12px;">MyInfra lit seulement le code. Il ne peut ni écrire dans vos dépôts ni changer leurs réglages.</span>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 12px;">
+<h2 style="margin: 0; font-size: 16px; font-weight: 400;"><span style="color: #78716c;">3</span>  Collez la clé</h2>
+<div style="display: flex; gap: 8px; align-items: center;">
+<div style="flex: 1;"><x-import component-from-global-scope="MyInfra.Input" type="password" default-value="github_pat_xxxxxxxxxxxxxxxxxxxxxxxx" aria-label="Jeton"></x-import></div>
+<x-import component-from-global-scope="MyInfra.Button" variant="secondary">Vérifier</x-import>
+</div>
+<div role="status" style="display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border: 1px solid #e7e5e4; border-radius: 6px; background: #ffffff;">
+<span style="display: inline-flex; align-items: center; gap: 6px; color: #3f6212;"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 9999px; background: #3f6212;"></span>Connexion réussie · compte acme · 12 dépôts visibles</span>
+<span style="font-family: 'Geist Mono', monospace; font-size: 13px; color: #57534e;">acme/site-vitrine · acme/billing-api · acme/docs · et 9 autres</span>
+<span style="font-size: 13px; color: #92400e;">Le jeton expire le 27 janvier 2027. MyInfra vous préviendra une semaine avant.</span>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 12px;">
+<h2 style="margin: 0; font-size: 16px; font-weight: 400;"><span style="color: #78716c;">4</span>  Nom</h2>
+<x-import component-from-global-scope="MyInfra.Field" label="Nom du compte"><x-import component-from-global-scope="MyInfra.Input" default-value="GitHub acme"></x-import></x-import>
+</section>
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; border-top: 1px solid #e7e5e4; padding-top: 24px;">
+<x-import component-from-global-scope="MyInfra.Button">Enregistrer</x-import>
+<span style="font-size: 13px; color: #57534e;">La clé est chiffrée et ne s'affiche plus ensuite.</span>
+</div>
+</form>
+</div>
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1200}}'>
+class Component extends DCLogic {
+  componentDidMount() { if (window.MyInfra && window.MyInfra.setLang) window.MyInfra.setLang('fr'); }
+  renderVals() {
+    var M = window.MyInfra || {};
+    return { icons: M.icons || {} };
+  }
+}
+</script>
+</body>
+</html>

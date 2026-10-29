@@ -1,0 +1,585 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Proposition-Activite.dc.html": {
+      "expand": "fill",
+      "h": 1200,
+      "is_interactive": true,
+      "title": "Activité",
+      "w": 1440,
+      "x": 10640,
+      "y": 0
+    },
+    "Proposition-Applications.dc.html": {
+      "expand": "fill",
+      "h": 1180,
+      "is_interactive": true,
+      "title": "Applications",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "Proposition-Ensemble.dc.html": {
+      "expand": "fill",
+      "h": 1080,
+      "is_interactive": true,
+      "title": "Vue d'ensemble",
+      "w": 1440,
+      "x": 9120,
+      "y": 0
+    },
+    "Proposition-MAJ.dc.html": {
+      "expand": "fill",
+      "h": 1280,
+      "title": "Mises à jour",
+      "w": 1440,
+      "x": 12160,
+      "y": 0
+    },
+    "Proposition-Nouvelle.dc.html": {
+      "expand": "fill",
+      "h": 1200,
+      "is_interactive": true,
+      "title": "Nouvelle application",
+      "w": 1440,
+      "x": 3040,
+      "y": 0
+    },
+    "Proposition-Reglages.dc.html": {
+      "expand": "fill",
+      "h": 1180,
+      "title": "Réglages",
+      "w": 1440,
+      "x": 13680,
+      "y": 0
+    },
+    "Proposition-Serveurs.dc.html": {
+      "expand": "fill",
+      "h": 1180,
+      "title": "Serveurs",
+      "w": 1440,
+      "x": 4560,
+      "y": 0
+    },
+    "Proposition-Suivi.dc.html": {
+      "expand": "fill",
+      "h": 1080,
+      "title": "Suivi d'un template",
+      "w": 1440,
+      "x": 7600,
+      "y": 0
+    },
+    "Proposition-Templates.dc.html": {
+      "expand": "fill",
+      "h": 1240,
+      "is_interactive": true,
+      "title": "Templates",
+      "w": 1440,
+      "x": 6080,
+      "y": 0
+    },
+    "Proposition-NouveauServeur.dc.html": {
+      "expand": "fill",
+      "h": 1240,
+      "is_interactive": true,
+      "title": "Nouveau serveur",
+      "w": 1440,
+      "x": 0,
+      "y": 2300
+    },
+    "Proposition-Article.dc.html": {
+      "expand": "fill",
+      "h": 1180,
+      "title": "Article de la bibliothèque",
+      "w": 1440,
+      "x": 1520,
+      "y": 2300
+    },
+    "Proposition-Formulaire.dc.html": {
+      "expand": "fill",
+      "h": 1500,
+      "is_interactive": true,
+      "title": "Installer une application",
+      "w": 1440,
+      "x": 3040,
+      "y": 2300
+    },
+    "Proposition-SourceImage.dc.html": {
+      "expand": "fill",
+      "h": 1200,
+      "title": "Depuis une image",
+      "w": 1440,
+      "x": 4560,
+      "y": 2300
+    },
+    "Proposition-Installation.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "title": "Installation en cours",
+      "w": 1440,
+      "x": 6080,
+      "y": 2300
+    },
+    "Proposition-Providers.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "title": "Hébergeurs",
+      "w": 1440,
+      "x": 0,
+      "y": 4400
+    },
+    "Proposition-ProviderAjout.dc.html": {
+      "expand": "fill",
+      "h": 1300,
+      "is_interactive": true,
+      "title": "Connecter un hébergeur",
+      "w": 1440,
+      "x": 1520,
+      "y": 4400
+    },
+    "Proposition-DNS.dc.html": {
+      "expand": "fill",
+      "h": 1400,
+      "is_interactive": true,
+      "title": "Domaines (DNS et enregistrements)",
+      "w": 1440,
+      "x": 3040,
+      "y": 4400
+    },
+    "Proposition-Images.dc.html": {
+      "expand": "fill",
+      "h": 1240,
+      "title": "Images (registres et images importées)",
+      "w": 1440,
+      "x": 9120,
+      "y": 4400
+    },
+    "Proposition-APIMCP.dc.html": {
+      "expand": "fill",
+      "h": 1400,
+      "is_interactive": true,
+      "title": "API et MCP",
+      "w": 1440,
+      "x": 10640,
+      "y": 4400
+    },
+    "Proposition-PaquetDebut.dc.html": {
+      "expand": "fill",
+      "h": 1100,
+      "title": "Nouveau paquet, départ",
+      "w": 1440,
+      "x": 0,
+      "y": 6400
+    },
+    "Proposition-PaquetPlan.dc.html": {
+      "expand": "fill",
+      "h": 1500,
+      "is_interactive": true,
+      "title": "Éditeur de paquet (page unique, plan fixe)",
+      "w": 1440,
+      "x": 1520,
+      "y": 6400
+    },
+    "Proposition-DNSAjout.dc.html": {
+      "expand": "fill",
+      "h": 1240,
+      "title": "Connecter un compte DNS",
+      "w": 1440,
+      "x": 4560,
+      "y": 4400
+    },
+    "Proposition-Git.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "title": "Dépôts Git",
+      "w": 1440,
+      "x": 6080,
+      "y": 4400
+    },
+    "Proposition-GitAjout.dc.html": {
+      "expand": "fill",
+      "h": 1200,
+      "title": "Connecter un compte Git",
+      "w": 1440,
+      "x": 7600,
+      "y": 4400
+    },
+    "Proposition-AppPlan.dc.html": {
+      "expand": "fill",
+      "h": 1600,
+      "is_interactive": true,
+      "title": "Fiche application (plan simplifié, tous les pods en option)",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "Mobile-Ensemble.dc.html": {
+      "expand": "fill",
+      "h": 891,
+      "title": "Vue d'ensemble · mobile",
+      "w": 390,
+      "x": 0,
+      "y": 8800
+    },
+    "Mobile-Applications.dc.html": {
+      "expand": "fill",
+      "h": 1029,
+      "title": "Applications · mobile",
+      "w": 390,
+      "x": 470,
+      "y": 8800
+    },
+    "Mobile-AppPlan.dc.html": {
+      "expand": "fill",
+      "h": 1808,
+      "title": "Fiche application · mobile",
+      "w": 390,
+      "x": 940,
+      "y": 8800
+    },
+    "Mobile-AppService.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "title": "Service d’une application · mobile",
+      "w": 390,
+      "x": 1410,
+      "y": 8800
+    },
+    "Mobile-Nouvelle.dc.html": {
+      "expand": "fill",
+      "h": 977,
+      "title": "Nouvelle application · mobile",
+      "w": 390,
+      "x": 1880,
+      "y": 8800
+    },
+    "Mobile-Serveurs.dc.html": {
+      "expand": "fill",
+      "h": 887,
+      "title": "Serveurs · mobile",
+      "w": 390,
+      "x": 2350,
+      "y": 8800
+    },
+    "Mobile-Activite.dc.html": {
+      "expand": "fill",
+      "h": 911,
+      "title": "Activité · mobile",
+      "w": 390,
+      "x": 2820,
+      "y": 8800
+    },
+    "Mobile-Plus.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "title": "Menu Plus · mobile",
+      "w": 390,
+      "x": 3290,
+      "y": 8800
+    },
+    "Mobile-Templates.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "title": "Templates · mobile",
+      "w": 390,
+      "x": 3760,
+      "y": 8800
+    },
+    "Mobile-Suivi.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "title": "Suivi d'un template · mobile",
+      "w": 390,
+      "x": 4230,
+      "y": 8800
+    },
+    "Mobile-MAJ.dc.html": {
+      "expand": "fill",
+      "h": 1033,
+      "title": "Mises à jour · mobile",
+      "w": 390,
+      "x": 4700,
+      "y": 8800
+    },
+    "Mobile-Reglages.dc.html": {
+      "expand": "fill",
+      "h": 1610,
+      "title": "Réglages · mobile",
+      "w": 390,
+      "x": 5170,
+      "y": 8800
+    },
+    "Mobile-NouveauServeur.dc.html": {
+      "expand": "fill",
+      "h": 1170,
+      "title": "Nouveau serveur · mobile",
+      "w": 390,
+      "x": 0,
+      "y": 11208
+    },
+    "Mobile-Article.dc.html": {
+      "expand": "fill",
+      "h": 915,
+      "title": "Article de la bibliothèque · mobile",
+      "w": 390,
+      "x": 470,
+      "y": 11208
+    },
+    "Mobile-Formulaire.dc.html": {
+      "expand": "fill",
+      "h": 945,
+      "title": "Installer une application · mobile",
+      "w": 390,
+      "x": 940,
+      "y": 11208
+    },
+    "Mobile-SourceImage.dc.html": {
+      "expand": "fill",
+      "h": 963,
+      "title": "Depuis une image · mobile",
+      "w": 390,
+      "x": 1410,
+      "y": 11208
+    },
+    "Mobile-Installation.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "title": "Installation en cours · mobile",
+      "w": 390,
+      "x": 1880,
+      "y": 11208
+    },
+    "Mobile-Providers.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "title": "Hébergeurs · mobile",
+      "w": 390,
+      "x": 0,
+      "y": 12978
+    },
+    "Mobile-ProviderAjout.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "title": "Connecter un hébergeur · mobile",
+      "w": 390,
+      "x": 470,
+      "y": 12978
+    },
+    "Mobile-DNS.dc.html": {
+      "expand": "fill",
+      "h": 966,
+      "title": "Domaines (DNS et enregistrements) · mobile",
+      "w": 390,
+      "x": 940,
+      "y": 12978
+    },
+    "Mobile-DNSAjout.dc.html": {
+      "expand": "fill",
+      "h": 899,
+      "title": "Connecter un compte DNS · mobile",
+      "w": 390,
+      "x": 1410,
+      "y": 12978
+    },
+    "Mobile-Git.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "title": "Dépôts Git · mobile",
+      "w": 390,
+      "x": 1880,
+      "y": 12978
+    },
+    "Mobile-GitAjout.dc.html": {
+      "expand": "fill",
+      "h": 880,
+      "title": "Connecter un compte Git · mobile",
+      "w": 390,
+      "x": 2350,
+      "y": 12978
+    },
+    "Mobile-Images.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "title": "Images (registres et images importées) · mobile",
+      "w": 390,
+      "x": 2820,
+      "y": 12978
+    },
+    "Mobile-APIMCP.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "title": "API et MCP · mobile",
+      "w": 390,
+      "x": 3290,
+      "y": 12978
+    },
+    "Mobile-PaquetDebut.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "title": "Nouveau paquet, départ · mobile",
+      "w": 390,
+      "x": 0,
+      "y": 14544
+    },
+    "Mobile-PaquetPlan.dc.html": {
+      "expand": "fill",
+      "h": 1198,
+      "title": "Éditeur de paquet (page unique, plan fixe) · mobile",
+      "w": 390,
+      "x": 470,
+      "y": 14544
+    },
+    "Mobile-PaquetElement.dc.html": {
+      "expand": "fill",
+      "h": 844,
+      "title": "Élément d’un paquet · mobile",
+      "w": 390,
+      "x": 940,
+      "y": 14544
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-10-27T09:26:00Z",
+    "v": 1
+  },
+  "designSystems": [
+    {
+      "artifact": "https://claude.ai/code/artifact/65a406a1-0e39-4299-9d6f-e701f9426cb7",
+      "copiedAt": "2026-10-27T09:26:00Z",
+      "namespace": "myinfra",
+      "title": "MyInfra",
+      "version": "1793092934-e504"
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  },
+  "noteOrder": [
+    "titrePropositions",
+    "titreCreationPropositions",
+    "titreConnexionsPropositions",
+    "titrePaquetsPropositions",
+    "mobilePrincipales",
+    "mobileCreation",
+    "mobileConnexions",
+    "mobilePaquets"
+  ],
+  "notes": {
+    "titrePropositions": {
+      "kind": "title1",
+      "maxW": 15120,
+      "text": "Pages principales",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "titreCreationPropositions": {
+      "kind": "title1",
+      "maxW": 7520,
+      "text": "Créer un serveur et installer une application",
+      "w": 240,
+      "x": 0,
+      "y": 2000
+    },
+    "titreConnexionsPropositions": {
+      "kind": "title1",
+      "maxW": 12080,
+      "text": "Connexions : hébergeurs, domaines, Git, images, API et MCP",
+      "x": 0,
+      "y": 4100
+    },
+    "titrePaquetsPropositions": {
+      "kind": "title1",
+      "maxW": 2960,
+      "text": "Paquets : plan, services, stockage et sauvegardes",
+      "x": 0,
+      "y": 6100
+    },
+    "mobilePrincipales": {
+      "kind": "title1",
+      "maxW": 5560,
+      "text": "Mobile · pages principales",
+      "x": 0,
+      "y": 8500
+    },
+    "mobileCreation": {
+      "kind": "title1",
+      "maxW": 2270,
+      "text": "Mobile · créer un serveur et installer une application",
+      "x": 0,
+      "y": 10908
+    },
+    "mobileConnexions": {
+      "kind": "title1",
+      "maxW": 3680,
+      "text": "Mobile · connexions",
+      "x": 0,
+      "y": 12678
+    },
+    "mobilePaquets": {
+      "kind": "title1",
+      "maxW": 2000,
+      "text": "Mobile · paquets",
+      "x": 0,
+      "y": 14244
+    }
+  },
+  "order": [
+    "Proposition-Applications.dc.html",
+    "Proposition-AppPlan.dc.html",
+    "Proposition-Nouvelle.dc.html",
+    "Proposition-Serveurs.dc.html",
+    "Proposition-Templates.dc.html",
+    "Proposition-Suivi.dc.html",
+    "Proposition-Ensemble.dc.html",
+    "Proposition-Activite.dc.html",
+    "Proposition-MAJ.dc.html",
+    "Proposition-Reglages.dc.html",
+    "Proposition-NouveauServeur.dc.html",
+    "Proposition-Article.dc.html",
+    "Proposition-Formulaire.dc.html",
+    "Proposition-SourceImage.dc.html",
+    "Proposition-Installation.dc.html",
+    "Proposition-Providers.dc.html",
+    "Proposition-ProviderAjout.dc.html",
+    "Proposition-DNS.dc.html",
+    "Proposition-DNSAjout.dc.html",
+    "Proposition-Git.dc.html",
+    "Proposition-GitAjout.dc.html",
+    "Proposition-Images.dc.html",
+    "Proposition-APIMCP.dc.html",
+    "Proposition-PaquetDebut.dc.html",
+    "Proposition-PaquetPlan.dc.html",
+    "Mobile-Ensemble.dc.html",
+    "Mobile-Applications.dc.html",
+    "Mobile-AppPlan.dc.html",
+    "Mobile-AppService.dc.html",
+    "Mobile-Nouvelle.dc.html",
+    "Mobile-Serveurs.dc.html",
+    "Mobile-Activite.dc.html",
+    "Mobile-Plus.dc.html",
+    "Mobile-Templates.dc.html",
+    "Mobile-Suivi.dc.html",
+    "Mobile-MAJ.dc.html",
+    "Mobile-Reglages.dc.html",
+    "Mobile-NouveauServeur.dc.html",
+    "Mobile-Article.dc.html",
+    "Mobile-Formulaire.dc.html",
+    "Mobile-SourceImage.dc.html",
+    "Mobile-Installation.dc.html",
+    "Mobile-Providers.dc.html",
+    "Mobile-ProviderAjout.dc.html",
+    "Mobile-DNS.dc.html",
+    "Mobile-DNSAjout.dc.html",
+    "Mobile-Git.dc.html",
+    "Mobile-GitAjout.dc.html",
+    "Mobile-Images.dc.html",
+    "Mobile-APIMCP.dc.html",
+    "Mobile-PaquetDebut.dc.html",
+    "Mobile-PaquetPlan.dc.html",
+    "Mobile-PaquetElement.dc.html"
+  ],
+  "pages": [],
+  "title": "MyInfra — propositions UI/UX"
+}

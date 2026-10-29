@@ -1,0 +1,59 @@
+{
+ "v": 3,
+ "assetGroups": {
+  "Logos": {
+   "files": {
+    "myinfra-app-icon.png": {
+     "blob": "95ef7af4e27653e54791d146dd15a87c",
+     "name": "myinfra-app-icon.png",
+     "size": 25666,
+     "type": "image/png"
+    },
+    "myinfra-mark.svg": {
+     "blob": "ce2576ea2c7684061d83ea6d283e9f18",
+     "name": "myinfra-mark.svg",
+     "size": 596,
+     "type": "image/svg+xml"
+    }
+   },
+   "name": "Logos",
+   "order": [
+    "myinfra-mark.svg",
+    "myinfra-app-icon.png"
+   ],
+   "tile": "m"
+  }
+ },
+ "blobs": {},
+ "createdOnFiles": {
+  "at": "2026-10-27T09:15:35Z",
+  "v": 1
+ },
+ "docs": {
+  "readme": "project/README.md",
+  "sections": []
+ },
+ "groups": [
+  "Logos"
+ ],
+ "lastChange": {
+  "by": "Claude",
+  "at": "2026-10-29T15:30:00Z",
+  "via": "Claude Design · MyInfra propositions UI/UX",
+  "note": "Plan (bandes, liens, compaction), écrans de téléphone, ports exposés, noms des réglages"
+ },
+ "layout": "files",
+ "libraries": [
+  {
+   "name": "react",
+   "version": "18"
+  },
+  {
+   "name": "react-dom",
+   "version": "18"
+  }
+ ],
+ "namespace": "MyInfra",
+ "sections": {},
+ "title": "MyInfra"
+}

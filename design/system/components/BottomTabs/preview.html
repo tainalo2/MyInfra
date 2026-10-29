@@ -1,0 +1,17 @@
+<!-- @dsCard group="Téléphone" height=90 -->
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+body{margin:0;padding:12px;background:var(--color-canvas);font-family:var(--font-sans)}
+nav{width:390px;display:grid;grid-template-columns:repeat(5,1fr);background:var(--color-surface);border-top:1px solid var(--color-line)}
+a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:58px;font-size:11px;color:var(--color-faint);text-decoration:none}
+a.on{color:var(--color-ink);font-weight:500}
+svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+span{position:relative;display:inline-flex}
+b{position:absolute;top:-4px;right:-10px;min-width:16px;height:16px;border-radius:9999px;background:var(--color-warn);color:var(--color-canvas);font-size:10px;line-height:16px;text-align:center;font-weight:400}
+</style></head><body><nav>
+<a><span><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/></svg></span>Accueil</a>
+<a class="on"><span><svg viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></span>Apps</a>
+<a><span><svg viewBox="0 0 24 24"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></svg></span>Serveurs</a>
+<a><span><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg><b>1</b></span>Activité</a>
+<a><span><svg viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></svg></span>Plus</a>
+</nav></body></html>
