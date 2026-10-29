@@ -35,7 +35,9 @@ Règles :
 - Pour écrire un paquet, lisez la ressource myinfra://guide/packages et vérifiez le texte avec check_package avant de l'enregistrer. Un paquet de l'utilisateur s'enregistre avec create_package ; la bibliothèque (le catalogue) se publie dans son propre dépôt et n'est pas modifiée par ici.
 - Un paquet peut avoir plusieurs services publics : le premier est le principal (domains), les autres reçoivent leurs noms par service_domains, sinon une adresse donnée par MyInfra.
 - Les services qui montent un disque partagé tournent en une copie, sur un même nœud : à l'installation sur un cluster, choisissez ce nœud avec disk_node d'après la place libre (get_cluster_usage).
-- Les identifiants de provider, de DNS, de Git et de registre d'images s'ajoutent, se remplacent ou se retirent par les outils dédiés. Le secret s'écrit une fois et ne se relit jamais : ne le redemandez pas à MyInfra, ne le répétez pas dans ce que vous montrez, et un champ absent ne veut pas dire qu'il est vide. Un provider qui a encore des serveurs ne se retire pas.`
+- Les identifiants de provider, de DNS, de Git et de registre d'images s'ajoutent, se remplacent ou se retirent par les outils dédiés. Le secret s'écrit une fois et ne se relit jamais : ne le redemandez pas à MyInfra, ne le répétez pas dans ce que vous montrez, et un champ absent ne veut pas dire qu'il est vide. Un provider qui a encore des serveurs ne se retire pas.
+- Une machine avec carte graphique se cherche avec find_server_offers (min_gpus, gpu) : le résultat indique le nombre et le modèle.
+- Lancer un modèle (run_template) peut acheter ses machines : deux temps, comme un achat. Le dépôt d'un fichier (sauvegarde, archive d'image) et le téléchargement d'une clé privée se font dans l'interface.`
 
 type rpcMessage struct {
 	JSONRPC string          `json:"jsonrpc"`
@@ -444,6 +446,35 @@ func (c *mcpCall) send(method, path string, body, out any) error {
 }
 
 func (c *mcpCall) get(path string, out any) error { return c.send(http.MethodGet, path, nil, out) }
+
+// callJSON calls the API and renders its JSON answer. An empty answer is "Fait."
+func (c *mcpCall) callJSON(method, path string, body any) (string, error) {
+	var out any
+	if err := c.send(method, path, body, &out); err != nil {
+		return "", err
+	}
+	if out == nil {
+		return "Fait.", nil
+	}
+	return asJSON(out), nil
+}
+
+// callText calls the API and returns the body as text, for a YAML or JSON file.
+func (c *mcpCall) callText(method, path string, body any) (string, error) {
+	status, raw := c.do(method, path, body)
+	if status >= 400 {
+		var refusal struct {
+			Error    string          `json:"error"`
+			Problems json.RawMessage `json:"problems"`
+		}
+		_ = json.Unmarshal(raw, &refusal)
+		if refusal.Error == "" {
+			refusal.Error = fmt.Sprintf("MyInfra a refusé (%d).", status)
+		}
+		return "", &toolError{Message: refusal.Error, Problems: refusal.Problems, Status: status}
+	}
+	return strings.TrimSpace(string(raw)), nil
+}
 
 // recorder keeps the answer of an inner request.
 type recorder struct {

@@ -25,6 +25,8 @@ func offerWantSchema() map[string]any {
 		"min_vcpu":          whole("Processeurs virtuels au moins.", 1, 512),
 		"min_memory_gb":     number("Mémoire en Go au moins."),
 		"min_disk_gb":       whole("Disque en Go au moins ; un volume est ajouté si l'offre le permet.", 1, 100000),
+		"min_gpus":          whole("Cartes graphiques au moins. Absent : pas de contrainte.", 1, 64),
+		"gpu":               text("Modèle de carte, par exemple L4 ou A40. Absent : n'importe quelle carte, si min_gpus est fixé."),
 		"max_monthly_price": number("Prix mensuel maximum par machine."),
 		"currency":          choice("Devise du prix maximum (EUR par défaut). Les prix ne sont jamais convertis.", "EUR", "USD"),
 		"model":             text("Modèle exact, par son nom ou son identifiant (CX33, b3-8, s-2vcpu-4gb)."),
@@ -41,6 +43,8 @@ type offerWantArgs struct {
 	MinVCPU         int      `json:"min_vcpu"`
 	MinMemoryGB     float64  `json:"min_memory_gb"`
 	MinDiskGB       int      `json:"min_disk_gb"`
+	MinGPUs         int      `json:"min_gpus"`
+	GPU             string   `json:"gpu"`
 	MaxMonthlyPrice float64  `json:"max_monthly_price"`
 	Currency        string   `json:"currency"`
 	Model           string   `json:"model"`
@@ -51,7 +55,7 @@ type offerWantArgs struct {
 func (w offerWantArgs) want() offerfind.Want {
 	return offerfind.Want{
 		Providers: w.Providers, Countries: w.Countries, Continents: w.Continents, Locations: w.Locations,
-		MinVCPU: w.MinVCPU, MinMemoryGB: w.MinMemoryGB, MinDiskGB: w.MinDiskGB, MaxMonthly: w.MaxMonthlyPrice,
+		MinVCPU: w.MinVCPU, MinMemoryGB: w.MinMemoryGB, MinDiskGB: w.MinDiskGB, MinGPUs: w.MinGPUs, GPU: w.GPU, MaxMonthly: w.MaxMonthlyPrice,
 		Currency: w.Currency, Model: w.Model, Period: w.Period, Quantity: w.Quantity,
 	}
 }
@@ -61,6 +65,10 @@ func matchBrief(m offerfind.Match) map[string]any {
 		"account": m.Account, "provider": m.Provider, "model": m.Offer.Name, "location": m.Location.ID,
 		"vcpu": m.Offer.VCPU, "memoryGb": float64(m.Offer.MemoryMB) / 1024, "diskGb": m.DiskGB,
 		"period": m.Period, "monthly": moneyText(m.Monthly, m.Currency),
+	}
+	if m.Offer.GPUs > 0 {
+		out["gpus"] = m.Offer.GPUs
+		out["gpu"] = m.Offer.GPU
 	}
 	if m.Offer.ID != m.Offer.Name {
 		out["modelId"] = m.Offer.ID
@@ -102,7 +110,7 @@ func mcpOrderTools() []mcpTool {
 	return []mcpTool{
 		{
 			Name: "find_server_offers", Title: "Chercher des machines à acheter", Role: store.RoleRead,
-			Description: "Cherche, chez les comptes providers enregistrés, les offres qui respectent les contraintes (provider, pays, continent, lieu, processeur, mémoire, disque, prix maximum, modèle exact), de la moins chère à la plus chère. Si aucune ne convient, rend les plus proches avec ce qui leur manque, et les raisons (compte absent, modèle inconnu…). Ne fait aucun achat.",
+			Description: "Cherche, chez les comptes providers enregistrés, les offres qui respectent les contraintes (provider, pays, continent, lieu, processeur, mémoire, disque, cartes graphiques, prix maximum, modèle exact), de la moins chère à la plus chère. Si aucune ne convient, rend les plus proches avec ce qui leur manque, et les raisons (compte absent, modèle inconnu…). Ne fait aucun achat.",
 			Schema:      object(nil, findSchema),
 			Routes:      []string{"POST /api/offers/search"},
 			Run: func(c *mcpCall, raw json.RawMessage) (string, error) {

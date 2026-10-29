@@ -53,12 +53,18 @@ func (t mcpTool) listing() map[string]any {
 func (a *API) mcpTools() []mcpTool {
 	var out []mcpTool
 	out = append(out, mcpReadTools()...)
+	out = append(out, mcpMachineReadTools()...)
 	out = append(out, mcpRegistryTools()...)
 	out = append(out, mcpAccountTools()...)
 	out = append(out, mcpPackageTools()...)
+	out = append(out, mcpLibraryTools()...)
 	out = append(out, mcpAppTools()...)
 	out = append(out, mcpInfraTools()...)
+	out = append(out, mcpMachineWriteTools()...)
+	out = append(out, mcpTemplateTools()...)
+	out = append(out, mcpUpdateTools()...)
 	out = append(out, mcpDNSTools()...)
+	out = append(out, mcpCopyTools()...)
 	return out
 }
 
@@ -107,6 +113,12 @@ func list(description string, items map[string]any) map[string]any {
 
 func textMap(description string) map[string]any {
 	return map[string]any{"type": "object", "description": description, "additionalProperties": map[string]any{"type": "string"}}
+}
+
+// loose is an object whose fields are not listed one by one: a template body,
+// a package or a list of services. Unknown fields are kept and checked by the API.
+func loose(description string) map[string]any {
+	return map[string]any{"type": "object", "description": description, "additionalProperties": true}
 }
 
 var confirmationArg = text("Code de confirmation rendu par le premier appel, après l'accord explicite de l'utilisateur. Absent au premier appel.")
