@@ -68,6 +68,7 @@ type vultrPlan struct {
 	Type      string   `json:"type"`
 	Locations []string `json:"locations"`
 	GPU       string   `json:"gpu_brand"`
+	GPUCount  int      `json:"gpu_count"`
 	Costs     map[string]struct {
 		Monthly float64 `json:"monthly_cost"`
 		Hourly  float64 `json:"hourly_cost"`
@@ -130,9 +131,11 @@ func parseVultr(regionPages, planPages [][]byte, location string) (Catalog, erro
 			if monthlyText == "" {
 				monthlyText = monthlyFromHourly(hourlyText)
 			}
+			count := vultrGPUs(plan)
 			offers = append(offers, Offer{
 				ID: plan.ID, Name: plan.ID, Location: chosen,
 				VCPU: plan.VCPU, MemoryMB: plan.RAM, DiskGB: plan.Disk,
+				GPUs: count, GPU: vultrModel(plan, count),
 				Hourly: hourlyText, Monthly: monthlyText,
 			})
 		}
@@ -151,10 +154,7 @@ func vultrUsable(plan vultrPlan, location string) bool {
 		return false
 	}
 	kind := strings.ToLower(plan.Type)
-	if strings.Contains(kind, "gpu") || kind == "vcg" || kind == "vbm" {
-		return false
-	}
-	if plan.GPU != "" && !strings.EqualFold(plan.GPU, "none") {
+	if kind == "vbm" {
 		return false
 	}
 	if len(plan.Locations) == 0 {
@@ -166,4 +166,23 @@ func vultrUsable(plan vultrPlan, location string) bool {
 		}
 	}
 	return false
+}
+
+func vultrGPUs(plan vultrPlan) int {
+	if plan.GPUCount > 0 {
+		return plan.GPUCount
+	}
+	kind := strings.ToLower(plan.Type)
+	if strings.Contains(kind, "gpu") || kind == "vcg" || (plan.GPU != "" && !strings.EqualFold(plan.GPU, "none")) {
+		return 1
+	}
+	return 0
+}
+
+func vultrModel(plan vultrPlan, count int) string {
+	model := gpuModel(count, plan.ID, plan.GPU)
+	if model == "GPU" && plan.GPU != "" && !strings.EqualFold(plan.GPU, "none") && !strings.EqualFold(plan.GPU, "nvidia") {
+		return plan.GPU
+	}
+	return model
 }

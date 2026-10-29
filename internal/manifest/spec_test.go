@@ -249,3 +249,38 @@ func TestRenderPublishesExposedPortsOnTheNodes(t *testing.T) {
 		t.Fatal("two Services share a name")
 	}
 }
+
+func TestRenderReservesAGPU(t *testing.T) {
+	raw := Render(App{
+		ID: specApp,
+		Services: []Service{
+			{Name: "web", Image: "ghcr.io/acme/app:1", Published: true, Listen: 8080, Replicas: 1, Spec: spec.Service{
+				Resources: &spec.Resources{GPU: 1},
+			}},
+			{Name: "api", Image: "ghcr.io/acme/api:1", Replicas: 1},
+		},
+	})
+	if strings.Contains(raw, "privileged") || strings.Contains(raw, "/dev/nvidia") {
+		t.Fatal(raw)
+	}
+	docs := documents(t, raw)
+	pod := dig(docs["Deployment/web"], "spec", "template", "spec")
+	if dig(pod, "runtimeClassName") != "nvidia" || dig(pod, "containers", 0, "resources", "limits", "nvidia.com/gpu") != 1 {
+		t.Fatal(raw)
+	}
+	other := dig(docs["Deployment/api"], "spec", "template", "spec", "containers", 0, "resources")
+	if other != nil {
+		t.Fatal(raw)
+	}
+	backed := Render(App{
+		ID: specApp,
+		Services: []Service{
+			{Name: "web", Image: "app:1", Published: true, Disk: true, Spec: spec.Service{
+				Resources: &spec.Resources{GPU: 1},
+			}, Backup: &Backup{Databases: []string{"/data/db.sqlite"}, Bucket: "bucket", KeyID: "GK000000000000000000000000", Secret: strings.Repeat("0", 64)}},
+		},
+	})
+	if strings.Count(backed, "nvidia.com/gpu: 1") != 1 {
+		t.Fatal(backed)
+	}
+}

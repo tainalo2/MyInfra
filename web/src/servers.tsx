@@ -8,7 +8,7 @@ import { CancelDeployment } from "./deployments";
 import { UsageMeters } from "./meters";
 import { hourlyRate, money, podCpu, size, usageText } from "./measure";
 import { HostingFields, HostingMark, ServerHosting, ServerSSHUser, emptyHosting, hostingLabel } from "./hosting";
-import { OfferFields, OfferStorage, cheapestOffer, chosenStorage, formatPrice, memory } from "./offers";
+import { OfferFields, OfferStorage, cheapestOffer, chosenStorage, formatPrice, machineLine } from "./offers";
 import { knownPlaces, placeLabel, placeOf } from "./places";
 import { ProviderSelect } from "./provider-select";
 import { TofuFiles } from "./tofu";
@@ -557,7 +557,7 @@ export function ServerCard({
         {placeLabel(server.plan?.location) || placeLabel(server.place) ? <p className="mt-1 truncate text-muted">{placeLabel(server.plan?.location) || placeLabel(server.place)}</p> : null}
         {server.plan ? (
           <p className="mt-1 truncate text-muted">
-            {server.plan.name} · {server.plan.vcpu} vCPU · {memory(server.plan.memoryMb)}
+            {machineLine(server.plan.name, server.plan.vcpu, server.plan.memoryMb, server.plan.gpus, server.plan.gpu)}
           </p>
         ) : null}
         {usageLoading ? <Skeleton className="mt-2 h-4 w-full" /> : usage ? <p className="mt-1 truncate text-muted">{usage.measured ? usageText(usage.cpu, usage.memory, usage.disk) : text("common.noMeasure")}</p> : null}
@@ -590,7 +590,7 @@ export function ServerCard({
       ) : null}
       {server.plan ? (
         <p className="text-muted">
-          {server.plan.name} · {server.plan.vcpu} vCPU · {memory(server.plan.memoryMb)}
+          {machineLine(server.plan.name, server.plan.vcpu, server.plan.memoryMb, server.plan.gpus, server.plan.gpu)}
           {server.plan.diskGb > 0 ? ` · ${server.plan.diskGb} ${text("unit.gb")}` : ""}
           {server.plan.storageGb ? ` · ${server.plan.storageLabel} ${server.plan.storageGb} ${text("unit.gb")}` : ""}
           {" · "}
@@ -675,7 +675,7 @@ export function ServerPage() {
       </span>
     )],
     ...(server.clusterName ? [[text("server.cluster"), `${server.clusterName}${server.controlPlane ? ` · ${text("server.controlPlaneShort")}` : ""}`] as [string, ReactNode]] : []),
-    ...(server.plan ? [[text("server.offer"), `${server.plan.name} · ${server.plan.vcpu} vCPU · ${memory(server.plan.memoryMb)}${server.plan.diskGb > 0 ? ` · ${server.plan.diskGb} ${text("unit.gb")}` : ""}`] as [string, ReactNode]] : []),
+    ...(server.plan ? [[text("server.offer"), machineLine(server.plan.name, server.plan.vcpu, server.plan.memoryMb, server.plan.gpus, server.plan.gpu, server.plan.diskGb)] as [string, ReactNode]] : []),
     ...(placeLabel(server.plan?.location) || (!(canDeploy && !server.providerId) && placeLabel(server.place)) ? [[text("server.place"), placeLabel(server.plan?.location) || placeLabel(server.place)] as [string, ReactNode]] : []),
     ...(server.address ? [[text("server.address"), <span className="break-all font-mono text-[13px]">{server.address}</span>] as [string, ReactNode]] : []),
     [text("server.cost"), server.cost ? billText(server.cost, false, hourlyRate(server)) : text("bill.none")],

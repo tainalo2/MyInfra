@@ -105,7 +105,8 @@ spec:
 				i, BackupImage, db, name, mounts)
 		}
 	}
-	b.WriteString("      containers:\n" + containerHead(svc, false))
+	b.WriteString(runtimeClass(svc))
+	b.WriteString("      containers:\n" + containerHead(svc, false, true))
 	plain := svc
 	plain.Disk = false
 	writeContainerEnv(b, refs, plain, svc.Backup.Env)

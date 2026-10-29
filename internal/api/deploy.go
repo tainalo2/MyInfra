@@ -128,7 +128,7 @@ func (a *API) runDeploy(owner, id, name, token, providerID, clusterID, clusterNa
 		steps = deploy.Mark(steps, "ssh", "done", address)
 	}
 	if clusterID == "" {
-		a.finishAlone(ctx, owner, id, address, machineID, privateKey, publicKeys, name, steps)
+		a.finishAlone(ctx, owner, id, address, machineID, privateKey, publicKeys, name, steps, plan)
 		return
 	}
 	index, err := a.Store.EnsureWireGuardIndex(ctx, id)
@@ -140,6 +140,7 @@ func (a *API) runDeploy(owner, id, name, token, providerID, clusterID, clusterNa
 		Address: address, PrivateKey: privateKey, PublicKeys: publicKeys, Cluster: clusterName,
 		NodeName: deploy.NodeName(name), Role: "agent",
 		WGAddress: deploy.WireGuardIP(index) + "/24", NodeIP: deploy.WireGuardIP(index),
+		GPUs: plan.GPUs,
 	}
 	if self.ControlPlane {
 		host.Role = "server"
@@ -237,6 +238,12 @@ func (a *API) runDeploy(owner, id, name, token, providerID, clusterID, clusterNa
 				a.failDeploy(owner, id, steps, tag, address, machineID, err.Error())
 				return
 			}
+			if host.GPUs > 0 {
+				if _, err := deploy.SSH(ctx, verifyHost, deploy.KubectlApply(deploy.GPUPlugin())); err != nil {
+					a.failDeploy(owner, id, steps, tag, address, machineID, err.Error())
+					return
+				}
+			}
 		}
 		steps = deploy.Mark(steps, tag, "done", labels[tag])
 	}
@@ -247,7 +254,7 @@ func (a *API) runDeploy(owner, id, name, token, providerID, clusterID, clusterNa
 
 // finishAlone prepares a machine that runs alone: keys, then Docker and the
 // proxy. The applications are then delivered over SSH by the delivery loop.
-func (a *API) finishAlone(ctx context.Context, owner, id, address, machineID, privateKey string, publicKeys []string, name string, steps []deploy.Step) {
+func (a *API) finishAlone(ctx context.Context, owner, id, address, machineID, privateKey string, publicKeys []string, name string, steps []deploy.Step, plan catalog.Plan) {
 	host := deploy.Host{Address: address, PrivateKey: privateKey, PublicKeys: publicKeys, NodeName: deploy.NodeName(name), Role: "server"}
 	if !deploy.Done(steps, "keys") {
 		steps = deploy.Mark(steps, "keys", "running", "Dépôt des clés SSH.")
@@ -274,6 +281,26 @@ func (a *API) finishAlone(ctx context.Context, owner, id, address, machineID, pr
 			return
 		}
 		steps = deploy.Mark(steps, "docker", "done", "Docker et proxy prêts.")
+	}
+	if plan.GPUs > 0 && !deploy.Done(steps, "gpu") {
+		present := false
+		for _, step := range steps {
+			if step.ID == "gpu" {
+				present = true
+			}
+		}
+		if !present {
+			steps = append(steps, deploy.Step{ID: "gpu", Label: "Pilote NVIDIA", Status: "pending"})
+		}
+		steps = deploy.Mark(steps, "gpu", "running", "Installation du pilote.")
+		if err := a.saveDeploy(owner, id, "deploying", address, machineID, steps); err != nil {
+			return
+		}
+		if _, err := deploy.SSH(ctx, host, deploy.RunScript(deploy.GPUScript())); err != nil {
+			a.failDeploy(owner, id, steps, "gpu", address, machineID, err.Error())
+			return
+		}
+		steps = deploy.Mark(steps, "gpu", "done", "La carte répond.")
 	}
 	_ = a.saveDeploy(owner, id, "linked", address, machineID, steps)
 	a.noteServer(context.Background(), owner, id, "deploy.linked", "ok", "Le serveur est prêt.")

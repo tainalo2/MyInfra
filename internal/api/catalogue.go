@@ -210,6 +210,10 @@ func (a *API) installFrom(w http.ResponseWriter, r *http.Request, expand expandF
 		// Nothing public: the application only opens ports to the Internet.
 		in.Source = in.Services[0].Image
 	}
+	if err := a.reserveGPU(r.Context(), in.OwnerID, in.DestinationKind, in.ServerID, in.ClusterID, "", in.Services); err != nil {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
 	if err := a.checkExposed(r.Context(), in.DestinationKind, in.ServerID, in.ClusterID, in.ID, in.Services); err != nil {
 		writeError(w, http.StatusConflict, err.Error())
 		return

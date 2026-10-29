@@ -74,6 +74,10 @@ func TestKubernetesTalksOverWireGuard(t *testing.T) {
 	if agent["k3s_extra"] != "--node-ip 10.66.0.2 --flannel-iface myinfra" {
 		t.Fatal(agent["k3s_extra"])
 	}
+	gpu := playVars(Host{Address: "203.0.113.11", Role: "agent", NodeIP: WireGuardIP(2), GPUs: 2}, "k3s")
+	if gpu["k3s_extra"] != "--node-ip 10.66.0.2 --flannel-iface myinfra --node-label myinfra.io/gpu=2" || gpu["gpu_count"] != 2 {
+		t.Fatal(gpu["k3s_extra"], gpu["gpu_count"])
+	}
 	if steps := Steps(true); steps[3].ID != "wireguard" || steps[4].ID != "kubernetes" {
 		t.Fatalf("%+v", steps)
 	}
@@ -232,5 +236,14 @@ func TestInventoryUsesAnIsolatedHostKeyFile(t *testing.T) {
 		!strings.Contains(inventory, "UserKnownHostsFile=/tmp/run/known_hosts") ||
 		strings.Contains(inventory, "~/.ssh/known_hosts") {
 		t.Fatal(inventory)
+	}
+}
+
+func TestGPUPluginSelectsLabelledNodes(t *testing.T) {
+	raw := GPUPlugin()
+	for _, part := range []string{"kind: RuntimeClass", "handler: nvidia", "myinfra.io/gpu", "operator: Gt", "nvcr.io/nvidia/k8s-device-plugin:v0.17.1"} {
+		if !strings.Contains(raw, part) {
+			t.Fatal(part)
+		}
 	}
 }

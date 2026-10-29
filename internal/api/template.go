@@ -952,6 +952,9 @@ func (a *API) createRunApp(ctx context.Context, owner string, run *blueprint.Run
 		return err
 	}
 	in.Variables = sealed
+	if err := a.reserveGPU(ctx, owner, in.DestinationKind, in.ServerID, in.ClusterID, "", in.Services); err != nil {
+		return err
+	}
 	if err := a.Store.CreateApplication(ctx, in); err != nil {
 		return err
 	}

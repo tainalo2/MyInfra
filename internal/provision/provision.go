@@ -22,6 +22,9 @@ type Spec struct {
 	Location  string
 	OfferID   string
 	OfferName string
+	// GPUs is how many cards the offer includes. The image then follows
+	// what that provider accepts for a graphics machine.
+	GPUs      int
 	UserData  string
 	RootGB    int
 	ProjectID string

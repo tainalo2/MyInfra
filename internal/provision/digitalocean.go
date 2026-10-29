@@ -8,6 +8,15 @@ import (
 	"strings"
 )
 
+// digitalOceanImage stays Debian for a CPU droplet. A GPU droplet only
+// accepts an Ubuntu image.
+func digitalOceanImage(gpus int) string {
+	if gpus > 0 {
+		return "ubuntu-24-04-x64"
+	}
+	return "debian-13-x64"
+}
+
 func (c Client) createDigitalOcean(ctx context.Context, token string, spec Spec) (Machine, error) {
 	base := c.base(c.DigitalOceanBase, "https://api.digitalocean.com")
 	header := bearer(token)
@@ -15,7 +24,7 @@ func (c Client) createDigitalOcean(ctx context.Context, token string, spec Spec)
 		"name":      spec.Name,
 		"region":    spec.Location,
 		"size":      spec.OfferID,
-		"image":     "debian-13-x64",
+		"image":     digitalOceanImage(spec.GPUs),
 		"user_data": spec.UserData,
 		"ipv6":      false,
 	})

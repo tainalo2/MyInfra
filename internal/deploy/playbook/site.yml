@@ -13,7 +13,35 @@
     wireguard_peers: []
     k3s_extra: ""
     k3s_version: ""
+    gpu_count: 0
   tasks:
+    - name: Installer le pilote NVIDIA
+      ansible.builtin.script: gpu.sh
+      when: gpu_count | int > 0
+      tags: [kubernetes]
+
+    - name: Préparer le dossier containerd
+      ansible.builtin.file:
+        path: /var/lib/rancher/k3s/agent/etc/containerd
+        state: directory
+        mode: "0755"
+      when: gpu_count | int > 0
+      tags: [kubernetes]
+
+    - name: Préparer containerd pour NVIDIA
+      ansible.builtin.copy:
+        dest: /var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl
+        mode: "0644"
+        content: |
+          {{ "{{" }} template "base" . {{ "}}" }}
+
+          [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nvidia]
+            runtime_type = "io.containerd.runc.v2"
+          [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.nvidia.options]
+            BinaryName = "/usr/bin/nvidia-container-runtime"
+            SystemdCgroup = true
+      when: gpu_count | int > 0
+      tags: [kubernetes]
     - name: Attendre la fin de cloud-init
       ansible.builtin.command: cloud-init status --wait
       changed_when: false

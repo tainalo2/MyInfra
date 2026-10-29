@@ -479,10 +479,11 @@ spec:
 			if svc.Node != "" && nodeName.MatchString(svc.Node) {
 				fmt.Fprintf(&b, "      nodeSelector:\n        kubernetes.io/hostname: %q\n", svc.Node)
 			}
+			b.WriteString(runtimeClass(svc))
 			b.WriteString(moveAway())
 			b.WriteString(waitFor(svc, ports))
 			b.WriteString("      containers:\n")
-			b.WriteString(containerHead(svc, true))
+			b.WriteString(containerHead(svc, true, true))
 			writeContainerTail(&b, refs, svc, false)
 		}
 		// After the workload's last line: the budget is a document of its own.
@@ -676,8 +677,8 @@ spec:
       labels:
         myinfra.io/service: %s
 %s    spec:
-%s%s%s      containers:
-%s`, svc.Name, ns, svc.Name, listenOf(svc), listenOf(svc), svc.Name, ns, appID, svc.Name, replicas, svc.Name, svc.Name, configAnnotation(svc, true), spread(svc.Name), moveAway(), waitFor(svc, ports), containerHead(svc, true))
+%s%s%s%s      containers:
+%s`, svc.Name, ns, svc.Name, listenOf(svc), listenOf(svc), svc.Name, ns, appID, svc.Name, replicas, svc.Name, svc.Name, configAnnotation(svc, true), spread(svc.Name), runtimeClass(svc), moveAway(), waitFor(svc, ports), containerHead(svc, true, true))
 	writeContainerTail(b, refs, svc, true)
 	fmt.Fprintf(b, `  volumeClaimTemplates:
     - metadata:

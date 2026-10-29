@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -173,6 +174,8 @@ type Host struct {
 	// K3sVersion is installed on the node: the one of the cluster it joins,
 	// K3sVersion for a new cluster.
 	K3sVersion string
+	// GPUs is how many cards this machine was bought with.
+	GPUs int
 }
 
 func (h Host) user() string {
@@ -281,6 +284,9 @@ func Play(ctx context.Context, host Host, tag string) error {
 	if err := os.WriteFile(filepath.Join(dir, "firewall.sh"), []byte(script), 0o755); err != nil {
 		return fmt.Errorf("Ansible n'a pas pu préparer la machine.")
 	}
+	if err := os.WriteFile(filepath.Join(dir, "gpu.sh"), []byte(GPUScript()), 0o755); err != nil {
+		return fmt.Errorf("Ansible n'a pas pu préparer la machine.")
+	}
 	knownHostsPath := filepath.Join(dir, "known_hosts")
 	inventory := inventoryFor(host.Address, keyPath, knownHostsPath)
 	if err := os.WriteFile(filepath.Join(dir, "inventory"), []byte(inventory), 0o644); err != nil {
@@ -318,6 +324,12 @@ func playVars(host Host, engine string) map[string]any {
 			extra += " --tls-san " + host.Address
 		}
 	}
+	if host.GPUs > 0 && engine == "k3s" {
+		if extra != "" {
+			extra += " "
+		}
+		extra += "--node-label myinfra.io/gpu=" + strconv.Itoa(host.GPUs)
+	}
 	version := host.K3sVersion
 	if !ValidK3sVersion(version) {
 		version = K3sVersion
@@ -334,6 +346,7 @@ func playVars(host Host, engine string) map[string]any {
 		"k3s_token":         host.Token,
 		"wireguard_address": host.WGAddress,
 		"wireguard_peers":   peers,
+		"gpu_count":         host.GPUs,
 	}
 }
 

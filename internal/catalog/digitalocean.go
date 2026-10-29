@@ -57,6 +57,10 @@ type doSize struct {
 	PriceHourly  float64  `json:"price_hourly"`
 	PriceMonthly float64  `json:"price_monthly"`
 	Regions      []string `json:"regions"`
+	GPU          *struct {
+		Count int    `json:"count"`
+		Model string `json:"model"`
+	} `json:"gpu_info"`
 }
 
 func parseDigitalOcean(sizes []doSize, regionsBody []byte, location string) (Catalog, error) {
@@ -109,9 +113,11 @@ func parseDigitalOcean(sizes []doSize, regionsBody []byte, location string) (Cat
 		if hourly == "" && monthly != "" {
 			hourly = hourlyFromMonthly(monthly, 672)
 		}
+		gpus, model := digitalOceanGPU(size)
 		offers = append(offers, Offer{
 			ID: size.Slug, Name: size.Slug, Location: chosen,
 			VCPU: size.Vcpus, MemoryMB: size.Memory, DiskGB: size.Disk,
+			GPUs: gpus, GPU: model,
 			Hourly: hourly, Monthly: monthly, Storage: []Storage{volume},
 		})
 	}
@@ -133,6 +139,20 @@ func parseDigitalOcean(sizes []doSize, regionsBody []byte, location string) (Cat
 		Note:    "DigitalOcean facture à la seconde, avec un plafond au mois pour les offres groupées. Le volume coûte 0,10 $ par Gio et par mois. Prix en dollars.",
 		Offers:  offers,
 	}, nil
+}
+
+func digitalOceanGPU(size doSize) (int, string) {
+	if size.GPU != nil && size.GPU.Count > 0 {
+		model := size.GPU.Model
+		if model == "" {
+			model = gpuModel(size.GPU.Count, size.Slug)
+		}
+		return size.GPU.Count, model
+	}
+	if strings.Contains(strings.ToLower(size.Slug), "gpu") {
+		return 1, gpuModel(1, size.Slug)
+	}
+	return 0, ""
 }
 
 func digitalOceanVolume() Storage {

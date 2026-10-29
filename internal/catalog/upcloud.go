@@ -53,7 +53,7 @@ func parseUpCloud(plansBody, zonesBody, pricesBody []byte, location string) (Cat
 	}
 	offers := make([]Offer, 0)
 	for _, plan := range payload.Plans.Plan {
-		if plan.Name == "" || plan.Cores <= 0 || plan.GPU > 0 || plan.Storage <= 0 || strings.Contains(strings.ToUpper(plan.Name), "GPU") {
+		if plan.Name == "" || plan.Cores <= 0 || (plan.GPU <= 0 && plan.Storage <= 0) {
 			continue
 		}
 		hourly := prices[chosen][plan.Name]
@@ -63,6 +63,7 @@ func parseUpCloud(plansBody, zonesBody, pricesBody []byte, location string) (Cat
 		offers = append(offers, Offer{
 			ID: plan.Name, Name: plan.Name, Location: chosen,
 			VCPU: plan.Cores, MemoryMB: plan.Memory, DiskGB: plan.Storage,
+			GPUs: plan.GPU, GPU: gpuModel(plan.GPU, plan.Name),
 			Hourly: hourly, Monthly: monthlyFromHourly(hourly),
 		})
 	}

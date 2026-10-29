@@ -219,7 +219,7 @@ func waitItems(svc Service, ports map[string]int) string {
 // containerHead starts a service's container: its image, command, ports,
 // probes and reservations. probe adds the default readiness check; a health
 // check the service declares is always written.
-func containerHead(svc Service, probe bool) string {
+func containerHead(svc Service, probe, gpu bool) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "        - name: %s\n          image: %s\n", svc.Name, svc.Image)
 	if len(svc.Spec.Command) > 0 {
@@ -243,16 +243,43 @@ func containerHead(svc Service, probe bool) string {
 	if probe || svc.Spec.Health != nil {
 		b.WriteString(readiness(svc))
 	}
-	if r := svc.Spec.Resources; r != nil && (r.CPU != "" || r.Memory != "") {
-		b.WriteString("          resources:\n            requests:\n")
-		if r.CPU != "" {
-			fmt.Fprintf(&b, "              cpu: %s\n", r.CPU)
+	r := svc.Spec.Resources
+	cards := 0
+	if gpu && r != nil && r.GPU > 0 {
+		cards = r.GPU
+	}
+	hasCPU := r != nil && r.CPU != ""
+	hasMemory := r != nil && r.Memory != ""
+	if hasCPU || hasMemory || cards > 0 {
+		b.WriteString("          resources:\n")
+		if hasCPU || hasMemory {
+			b.WriteString("            requests:\n")
+			if hasCPU {
+				fmt.Fprintf(&b, "              cpu: %s\n", r.CPU)
+			}
+			if hasMemory {
+				fmt.Fprintf(&b, "              memory: %s\n", r.Memory)
+			}
 		}
-		if r.Memory != "" {
-			fmt.Fprintf(&b, "              memory: %s\n            limits:\n              memory: %s\n", r.Memory, r.Memory)
+		if hasMemory || cards > 0 {
+			b.WriteString("            limits:\n")
+			if hasMemory {
+				fmt.Fprintf(&b, "              memory: %s\n", r.Memory)
+			}
+			if cards > 0 {
+				fmt.Fprintf(&b, "              nvidia.com/gpu: %d\n", cards)
+			}
 		}
 	}
 	return b.String()
+}
+
+// runtimeClass sends a pod that reserved a card through the NVIDIA runtime.
+func runtimeClass(svc Service) string {
+	if svc.Spec.Resources == nil || svc.Spec.Resources.GPU <= 0 {
+		return ""
+	}
+	return "      runtimeClassName: nvidia\n"
 }
 
 // mainAgain is the service's own port listed again, to open it on the

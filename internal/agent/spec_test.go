@@ -43,6 +43,12 @@ func TestSyncRunsTheSpec(t *testing.T) {
 	if strings.Index(script, "--network-alias 'db'") > strings.Index(script, "--network-alias 'web'") {
 		t.Fatal("db must start before web")
 	}
+	gpu, err := Sync("http://127.0.0.1:8080", "tok_en", []Workload{
+		{ID: specApp, Service: "web", Image: "ghcr.io/acme/app:1", Spec: spec.Service{Resources: &spec.Resources{GPU: 1}}},
+	})
+	if err != nil || !strings.Contains(gpu, " --gpus 1 ") {
+		t.Fatal(gpu, err)
+	}
 	if err := exec.Command("sh", "-n", "-c", script).Run(); err != nil {
 		t.Fatal(err)
 	}

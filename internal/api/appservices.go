@@ -300,6 +300,10 @@ func (a *API) setServices(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if err := a.reserveGPU(r.Context(), owner, app.DestinationKind, app.ServerID, app.ClusterID, app.ID, next); err != nil {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
 	if err := a.checkExposed(r.Context(), app.DestinationKind, app.ServerID, app.ClusterID, app.ID, next); err != nil {
 		writeError(w, http.StatusConflict, err.Error())
 		return

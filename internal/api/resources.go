@@ -443,7 +443,7 @@ func (a *API) purchase(ctx context.Context, owner, providerID, id, name, token s
 		Token: tok.Token, ProjectID: tok.ProjectID,
 		ApplicationKey: tok.ApplicationKey, ApplicationSecret: tok.ApplicationSecret, ConsumerKey: tok.ConsumerKey,
 	}, provision.Spec{
-		Name: name, Location: plan.Location, OfferID: plan.OfferID, OfferName: plan.Name,
+		Name: name, Location: plan.Location, OfferID: plan.OfferID, OfferName: plan.Name, GPUs: plan.GPUs,
 		UserData: script, RootGB: rootGB(plan), ProjectID: plan.ProjectID, SSHKeys: keys, Key: id,
 	})
 	if err != nil {
@@ -1021,6 +1021,10 @@ func (a *API) createApplication(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		in.ClusterID = body.ClusterID
+	}
+	if err := a.reserveGPU(r.Context(), in.OwnerID, in.DestinationKind, in.ServerID, in.ClusterID, "", in.Services); err != nil {
+		writeError(w, http.StatusConflict, err.Error())
+		return
 	}
 	names, err := a.parseNames(r.Context(), in.OwnerID, body.Names)
 	if err != nil {

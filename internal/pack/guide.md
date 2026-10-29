@@ -76,7 +76,7 @@ Les variables communes (`env` en haut du paquet) vont à tous les services et so
 
 ## Santé et ressources
 
-`health.http` donne le chemin HTTP qui répond quand une copie est prête (et `health.port` s'il diffère) : une mise à jour qui ne démarre pas laisse l'ancienne version en place. `resources.cpu` réserve du processeur (`0.5` ou `500m`), `resources.memory` plafonne la mémoire (`512Mi`, `2Gi`).
+`health.http` donne le chemin HTTP qui répond quand une copie est prête (et `health.port` s'il diffère) : une mise à jour qui ne démarre pas laisse l'ancienne version en place. `resources.cpu` réserve du processeur (`0.5` ou `500m`), `resources.memory` plafonne la mémoire (`512Mi`, `2Gi`). `resources.gpu` réserve des cartes entières (`1`) : le pod les reçoit seul, et l'installation est refusée si les machines de la destination n'en ont pas assez de libres.
 
 ## Ce que MyInfra remplit pour vous
 
@@ -103,7 +103,7 @@ Les variables communes (`env` en haut du paquet) vont à tous les services et so
 - `services[].files` : les fichiers posés en lecture seule, `{path, content}`.
 - `services[].env` : les variables de ce service seul, sans secret.
 - `services[].health` : `{http, port}`.
-- `services[].resources` : `{cpu, memory}`.
+- `services[].resources` : `{cpu, memory, gpu}`.
 - `services[].dependsOn` : les services à attendre avant de démarrer.
 - `about` : facultatif ; `site`, `logo` (nom Simple Icons), `description`, et `translations` (`en`, `pt`, `it`, `de`) avec `summary` et `description`.
 
