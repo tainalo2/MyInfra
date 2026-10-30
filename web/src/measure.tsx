@@ -1,5 +1,5 @@
 import type { Gauge } from "./api";
-import { currentLocale, text } from "./i18n";
+import { currentLocale, text, type MsgKey } from "./i18n";
 
 export function vcpu(milli: number) {
   return (milli / 1000).toLocaleString(currentLocale(), { maximumFractionDigits: 1 });
@@ -12,8 +12,26 @@ export function size(bytes: number) {
   return `${bytes.toLocaleString(currentLocale())} ${text("unit.byte")}`;
 }
 
+// sizePair writes a used amount and its total in the unit of the total,
+// written once: 3,4 / 14,9 Go.
+export function sizePair(used: number, total: number) {
+  const steps: [number, MsgKey][] = [
+    [1024 ** 3, "unit.gb"],
+    [1024 ** 2, "unit.mb"],
+    [1024, "unit.kb"],
+  ];
+  const [factor, unit] = steps.find(([step]) => total >= step) ?? [1, "unit.byte" as MsgKey];
+  const format = (value: number) => (value / factor).toLocaleString(currentLocale(), { maximumFractionDigits: factor >= 1024 ** 3 ? 1 : 0 });
+  return `${format(used)} / ${format(total)} ${text(unit)}`;
+}
+
+// cpuPair writes cores used and their total: 0,7 / 4 vCPU.
+export function cpuPair(used: number, total: number) {
+  return `${vcpu(used)} / ${vcpu(total)} vCPU`;
+}
+
 export function usageText(cpu: Gauge, memory: Gauge, disk: Gauge) {
-  return `CPU ${vcpu(cpu.used)} / ${vcpu(cpu.total)} · RAM ${size(memory.used)} / ${size(memory.total)} · ${text("usage.disk")} ${size(disk.used)} / ${size(disk.total)}`;
+  return `CPU ${cpuPair(cpu.used, cpu.total)} · RAM ${sizePair(memory.used, memory.total)} · ${text("usage.disk")} ${sizePair(disk.used, disk.total)}`;
 }
 
 export function podCpu(milli: number) {

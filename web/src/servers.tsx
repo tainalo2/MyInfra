@@ -841,7 +841,14 @@ export function ServerPage() {
 
   return (
     <>
-      <PageTitle title={server.name} icon={ServerIcon} />
+      {linked ? (
+        // The name heads the card: the page keeps it for its tab and readers.
+        <div className="sr-only">
+          <PageTitle title={server.name} />
+        </div>
+      ) : (
+        <PageTitle title={server.name} icon={ServerIcon} />
+      )}
       {error ? (
         <div className="mb-8">
           <ErrorText>{error}</ErrorText>
@@ -851,6 +858,10 @@ export function ServerPage() {
       {linked ? (
         // A running server keeps what matters in sight while the page scrolls.
         <aside aria-label={text("server.essentials")} className="flex flex-col gap-4 rounded-md border border-line bg-surface p-4 lg:sticky lg:top-4 lg:order-last lg:w-[320px] lg:shrink-0">
+          <p aria-hidden className="flex items-center gap-2 text-[18px] font-medium">
+            <Icon icon={ServerIcon} className="text-muted" />
+            <span className="truncate">{server.name}</span>
+          </p>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-[13px]">
             {facts.map(([label, value]) => (
               <div key={label} className="contents">
@@ -859,7 +870,21 @@ export function ServerPage() {
               </div>
             ))}
           </dl>
-          {terminal ? <div className="border-t border-line pt-4">{terminal}</div> : null}
+          {canDeploy ? (
+            <div className="flex flex-col items-start gap-2 border-t border-line pt-4">
+              {terminal}
+              {!locked ? (
+                <TextButton type="button" onClick={() => void retry()} disabled={retrying}>
+                  {retrying ? <Spinner /> : <Icon icon={RotateCcw} />}
+                  {text("ui.relancerLeDeploiement")}
+                </TextButton>
+              ) : null}
+              <TextButton type="button" tone="danger" onClick={() => setConfirm(true)}>
+                <Icon icon={Trash2} />
+                {text("common.delete")}
+              </TextButton>
+            </div>
+          ) : null}
         </aside>
       ) : null}
       <div className={linked ? "min-w-0 flex-1" : ""}>
@@ -900,7 +925,8 @@ export function ServerPage() {
           {copied ? <span className="text-muted">{text("common.copied")}</span> : null}
         </div>
       ) : null}
-      <div className={`flex flex-wrap items-center gap-3 ${linked ? "" : "mt-6"}`}>
+      {linked ? null : (
+      <div className="mt-6 flex flex-wrap items-center gap-3">
         {canDeploy && failed ? (
           <Button type="button" onClick={() => void retry()} disabled={retrying || locked}>
             {retrying ? <Spinner /> : <Icon icon={RotateCcw} />}
@@ -917,6 +943,7 @@ export function ServerPage() {
           </ActionsMenu>
         ) : null}
       </div>
+      )}
       <div className="max-w-[720px]">
         <UpdateLock locked={locked && !transferring} />
         <ServerUpdateNotice server={server} onStarted={() => void serverPoll.reload()} />
@@ -925,19 +952,14 @@ export function ServerPage() {
         <UpdateJobs filter={(job) => job.status === "running" && job.steps.some((step) => step.serverId === server.id)} />
       </div>
       {failed || deploying ? <div className="mt-4"><ToolInstall ansible tofu={server.tofu} /></div> : null}
-      {server.deploy && server.deploy.length > 0 ? (
+      {/* Once the machine is deployed, its installation steps are history. */}
+      {server.deploy && server.deploy.length > 0 && !linked ? (
         <div className="mt-8 max-w-[720px]">
-          {linked ? (
-            <Fold title={text("server.deployHistory")}>
-              <DeployTimeline steps={server.deploy} live={false} />
-            </Fold>
-          ) : (
-            <DeployTimeline steps={server.deploy} live={active} />
-          )}
+          <DeployTimeline steps={server.deploy} live={active} />
         </div>
       ) : null}
       {linked ? (
-        <div className="mt-8 max-w-[720px]">
+        <div className="max-w-[720px] [&:not(:first-child)]:mt-8">
           <UsageMeters sample={runtime} />
           <div className="mt-10">
             <Fold title={text("apps.instances")} defaultOpen={Boolean(runtime?.pods.some((pod) => podFailed(pod)))}>
