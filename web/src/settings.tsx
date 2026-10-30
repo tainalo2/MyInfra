@@ -12,7 +12,7 @@ import { Input, PageTitle, Select, TextButton, focus, readListMode, saveListMode
 import { useUpdates } from "./updates";
 
 type Tone = "ok" | "warn" | "muted";
-type Entry = { to: string; label: MsgKey; hint: MsgKey; icon: LucideIcon; adminOnly?: boolean; deployOnly?: boolean; state?: { label: string; tone: Tone } };
+type Entry = { to: string; label: MsgKey; hint: MsgKey; icon: LucideIcon; adminOnly?: boolean; deployOnly?: boolean; state?: { label: ReactNode; tone: Tone } };
 
 function plural(count: number, one: MsgKey, many: MsgKey) {
   return count === 1 ? text(one) : text(many, { count });
@@ -70,7 +70,7 @@ export function SettingsPage() {
       id: "acces",
       title: "settings.security",
       entries: [
-        { to: "/compte", label: "settings.accountRow", hint: "settings.accountRowHint", icon: UserRound, state: totp ? { label: text("settings.totpOn"), tone: "ok" } : { label: text("settings.totpOff"), tone: "muted" } },
+        { to: "/compte", label: "settings.accountRow", hint: "settings.accountRowHint", icon: UserRound, state: { label: <><span className="md:hidden">{text(totp ? "settings.totpOnShort" : "settings.totpOffShort")}</span><span className="hidden md:inline">{text(totp ? "settings.totpOn" : "settings.totpOff")}</span></>, tone: totp ? "ok" : "muted" } },
         { to: "/cles", label: "nav.ssh", hint: "settings.sshHint", icon: KeyRound, deployOnly: true, state: count(kinds("ssh_key"), "count.keys1", "count.keysN") },
         { to: "/secrets", label: "nav.secrets", hint: "settings.secretsHint", icon: Shield, deployOnly: true, state: count(counts.appSecrets, "count.secrets1", "count.secretsN") },
         { to: "/utilisateurs", label: "nav.users", hint: "settings.usersHint", icon: Users, adminOnly: true, state: count(counts.users, "count.accounts1", "count.accountsN") },
@@ -118,8 +118,8 @@ export function SettingsPage() {
                   icon={entry.icon}
                   phoneTile
                   title={text(entry.label)}
-                  sub={text(entry.hint)}
-                  end={entry.state ? <span className="hidden sm:inline-flex"><RowState tone={entry.state.tone}>{entry.state.label}</RowState></span> : null}
+                  sub={<span className="hidden md:inline">{text(entry.hint)}</span>}
+                  end={entry.state ? <RowState tone={entry.state.tone}>{entry.state.label}</RowState> : null}
                 />
               ))}
             </RowGroup>
@@ -244,15 +244,15 @@ function MyInfraPart({ canAdmin }: { canAdmin: boolean }) {
             end={next ? <RowState tone="link">{text("settings.seeUpdates")}</RowState> : null}
           />
         ) : null}
-        {canAdmin ? <ListRow to="/transfert" icon={ArrowRightLeft} phoneTile title={text("nav.transfer")} sub={text("settings.transferHint")} /> : null}
+        {canAdmin ? <ListRow to="/transfert" icon={ArrowRightLeft} phoneTile title={text("nav.transfer")} sub={<span className="hidden md:inline">{text("settings.transferHint")}</span>} /> : null}
         {canAdmin ? (
           <ListRow
             to="/copies"
             icon={Waypoints}
             phoneTile
             title={text("nav.copies")}
-            sub={text("settings.copiesHint")}
-            end={peers === undefined ? null : <span className="hidden sm:inline-flex"><RowState>{peers === 0 ? text("copies.none") : text("copies.count", { count: peers + 1 })}</RowState></span>}
+            sub={<span className="hidden md:inline">{text("settings.copiesHint")}</span>}
+            end={peers === undefined ? null : <RowState>{peers === 0 ? text("copies.none") : text("copies.count", { count: peers + 1 })}</RowState>}
           />
         ) : null}
       </RowGroup>

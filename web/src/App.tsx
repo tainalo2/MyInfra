@@ -37,6 +37,7 @@ const TransferFollow = page(() => import("./transfer"), "TransferFollow");
 const Copies = page(() => import("./copies"), "Copies");
 const UpdatesPage = page(() => import("./updates"), "UpdatesPage");
 const SettingsPage = page(() => import("./settings"), "SettingsPage");
+const MorePage = page(() => import("./mobilenav"), "MorePage");
 const Templates = page(() => import("./templates"), "Templates");
 const TemplateEditor = page(() => import("./templates"), "TemplateEditor");
 const TemplateLaunch = page(() => import("./templates"), "TemplateLaunch");
@@ -302,6 +303,7 @@ export function App() {
         <Route path="/copies" element={<RequireAdmin><Copies /></RequireAdmin>} />
         <Route path="/mises-a-jour" element={<UpdatesPage />} />
         <Route path="/reglages" element={<SettingsPage />} />
+        <Route path="/plus" element={<MorePage />} />
       </Route>
     </Routes>
     </Suspense>

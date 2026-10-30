@@ -36,9 +36,21 @@ function clean(value: string) {
   return value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
 
-export function SearchButton() {
+export function SearchButton({ compact = false }: { compact?: boolean }) {
   useI18n();
   const mac = /Mac|iPhone|iPad/.test(navigator.platform);
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={() => window.dispatchEvent(new Event(openEvent))}
+        aria-label={text("palette.open")}
+        className="inline-flex size-10 items-center justify-center rounded-full text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+      >
+        <Search size={22} strokeWidth={1.75} aria-hidden />
+      </button>
+    );
+  }
   return (
     <button
       type="button"

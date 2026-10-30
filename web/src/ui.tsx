@@ -282,7 +282,7 @@ const settingsNav: NavSpec = { to: "/reglages", label: "nav.settings", icon: Set
 type NavSpec = { to: string; label: MsgKey; icon: LucideIcon; end?: boolean; match?: string[] };
 
 function itemClass(active: boolean) {
-  return `flex items-center gap-3 rounded-md px-3 py-2 ${focus} ${active ? "bg-status text-ink" : "text-muted"}`;
+  return `flex items-center gap-3 rounded-md px-3 py-2 text-ink ${focus} ${active ? "bg-status" : ""}`;
 }
 
 function NavItem({ to, label, icon, end, match, count, hot }: NavSpec & { count?: number; hot?: boolean }) {
@@ -292,12 +292,13 @@ function NavItem({ to, label, icon, end, match, count, hot }: NavSpec & { count?
   const name = text(label);
   return (
     <NavLink to={to} end={end} aria-label={count ? `${name} · ${count}` : name} className={({ isActive }) => itemClass(isActive || covered)}>
-      <Icon icon={icon} />
+      <Icon icon={icon} className="text-muted" />
       <span className="hidden flex-1 md:inline" aria-hidden>
         {name}
       </span>
       {count ? (
-        <span className={`hidden min-w-5 rounded-full px-1.5 text-center text-[11px] leading-5 text-canvas md:inline ${hot ? "bg-bad" : "bg-muted"}`} aria-hidden>
+        <span className={`hidden items-center gap-1.5 text-[13px] md:inline-flex ${hot ? "text-warn" : "text-muted"}`} aria-hidden>
+          {hot ? <span className="size-2 rounded-full bg-warn" /> : null}
           {count}
         </span>
       ) : null}
@@ -389,6 +390,28 @@ function useRunningDestructions() {
   return jobs;
 }
 
+// useCounts reads how many apps and servers there are, for the menu.
+function useCounts(pathname: string) {
+  const [counts, setCounts] = useState<{ apps?: number; servers?: number }>({});
+  useEffect(() => {
+    let stop = false;
+    api<unknown[]>("/api/applications")
+      .then((rows) => {
+        if (!stop) setCounts((current) => ({ ...current, apps: rows.length }));
+      })
+      .catch(() => undefined);
+    api<unknown[]>("/api/servers")
+      .then((rows) => {
+        if (!stop) setCounts((current) => ({ ...current, servers: rows.length }));
+      })
+      .catch(() => undefined);
+    return () => {
+      stop = true;
+    };
+  }, [pathname]);
+  return counts;
+}
+
 function useOpenDeployments() {
   const location = useLocation();
   const [items, setItems] = useState<Deployment[]>([]);
@@ -444,6 +467,7 @@ export function Shell() {
   const jobs = useRunningDestructions();
   const deploys = useOpenDeployments();
   const [override, setOverride] = useState<Crumb[] | null>(null);
+  const counts = useCounts(location.pathname);
   return (
     <ToastHost>
     <UpdatesHost>
@@ -452,12 +476,14 @@ export function Shell() {
     <DestructionJobs.Provider value={jobs}>
     <OpenDeployments.Provider value={deploys}>
     <div className="flex h-dvh flex-col overflow-hidden">
-      <Header search />
+      <div className="hidden md:block">
+        <Header search />
+      </div>
       <div className="flex min-h-0 flex-1">
         <aside className="hidden h-full min-h-0 w-56 shrink-0 flex-col border-r border-line md:flex">
           <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 py-4 md:px-4">
             {nav.map((item) => (
-              <NavItem key={item.to} {...item} />
+              <NavItem key={item.to} {...item} count={item.to === "/applications" ? counts.apps : item.to === "/clusters" ? counts.servers : undefined} />
             ))}
             <ActivityNav />
             <UpdatesNav />
@@ -472,13 +498,17 @@ export function Shell() {
           </div>
         </aside>
         {location.pathname === "/" ? (
-          <main className="relative min-w-0 flex-1 overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom))] md:overflow-hidden md:pb-0">
+          <main className="relative min-w-0 flex-1 overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)] md:overflow-hidden md:pb-0 md:pt-0">
+            <div className="px-4">
+              <MobileBar />
+            </div>
             <Suspense fallback={<LoadingLines lines={4} />}>
               <Outlet />
             </Suspense>
           </main>
         ) : (
-          <main className="min-w-0 flex-1 overflow-y-auto px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-4 md:px-6 md:py-12">
+          <main className="min-w-0 flex-1 overflow-y-auto px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)] md:px-6 md:py-12">
+            <MobileBar />
             <div className="mx-auto w-full max-w-[960px]">
               <ReadOnlyBanner />
               <TransferBanner />
@@ -503,22 +533,20 @@ export function Shell() {
   );
 }
 
-function Breadcrumb() {
-  useI18n();
+function useCrumbs() {
   const { pathname } = useLocation();
   const { override } = useContext(TrailContext);
   const names = useCrumbNames(pathname);
-  const crumbs = override ?? crumbsFor(pathname, names);
+  return override ?? crumbsFor(pathname, names);
+}
+
+function Breadcrumb() {
+  useI18n();
+  const crumbs = useCrumbs();
   if (crumbs.length === 0) return null;
   return (
-    <nav aria-label={text("crumb.trail")} className="breadcrumb mb-4 md:mb-8">
-      {crumbs.length > 1 && crumbs[crumbs.length - 2].to ? (
-        <Link to={crumbs[crumbs.length - 2].to!} className={`-mx-2 inline-flex min-h-11 items-center gap-1 px-2 text-link md:hidden ${focus}`}>
-          <ChevronLeft size={16} strokeWidth={1.5} aria-hidden />
-          {crumbs[crumbs.length - 2].label}
-        </Link>
-      ) : null}
-      <ol className="hidden flex-wrap items-center gap-x-2 gap-y-1 md:flex">
+    <nav aria-label={text("crumb.trail")} className="breadcrumb mb-8 hidden md:block">
+      <ol className="flex flex-wrap items-center gap-x-2 gap-y-1">
         {crumbs.map((crumb, index) => {
           const last = index === crumbs.length - 1;
           return (
@@ -536,6 +564,31 @@ function Breadcrumb() {
         })}
       </ol>
     </nav>
+  );
+}
+
+// MobileBar heads a page on a phone: the way back on the left, the search
+// and what is running on the right. The page title follows, large.
+function MobileBar() {
+  useI18n();
+  const crumbs = useCrumbs();
+  const { pathname } = useLocation();
+  const back = crumbs.length > 1 ? crumbs[crumbs.length - 2] : settingsMatch.some((prefix) => pathname.startsWith(prefix)) && pathname !== "/reglages" ? { label: text("nav.settings"), to: "/reglages" } : pathname === "/reglages" || pathname === "/templates" || pathname === "/mises-a-jour" || pathname === "/compte" ? { label: text("nav.more"), to: "/plus" } : null;
+  return (
+    <div className="sticky top-0 z-20 -mx-4 flex h-12 items-center justify-between gap-2 bg-canvas pl-4 pr-2.5 md:hidden">
+      {back?.to ? (
+        <Link to={back.to} className={`-ml-1.5 inline-flex min-h-11 min-w-0 items-center gap-0.5 text-link ${focus}`}>
+          <ChevronLeft size={22} strokeWidth={1.75} aria-hidden />
+          <span className="truncate">{back.label}</span>
+        </Link>
+      ) : (
+        <span />
+      )}
+      <span className="flex items-center gap-1">
+        <BusyIndicator />
+        <SearchButton compact />
+      </span>
+    </div>
   );
 }
 
@@ -700,8 +753,8 @@ export function PageTitle({
     };
   }, [title]);
   return (
-    <div className="mb-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 md:mb-12">
-      <h1 className="flex min-w-0 items-center gap-3 text-xl font-medium md:text-2xl">
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 md:mb-12">
+      <h1 className="flex min-w-0 items-center gap-3 text-[28px] font-medium leading-[1.2] md:text-2xl md:leading-8">
         {mark ? mark : icon ? <Icon icon={icon} /> : null}
         {title}
       </h1>

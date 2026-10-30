@@ -1558,6 +1558,9 @@ const fr = {
   "images.pageIntro": "D'où viennent les images de vos applications. Les images publiques (Docker Hub, GitHub, Quay…) se récupèrent sans rien configurer ici.",
   "registry.sectionTitle": "Registres privés",
   "registry.sectionHint": "Pour les images que vous publiez sans les rendre publiques.",
+  "nav.appsShort": "Apps",
+  "settings.totpOnShort": "2FA",
+  "settings.totpOffShort": "Sans 2FA",
 } as const;
 
 export type MsgKey = keyof typeof fr;
@@ -3050,6 +3053,9 @@ const en: Record<MsgKey, string> = {
   "images.pageIntro": "Where your applications' images come from. Public images (Docker Hub, GitHub, Quay…) are pulled without setting anything here.",
   "registry.sectionTitle": "Private registries",
   "registry.sectionHint": "For the images you publish without making them public.",
+  "nav.appsShort": "Apps",
+  "settings.totpOnShort": "2FA",
+  "settings.totpOffShort": "No 2FA",
 };
 
 const pt: Record<MsgKey, string> = {
@@ -4519,6 +4525,9 @@ const pt: Record<MsgKey, string> = {
   "images.pageIntro": "De onde vêm as imagens das suas aplicações. As imagens públicas (Docker Hub, GitHub, Quay…) obtêm-se sem configurar nada aqui.",
   "registry.sectionTitle": "Registos privados",
   "registry.sectionHint": "Para as imagens que publica sem as tornar públicas.",
+  "nav.appsShort": "Apps",
+  "settings.totpOnShort": "2FA",
+  "settings.totpOffShort": "Sem 2FA",
 };
 
 const it: Record<MsgKey, string> = {
@@ -5987,6 +5996,9 @@ const it: Record<MsgKey, string> = {
   "images.pageIntro": "Da dove vengono le immagini delle tue applicazioni. Le immagini pubbliche (Docker Hub, GitHub, Quay…) si scaricano senza configurare nulla qui.",
   "registry.sectionTitle": "Registri privati",
   "registry.sectionHint": "Per le immagini che pubblichi senza renderle pubbliche.",
+  "nav.appsShort": "App",
+  "settings.totpOnShort": "2FA",
+  "settings.totpOffShort": "Senza 2FA",
 };
 
 const de: Record<MsgKey, string> = {
@@ -7457,6 +7469,9 @@ const de: Record<MsgKey, string> = {
   "images.pageIntro": "Woher die Images Ihrer Anwendungen kommen. Öffentliche Images (Docker Hub, GitHub, Quay…) werden ohne Einstellung hier geladen.",
   "registry.sectionTitle": "Private Registries",
   "registry.sectionHint": "Für Images, die Sie veröffentlichen, ohne sie öffentlich zu machen.",
+  "nav.appsShort": "Apps",
+  "settings.totpOnShort": "2FA",
+  "settings.totpOffShort": "Ohne 2FA",
 };
 
 const tables: Record<Lang, Record<MsgKey, string>> = { fr, en, pt, it, de };
