@@ -176,48 +176,98 @@ export function CatalogueArticle() {
           </span>
         }
       />
-      <div className="flex max-w-[720px] flex-col gap-4">
-        {error ? <ErrorText>{error}</ErrorText> : null}
-        <p>{shownCard.description}</p>
-        <p>
-          <a className="text-link" href={article.site} target="_blank" rel="noreferrer">
-            {siteLabel(article.site)}
-          </a>
-        </p>
-        {chosen ? (
-          <p>
-            <ImageOrigin image={chosen} />
-          </p>
-        ) : null}
-        {versions?.detail ? <p className="text-bad">{knownMessage(versions.detail)}</p> : null}
-        <p className="text-muted">
-          {categoryName(article.category, article.categoryWords)} · {text("library.from", { version: article.version })}
-        </p>
-        {article.community ? (
-          <p className="flex items-center gap-2 text-muted">
-            <CommunityTag />
-            {text("library.communityHint")}
-          </p>
-        ) : null}
-        {article.changes ? <p className="text-[13px] text-faint">{article.changes}</p> : null}
-        {article.keepsFiles ? <p>{text("apps.keeps")}</p> : null}
-        <Fold title={text("field.services")}>
-          <ul className="flex flex-col gap-3">
-            {article.services.map((service) => {
-              const shown = service.published && chosen ? chosen : service.image;
-              return (
-                <li key={service.name}>
+      <p className="-mt-2 mb-8 text-muted md:-mt-10 md:mb-10 md:pl-[60px]">{shownCard.summary}</p>
+      <div className="flex flex-col gap-10 lg:flex-row lg:items-start">
+        <div className="flex min-w-0 max-w-[720px] flex-1 flex-col gap-8">
+          {error ? <ErrorText>{error}</ErrorText> : null}
+          <p>{shownCard.description}</p>
+          <section className="flex flex-col gap-2">
+            <h2>{text("catalogue.installs")}</h2>
+            <ul className="overflow-hidden rounded-md border border-line bg-surface">
+              {article.services.map((service) => (
+                <li key={service.name} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-line px-4 py-3 first:border-t-0">
                   <span>{service.name}</span>
-                  <span className="text-muted">{service.published ? ` · ${text("common.published")}` : ` · ${text("common.internal")}`}{service.disk ? ` · ${text("common.disk")}` : ""}</span>
-                  <p className="mt-1">
-                    <ImageOrigin image={shown} />
-                  </p>
+                  <span className="text-[13px] text-muted">
+                    {service.published ? text("plan.link.proxy") : text("common.internal")}
+                    {service.disk ? ` · ${text("common.disk")}` : ""}
+                  </span>
                 </li>
-              );
-            })}
-          </ul>
-        </Fold>
+              ))}
+            </ul>
+            {article.keepsFiles ? <p className="text-[13px] text-muted">{text("apps.keeps")}</p> : null}
+          </section>
+          {versions?.detail ? <p className="text-bad">{knownMessage(versions.detail)}</p> : null}
+          {article.community ? (
+            <p className="flex items-center gap-2 text-muted">
+              <CommunityTag />
+              {text("library.communityHint")}
+            </p>
+          ) : null}
+          {article.changes ? <p className="text-[13px] text-faint">{article.changes}</p> : null}
+          <Fold title={text("catalogue.technical")}>
+            <ul className="flex flex-col gap-3">
+              {article.services.map((service) => {
+                const shown = service.published && chosen ? chosen : service.image;
+                return (
+                  <li key={service.name}>
+                    <span className="font-mono text-[13px]">{service.name}</span>
+                    <span className="text-[13px] text-muted">{service.published ? ` · ${text("common.published")}` : ` · ${text("common.internal")}`}{service.disk ? ` · ${text("common.disk")}` : ""}</span>
+                    <p className="mt-1">
+                      <ImageOrigin image={shown} />
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
+          </Fold>
+        </div>
+        <aside className="flex flex-col gap-6 lg:sticky lg:top-4 lg:w-[280px] lg:shrink-0">
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-md border border-line bg-surface p-4 text-[13px]">
+            <dt className="text-muted">{text("catalogue.category")}</dt>
+            <dd>{categoryName(article.category, article.categoryWords)}</dd>
+            <dt className="text-muted">{text("field.version")}</dt>
+            <dd className="break-all font-mono">{tag}</dd>
+            <dt className="text-muted">{text("catalogue.sheet")}</dt>
+            <dd>{text("library.from", { version: article.version })}</dd>
+            {article.site ? (
+              <>
+                <dt className="text-muted">{text("catalogue.site")}</dt>
+                <dd className="min-w-0 break-all">
+                  <a className={`text-link ${focus}`} href={article.site} target="_blank" rel="noreferrer">
+                    {siteLabel(article.site)}
+                  </a>
+                </dd>
+              </>
+            ) : null}
+          </dl>
+          <SameCategory article={article} />
+        </aside>
       </div>
     </>
+  );
+}
+
+// SameCategory lists a few other applications of the article's category.
+function SameCategory({ article }: { article: CatalogueCard }) {
+  const [groups, setGroups] = useState<CatalogueGroup[] | null>(null);
+  useEffect(() => {
+    api<CatalogueGroup[]>("/api/catalogue").then(setGroups).catch(() => setGroups([]));
+  }, []);
+  const near = (groups ?? []).flatMap((group) => group.articles).filter((item) => item.category === article.category && item.id !== article.id).slice(0, 4);
+  if (near.length === 0) return null;
+  return (
+    <section className="flex flex-col gap-2">
+      <h2 className="text-[13px] text-muted">{text("catalogue.same")}</h2>
+      <ul className="flex flex-col gap-1">
+        {near.map((item) => (
+          <li key={item.id}>
+            <Link to={`/catalogue/${item.id}`} className={`-mx-2 flex items-center gap-2 rounded-md px-2 py-1 text-ink ${focus}`}>
+              <AppLogo slug={item.logo} name={item.name} size={24} />
+              {item.name}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

@@ -1706,6 +1706,12 @@ const fr = {
   "server.recap.joins": "Il rejoint le cluster tout seul. Vous suivez l'installation dans l'Activité.",
   "server.recap.alone": "Il fera tourner ses applications seul. Vous suivez l'installation dans l'Activité.",
   "server.newIn": "Nouveau serveur · dans {name}",
+  "catalogue.installs": "Ce que MyInfra installe",
+  "catalogue.technical": "Détails techniques",
+  "catalogue.category": "Catégorie",
+  "catalogue.sheet": "Fiche",
+  "catalogue.site": "Site officiel",
+  "catalogue.same": "Dans la même catégorie",
 } as const;
 
 export type MsgKey = keyof typeof fr;
@@ -3346,6 +3352,12 @@ const en: Record<MsgKey, string> = {
   "server.recap.joins": "It joins the cluster on its own. You follow the setup in Activity.",
   "server.recap.alone": "It will run its applications alone. You follow the setup in Activity.",
   "server.newIn": "New server · in {name}",
+  "catalogue.installs": "What MyInfra installs",
+  "catalogue.technical": "Technical details",
+  "catalogue.category": "Category",
+  "catalogue.sheet": "Sheet",
+  "catalogue.site": "Official site",
+  "catalogue.same": "In the same category",
 };
 
 const pt: Record<MsgKey, string> = {
@@ -4963,6 +4975,12 @@ const pt: Record<MsgKey, string> = {
   "server.recap.joins": "Junta-se ao cluster sozinho. Acompanha a instalação na Atividade.",
   "server.recap.alone": "Correrá as suas aplicações sozinho. Acompanha a instalação na Atividade.",
   "server.newIn": "Novo servidor · em {name}",
+  "catalogue.installs": "O que o MyInfra instala",
+  "catalogue.technical": "Detalhes técnicos",
+  "catalogue.category": "Categoria",
+  "catalogue.sheet": "Ficha",
+  "catalogue.site": "Site oficial",
+  "catalogue.same": "Na mesma categoria",
 };
 
 const it: Record<MsgKey, string> = {
@@ -6579,6 +6597,12 @@ const it: Record<MsgKey, string> = {
   "server.recap.joins": "Si unisce al cluster da solo. Segui l'installazione nell'Attività.",
   "server.recap.alone": "Eseguirà le sue applicazioni da solo. Segui l'installazione nell'Attività.",
   "server.newIn": "Nuovo server · in {name}",
+  "catalogue.installs": "Cosa installa MyInfra",
+  "catalogue.technical": "Dettagli tecnici",
+  "catalogue.category": "Categoria",
+  "catalogue.sheet": "Scheda",
+  "catalogue.site": "Sito ufficiale",
+  "catalogue.same": "Nella stessa categoria",
 };
 
 const de: Record<MsgKey, string> = {
@@ -8197,6 +8221,12 @@ const de: Record<MsgKey, string> = {
   "server.recap.joins": "Er tritt dem Cluster selbst bei. Die Einrichtung verfolgen Sie unter Aktivität.",
   "server.recap.alone": "Er betreibt seine Anwendungen allein. Die Einrichtung verfolgen Sie unter Aktivität.",
   "server.newIn": "Neuer Server · in {name}",
+  "catalogue.installs": "Was MyInfra installiert",
+  "catalogue.technical": "Technische Details",
+  "catalogue.category": "Kategorie",
+  "catalogue.sheet": "Eintrag",
+  "catalogue.site": "Offizielle Website",
+  "catalogue.same": "In derselben Kategorie",
 };
 
 const tables: Record<Lang, Record<MsgKey, string>> = { fr, en, pt, it, de };
