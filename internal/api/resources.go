@@ -593,21 +593,6 @@ func (a *API) deleteServer(w http.ResponseWriter, r *http.Request) {
 	a.respondDestruction(w, r, owner, "server", row.ID, row.Name, serverSteps(row, names))
 }
 
-func (a *API) attachCluster(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		ClusterID string `json:"clusterId"`
-	}
-	if err := readJSON(w, r, &body); err != nil {
-		writeError(w, http.StatusBadRequest, "Requête illisible.")
-		return
-	}
-	if err := a.Store.AttachCluster(r.Context(), ownerID(r.Context()), r.PathValue("id"), strings.TrimSpace(body.ClusterID)); err != nil {
-		a.mapErr(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
 func (a *API) listClusters(w http.ResponseWriter, r *http.Request) {
 	rows, err := a.Store.ListClusters(r.Context(), ownerID(r.Context()))
 	if err != nil {

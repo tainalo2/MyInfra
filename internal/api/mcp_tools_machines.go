@@ -244,12 +244,13 @@ func mcpMachineWriteTools() []mcpTool {
 			},
 		},
 		{
-			Name: "attach_server", Title: "Rattacher une machine à un cluster", Role: store.RoleDeploy, Write: true, Destructive: true,
-			Description: "Enregistre qu'une machine déjà dans MyInfra appartient à un cluster, ou la détache si cluster est vide. Cela ne réinstalle rien : WireGuard et Kubernetes se mettent en place en ajoutant la machine (add_existing_server) ou en l'achetant (order_servers). Refusé tant qu'une application tourne sur la machine. Deux appels : récapitulatif et code, puis rattachement après l'accord.",
+			Name: "attach_server", Title: "Déplacer une machine", Role: store.RoleDeploy, Write: true, Destructive: true,
+			Description: "Déplace une machine déjà dans MyInfra vers un cluster, vers un autre cluster, ou la sort seule si cluster est vide. La machine doit être prête. MyInfra la retire de son rôle actuel (drain du nœud, désinstallation de k3s, ou arrêt de Docker), puis installe l'autre. Cela prend du temps. Refusé si des applications tournent sur une machine seule, si elle porte un disque partagé, si elle est le seul plan de contrôle alors que d'autres machines restent, ou si elle est la seule machine d'un cluster qui a des applications. control_plane choisit le rôle à l'arrivée ; la première machine d'un cluster l'est toujours. Le rôle ne se change pas sans changer de cluster. Deux appels : récapitulatif et code, puis déplacement après l'accord.",
 			Schema: object([]string{"server"}, map[string]any{
-				"server":       server,
-				"cluster":      text("Cluster. Vide pour détacher la machine."),
-				"confirmation": confirmationArg,
+				"server":        server,
+				"cluster":       text("Cluster d'arrivée. Vide pour sortir la machine seule."),
+				"control_plane": flag("La machine pilote le cluster d'arrivée. Ignoré si elle sort seule, ou si le cluster n'a encore aucun plan de contrôle."),
+				"confirmation":  confirmationArg,
 			}),
 			Routes: []string{"GET /api/servers", "GET /api/clusters", "POST /api/servers/{id}/cluster"},
 			Run:    runAttachServer,
@@ -307,7 +308,10 @@ func (c *mcpCall) namedServer(raw json.RawMessage) (serverView, error) {
 
 func runAttachServer(c *mcpCall, raw json.RawMessage) (string, error) {
 	args, err := decodeArgs[struct {
-		Server, Cluster, Confirmation string
+		Server       string `json:"server"`
+		Cluster      string `json:"cluster"`
+		ControlPlane bool   `json:"control_plane"`
+		Confirmation string `json:"confirmation"`
 	}](raw)
 	if err != nil {
 		return "", err
@@ -316,26 +320,49 @@ func runAttachServer(c *mcpCall, raw json.RawMessage) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var clusterID, label string
+	clusterID, clusterName := "", ""
 	if strings.TrimSpace(args.Cluster) == "" {
-		label = "Détachement de « " + row.Name + " » de son cluster. La machine n'est pas réinstallée.\n"
+		if row.ClusterID == "" {
+			return row.Name + " est déjà seule.", nil
+		}
 	} else {
 		cluster, err := c.cluster(args.Cluster)
 		if err != nil {
 			return "", err
 		}
-		clusterID = cluster.ID
-		label = "Rattachement de « " + row.Name + " » au cluster " + cluster.Name + ". La machine n'est pas réinstallée.\n"
+		if cluster.ID == row.ClusterID {
+			return row.Name + " est déjà dans ce cluster. Le rôle de plan de contrôle ne se change pas sur place.", nil
+		}
+		clusterID, clusterName = cluster.ID, cluster.Name
+	}
+	var label string
+	switch {
+	case clusterID == "":
+		label = "Sortie de « " + row.Name + " » de son cluster. Kubernetes est désinstallé, Docker et le proxy sont installés. Les applications du cluster restent sur les autres machines.\n"
+	case row.ClusterID == "":
+		label = "« " + row.Name + " » rejoint le cluster " + clusterName + ". Docker est arrêté, Kubernetes est installé.\n"
+	default:
+		label = "« " + row.Name + " » quitte son cluster pour " + clusterName + ". Kubernetes est réinstallé.\n"
+	}
+	if clusterID != "" && args.ControlPlane {
+		label += "Elle en devient un plan de contrôle. S'il n'y en a pas encore, elle l'est de toute façon.\n"
+	} else if clusterID != "" {
+		label += "Elle rejoint comme worker, sauf si le cluster n'a encore aucun plan de contrôle.\n"
+	}
+	role := "worker"
+	if args.ControlPlane {
+		role = "plane"
 	}
 	return c.confirmed(raw, args.Confirmation, func() (string, string, error) {
-		return label, fingerprintOf([]string{row.ID, clusterID}), nil
+		return label, fingerprintOf([]string{row.ID, clusterID, role}), nil
 	}, func() (string, error) {
-		if err := c.send(http.MethodPost, "/api/servers/"+url.PathEscape(row.ID)+"/cluster", map[string]string{"clusterId": clusterID}, nil); err != nil {
+		var view serverView
+		if err := c.send(http.MethodPost, "/api/servers/"+url.PathEscape(row.ID)+"/cluster", map[string]any{"clusterId": clusterID, "controlPlane": args.ControlPlane}, &view); err != nil {
 			return "", err
 		}
-		if clusterID == "" {
-			return row.Name + " n'est plus rattachée à un cluster.", nil
+		if view.Status != "deploying" {
+			return row.Name + " est déjà à cette place.", nil
 		}
-		return row.Name + " est rattachée au cluster.", nil
+		return "Le déplacement de " + row.Name + " est lancé.", nil
 	})
 }

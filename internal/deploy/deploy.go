@@ -33,6 +33,12 @@ type Step struct {
 	Label  string `json:"label"`
 	Status string `json:"status"`
 	Detail string `json:"detail,omitempty"`
+	// Source is the cluster a move leaves. Empty means the machine ran alone.
+	Source string `json:"source,omitempty"`
+	// Target is the cluster a move joins. Empty means it will run alone.
+	Target string `json:"target,omitempty"`
+	// ControlPlane is the role asked for Target. Only the leave step carries it.
+	ControlPlane bool `json:"controlPlane,omitempty"`
 }
 
 func Steps(cloud bool) []Step {
@@ -58,6 +64,45 @@ func Steps(cloud bool) []Step {
 func AloneSteps(cloud bool) []Step {
 	steps := Steps(cloud)
 	return []Step{steps[0], steps[1], steps[2], {ID: "docker", Label: "Docker et proxy", Status: "pending"}}
+}
+
+// MoveSteps are the steps of a machine that changes role. source is the
+// cluster it leaves, target the one it joins; empty means it runs alone.
+func MoveSteps(source, target string, controlPlane bool) []Step {
+	leave := Step{
+		ID: "leave", Label: "Sortie du rôle actuel", Status: "pending",
+		Source: source, Target: target, ControlPlane: controlPlane && target != "",
+	}
+	if target != "" {
+		return []Step{
+			leave,
+			{ID: "wireguard", Label: "WireGuard du cluster", Status: "pending"},
+			{ID: "kubernetes", Label: "Kubernetes", Status: "pending"},
+			{ID: "cluster", Label: "Configuration du cluster", Status: "pending"},
+		}
+	}
+	return []Step{leave, {ID: "docker", Label: "Docker et proxy", Status: "pending"}}
+}
+
+// MoveOf reads where a move goes. ok is false when these steps are not a move.
+func MoveOf(steps []Step) (source, target string, controlPlane, ok bool) {
+	for _, step := range steps {
+		if step.ID != "leave" {
+			continue
+		}
+		return step.Source, step.Target, step.ControlPlane, true
+	}
+	return "", "", false, false
+}
+
+// Has reports whether the steps include this one.
+func Has(steps []Step, id string) bool {
+	for _, step := range steps {
+		if step.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // WireGuardIP is the address of a cluster node inside the WireGuard network.

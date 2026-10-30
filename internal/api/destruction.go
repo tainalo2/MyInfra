@@ -294,7 +294,7 @@ func wholeCluster(job destructionJob) bool {
 func (a *API) performDestruction(owner string, step *destructionStep, whole bool) (string, error) {
 	switch step.Action {
 	case "server":
-		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
 		defer cancel()
 		// A deployment still running on this machine would keep its SSH
 		// session, and the deployment lock, on a machine that no longer exists.
@@ -306,7 +306,9 @@ func (a *API) performDestruction(owner string, step *destructionStep, whole bool
 		if srv, err := a.Store.Server(ctx, owner, step.ServerID); err == nil {
 			clusterID = srv.ClusterID
 			if clusterID != "" && !gone && !whole {
-				a.removeNode(ctx, owner, srv)
+				if err := a.removeNode(ctx, owner, srv); err != nil {
+					return "", err
+				}
 			}
 		}
 		if gone {
@@ -479,19 +481,83 @@ type destructionStepView struct {
 	Detail string `json:"detail,omitempty"`
 }
 
-// removeNode moves the work of a cluster node to the others, then takes the
-// node out of Kubernetes, before its machine is destroyed. Without it, the
-// pods stay bound to a machine that no longer exists.
-func (a *API) removeNode(ctx context.Context, owner string, srv store.Server) {
+// removeNode moves the disks and the pods of a cluster node onto the others,
+// then takes the node out of Kubernetes. A failed step leaves the machine in
+// the cluster: uninstalling it would delete the only copy of those disks.
+func (a *API) removeNode(ctx context.Context, owner string, srv store.Server) error {
 	host, ok := a.otherPlane(ctx, owner, srv)
 	if !ok {
-		return
+		return nil
 	}
+	holdDeliver(host.Address, 45*time.Minute)
+	defer releaseDeliver(host.Address)
 	node := deploy.NodeName(srv.Name)
-	command := fmt.Sprintf("k3s kubectl drain %q --ignore-daemonsets --delete-emptydir-data --force --timeout=120s >/dev/null 2>&1; k3s kubectl delete node %q --wait=false >/dev/null 2>&1 || true", node, node)
-	if _, err := deploy.SSH(ctx, host, command); err != nil {
-		slog.Info("retrait du nœud", "node", node, "err", err)
+	if _, err := deploy.SSH(ctx, host, fmt.Sprintf("k3s kubectl cordon %q", node)); err != nil {
+		return fmt.Errorf("Le nœud n'a pas pu être mis à l'écart.")
 	}
+	released := false
+	defer func() {
+		if !released {
+			_, _ = deploy.SSH(context.Background(), host, fmt.Sprintf("k3s kubectl uncordon %q", node))
+		}
+	}()
+	if err := a.shiftStateless(ctx, host, node); err != nil {
+		return err
+	}
+	if err := a.relocateLocalVolumes(ctx, owner, srv, host); err != nil {
+		return err
+	}
+	raw, err := deploy.SSH(ctx, host, "k3s kubectl get pods -A -o json")
+	if err != nil {
+		return fmt.Errorf("Les pods du cluster n'ont pas pu être lus.")
+	}
+	pods, err := podsOf([]byte(raw))
+	if err != nil || busyOnNode(pods, node) {
+		return fmt.Errorf("Des applications sont encore sur la machine. Elle reste dans le cluster.")
+	}
+	a.movePrimaries(ctx, host, node)
+	if _, err := deploy.SSH(ctx, host, drainNodeCommand(node)); err != nil {
+		return fmt.Errorf("Le nœud ne s'est pas vidé : %s", err.Error())
+	}
+	released = true
+	return nil
+}
+
+// shiftStateless starts the pods that have no disk on another machine and
+// waits until they are ready there. The leaving node is already cordoned.
+func (a *API) shiftStateless(ctx context.Context, plane deploy.Host, node string) error {
+	raw, err := deploy.SSH(ctx, plane, "k3s kubectl get pods -A -o json")
+	if err != nil {
+		return fmt.Errorf("Les pods du cluster n'ont pas pu être lus.")
+	}
+	pods, err := podsOf([]byte(raw))
+	if err != nil {
+		return fmt.Errorf("Les pods du cluster n'ont pas pu être lus.")
+	}
+	var names []string
+	seen := map[string]bool{}
+	for _, pod := range statelessOnNode(pods, node) {
+		if !kubeName.MatchString(pod.Namespace) || !kubeName.MatchString(pod.Name) {
+			continue
+		}
+		if _, err := deploy.SSH(ctx, plane, fmt.Sprintf("k3s kubectl -n %s delete pod %s --wait=false", pod.Namespace, pod.Name)); err != nil && !notFound(err) {
+			return fmt.Errorf("Le pod %s n'a pas pu quitter la machine.", pod.Name)
+		}
+		service := pod.Service
+		if service == "" {
+			service = pod.Name
+		}
+		key := pod.Namespace + "/" + service
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		names = append(names, key)
+	}
+	if err := waitReadyOff(ctx, plane, node, names); err != nil {
+		return fmt.Errorf("Un pod sans disque n'est pas prêt sur une autre machine.")
+	}
+	return nil
 }
 
 // otherPlane is a linked control plane of the cluster other than srv.

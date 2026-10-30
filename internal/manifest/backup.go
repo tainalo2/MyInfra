@@ -57,7 +57,7 @@ func writeBackedUp(b *strings.Builder, ns, appID string, svc Service, replicas i
 	state := "ready"
 	if svc.Backup.Copying {
 		state = "copying"
-		fmt.Fprintf(b, "---\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: %s\n  namespace: %s\nspec:\n  accessModes: [ReadWriteOnce]\n  resources:\n    requests:\n      storage: %dGi\n", svc.Name, ns, diskGiOf(svc))
+		fmt.Fprintf(b, "---\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: %s\n  namespace: %s\nspec:\n  accessModes: [ReadWriteOnce]\n  storageClassName: local-path\n  resources:\n    requests:\n      storage: %dGi\n", svc.Name, ns, diskGiOf(svc))
 	}
 	fmt.Fprintf(b, `---
 apiVersion: apps/v1

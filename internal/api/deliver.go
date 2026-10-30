@@ -28,8 +28,20 @@ var (
 )
 
 func pauseDeliver(address string) {
+	holdDeliver(address, 90*time.Second)
+}
+
+// holdDeliver keeps the reconciler from putting replicas and disks back
+// while a node move is copying them.
+func holdDeliver(address string, d time.Duration) {
 	deliverPauseMu.Lock()
-	deliverPauseUntil[address] = time.Now().Add(90 * time.Second)
+	deliverPauseUntil[address] = time.Now().Add(d)
+	deliverPauseMu.Unlock()
+}
+
+func releaseDeliver(address string) {
+	deliverPauseMu.Lock()
+	delete(deliverPauseUntil, address)
 	deliverPauseMu.Unlock()
 }
 

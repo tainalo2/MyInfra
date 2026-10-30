@@ -189,7 +189,7 @@ func writeClaims(b *strings.Builder, ns string, svc Service) {
 		if volume.Disk != "" {
 			continue
 		}
-		fmt.Fprintf(b, "---\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: %s\n  namespace: %s\nspec:\n  accessModes: [ReadWriteOnce]\n  resources:\n    requests:\n      storage: %dGi\n", claimName(svc, i), ns, sizeOf(volume))
+		fmt.Fprintf(b, "---\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: %s\n  namespace: %s\nspec:\n  accessModes: [ReadWriteOnce]\n  storageClassName: local-path\n  resources:\n    requests:\n      storage: %dGi\n", claimName(svc, i), ns, sizeOf(volume))
 	}
 }
 

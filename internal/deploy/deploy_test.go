@@ -51,6 +51,30 @@ func TestResumeClearsTheFailedStepAndThoseAfterIt(t *testing.T) {
 	}
 }
 
+func TestMoveStepsKeepWhereTheyGo(t *testing.T) {
+	steps := MoveSteps("sw", "home", true)
+	if !Has(steps, "leave") || !Has(steps, "kubernetes") || Has(steps, "docker") {
+		t.Fatalf("%+v", steps)
+	}
+	source, target, control, ok := MoveOf(steps)
+	if !ok || source != "sw" || target != "home" || !control {
+		t.Fatalf("%q %q %v %v", source, target, control, ok)
+	}
+	failed := Mark(steps, "leave", "failed", "ssh")
+	resumed := Resume(failed)
+	source, target, control, ok = MoveOf(resumed)
+	if !ok || source != "sw" || target != "home" || !control || resumed[0].Status != "pending" {
+		t.Fatalf("%+v", resumed[0])
+	}
+	alone := MoveSteps("sw", "", true)
+	if Has(alone, "kubernetes") || !Has(alone, "docker") {
+		t.Fatalf("%+v", alone)
+	}
+	if _, _, control, _ = MoveOf(alone); control {
+		t.Fatal("une machine seule n'est pas un plan de contrôle")
+	}
+}
+
 func TestReplayRestartsConfigurationWhenTheMachineExists(t *testing.T) {
 	steps := Steps(true)
 	for _, id := range []string{"machine", "ssh", "keys", "kubernetes", "cluster", "wireguard"} {
@@ -143,6 +167,20 @@ func TestReadyCommandRetriesUntilTheDirectoryCanBeCreated(t *testing.T) {
 	info, err := os.Stat(target)
 	if err != nil || !info.IsDir() {
 		t.Fatal(err)
+	}
+}
+
+func TestPlaybookLetsPodsCrossWireGuard(t *testing.T) {
+	for _, part := range []string{
+		"tx-checksum-ip-generic off",
+		"myinfra-flannel-offload",
+		"myinfra-flannel.service",
+		"ip monitor link",
+		"tags: [kubernetes]",
+	} {
+		if !strings.Contains(playbook, part) {
+			t.Fatalf("réseau des pods absent du playbook : %s", part)
+		}
 	}
 }
 

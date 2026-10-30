@@ -992,6 +992,9 @@ func (a *API) restartDeploy(ctx context.Context, owner, id string, replay bool) 
 	if len(steps) == 0 {
 		steps = stepsFor(row.ProviderID != "", row.ClusterID)
 	}
+	if deploy.Has(steps, "leave") {
+		return a.restartMove(ctx, owner, row, deploy.Resume(steps))
+	}
 	if row.Address != "" {
 		if !deploy.Done(steps, "machine") {
 			steps = deploy.Mark(steps, "machine", "done", row.Address)

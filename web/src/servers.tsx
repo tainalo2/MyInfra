@@ -1,9 +1,9 @@
-import { FormEvent, useEffect, useState, type ReactNode } from "react";
+import { FormEvent, useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { ConfirmDialog, Sheet, Spinner, StatusBadge, Steps, useToast } from "./kit";
 import { usePoll } from "./poll";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Copy, KeyRound, Plus, RotateCcw, Server as ServerIcon, SquareTerminal, Trash2 } from "lucide-react";
-import { api, type Catalog, type Cost, type DeployStep, type Destruction, type Project, type Secret, type Server, type ServerRuntime, type ServerUsage } from "./api";
+import { api, type Catalog, type Cluster, type Cost, type DeployStep, type Destruction, type Project, type Secret, type Server, type ServerRuntime, type ServerUsage } from "./api";
 import { CancelDeployment } from "./deployments";
 import { UsageMeters } from "./meters";
 import { hourlyRate, money, podCpu, size, usageText } from "./measure";
@@ -530,20 +530,47 @@ export function ServerCard({
   usage,
   usageLoading,
   compact,
+  draggable,
+  lifted,
+  onDragStart,
+  onDragEnd,
 }: {
   server: Server;
   controlPlane?: boolean;
   usage?: ServerUsage;
   usageLoading?: boolean;
   compact?: boolean;
+  draggable?: boolean;
+  lifted?: boolean;
+  onDragStart?: (event: DragEvent) => void;
+  onDragEnd?: () => void;
 }) {
   const label = statusLabel(serverState(server));
   const removal = removalOf(useDestructions(), "server", server.id);
   const update = useUpdate("server", server.id);
+  const dragged = useRef(false);
+  function beginDrag(event: DragEvent) {
+    dragged.current = true;
+    onDragStart?.(event);
+  }
+  function finishDrag() {
+    onDragEnd?.();
+    window.setTimeout(() => {
+      dragged.current = false;
+    }, 0);
+  }
+  function keepPlace(event: { preventDefault: () => void }) {
+    if (!dragged.current) return;
+    event.preventDefault();
+  }
+  const drag = draggable
+    ? { draggable: true as const, onDragStart: beginDrag, onDragEnd: finishDrag }
+    : {};
+  const lift = `${draggable ? "cursor-grab active:cursor-grabbing" : ""} ${lifted ? "opacity-50" : ""}`;
   if (compact) {
     return (
-      <div className="card-link flex h-full flex-col rounded-md border border-line bg-canvas">
-      <Link to={`/serveurs/${server.id}`} className="block flex-1 p-3">
+      <div className={`card-link flex h-full flex-col rounded-md border border-line bg-canvas ${lift}`}>
+      <Link to={`/serveurs/${server.id}`} onClick={keepPlace} className="block flex-1 p-3" {...drag}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="flex min-w-0 items-center gap-2">
             <Icon icon={ServerIcon} className="shrink-0 text-muted" />
@@ -567,8 +594,8 @@ export function ServerCard({
     );
   }
   return (
-    <div className="card-link rounded-md border border-line bg-canvas">
-    <Link to={`/serveurs/${server.id}`} className="block p-4">
+    <div className={`card-link rounded-md border border-line bg-canvas ${lift}`}>
+    <Link to={`/serveurs/${server.id}`} onClick={keepPlace} className="block p-4" {...drag}>
       <div className="mb-3 flex items-center justify-between gap-6">
         <span className="flex items-center gap-3">
           <Icon icon={ServerIcon} className="text-muted" />
@@ -608,6 +635,86 @@ export function ServerCard({
   );
 }
 
+export function MoveServerDialog({
+  server,
+  fixedDestination,
+  onClose,
+  onMoved,
+}: {
+  server: Server;
+  onClose: () => void;
+  onMoved: (server: Server) => void;
+  // fixedDestination locks the place chosen by a drop. An empty id means alone.
+  fixedDestination?: { id: string; name: string };
+}) {
+  const [clusters, setClusters] = useState<Cluster[] | null>(null);
+  const [servers, setServers] = useState<Server[]>([]);
+  const [dest, setDest] = useState(fixedDestination?.id ?? server.clusterId ?? "");
+  const [plane, setPlane] = useState(false);
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    Promise.all([api<Cluster[]>("/api/clusters"), api<Server[]>("/api/servers")])
+      .then(([nextClusters, nextServers]) => {
+        setClusters(nextClusters);
+        setServers(nextServers);
+      })
+      .catch((err: unknown) => setLoadError(err instanceof Error ? err.message : text("common.error")));
+  }, []);
+
+  const choices = (clusters ?? []).filter((cluster) => cluster.origin !== "imported");
+  const loaded = clusters !== null;
+  const others = servers.filter((row) => row.clusterId === dest && row.controlPlane && row.id !== server.id).length;
+  const roleLocked = loaded && dest !== "" && others === 0;
+  useEffect(() => {
+    if (roleLocked) setPlane(true);
+  }, [roleLocked]);
+  const even = dest !== "" && (roleLocked || plane) && (others + 1) % 2 === 0;
+
+  return (
+    <ConfirmDialog
+      title={text("server.moveTitle", { name: server.name })}
+      confirmLabel={text("server.moveConfirm")}
+      phrase={server.name}
+      phraseLabel={text("server.serverName")}
+      onConfirm={async () => {
+        if (dest === (server.clusterId ?? "")) throw new Error(text("server.moveSame"));
+        onMoved(await api<Server>(`/api/servers/${server.id}/cluster`, {
+          method: "POST",
+          body: JSON.stringify({ clusterId: dest, controlPlane: roleLocked || plane }),
+        }));
+      }}
+      onClose={onClose}
+    >
+      <p>{text("server.moveHint")}</p>
+      {fixedDestination ? <p className="mt-4 text-ink">{text("server.moveToward", { name: fixedDestination.name })}</p> : null}
+      {loadError ? <div className="mt-4"><ErrorText>{loadError}</ErrorText></div> : null}
+      {fixedDestination ? null : (
+      <div className="mt-6">
+        <Field label={text("server.moveTo")}>
+          <Select value={dest} onChange={(e) => setDest(e.target.value)} disabled={clusters === null}>
+            <option value="">{text("server.moveAlone")}</option>
+            {choices.map((cluster) => (
+              <option key={cluster.id} value={cluster.id}>{cluster.name}</option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+      )}
+      {loaded && dest !== "" ? (
+        <div className="mt-4">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={roleLocked || plane} disabled={roleLocked} onChange={(e) => setPlane(e.target.checked)} />
+            {text("server.controlPlaneLabel")}
+          </label>
+          <p className="mt-2 text-faint">{roleLocked ? text("server.firstPlane") : text("server.manyPlanes")}</p>
+          {even ? <p className="mt-2 text-warn">{text("server.evenPlanes")}</p> : null}
+        </div>
+      ) : null}
+    </ConfirmDialog>
+  );
+}
+
 export function ServerPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
@@ -615,6 +722,7 @@ export function ServerPage() {
   const { canDeploy } = useSession();
   const [error, setError] = useState("");
   const [confirm, setConfirm] = useState(false);
+  const [moving, setMoving] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [copied, setCopied] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -674,7 +782,14 @@ export function ServerPage() {
         {hostingLabel(server)}
       </span>
     )],
-    ...(server.clusterName ? [[text("server.cluster"), `${server.clusterName}${server.controlPlane ? ` · ${text("server.controlPlaneShort")}` : ""}`] as [string, ReactNode]] : []),
+    [text("server.cluster"), (
+      <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span>{server.clusterName ? `${server.clusterName}${server.controlPlane ? ` · ${text("server.controlPlaneShort")}` : ""}` : text("server.moveAlone")}</span>
+        {canDeploy && linked && !locked && !deploying ? (
+          <TextButton type="button" onClick={() => setMoving(true)}>{text("server.move")}</TextButton>
+        ) : null}
+      </span>
+    )],
     ...(server.plan ? [[text("server.offer"), machineLine(server.plan.name, server.plan.vcpu, server.plan.memoryMb, server.plan.gpus, server.plan.gpu, server.plan.diskGb)] as [string, ReactNode]] : []),
     ...(placeLabel(server.plan?.location) || (!(canDeploy && !server.providerId) && placeLabel(server.place)) ? [[text("server.place"), placeLabel(server.plan?.location) || placeLabel(server.place)] as [string, ReactNode]] : []),
     ...(server.address ? [[text("server.address"), <span className="break-all font-mono text-[13px]">{server.address}</span>] as [string, ReactNode]] : []),
@@ -813,6 +928,17 @@ export function ServerPage() {
           <EventList server={server.id} />
         </div>
       </div>
+      {moving ? (
+        <MoveServerDialog
+          server={server}
+          onClose={() => setMoving(false)}
+          onMoved={(next) => {
+            setServer(next);
+            setMoving(false);
+            if (next.status === "deploying") toast(text("server.moveStarted", { name: next.name }));
+          }}
+        />
+      ) : null}
       {confirm ? (
         <ConfirmDialog
           title={text("server.removeNamed", { name: server.name })}

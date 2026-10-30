@@ -415,7 +415,7 @@ func Render(app App) string {
 	disks, sizes := sharedDisks(app)
 	redirect, paused := false, false
 	for _, name := range disks {
-		fmt.Fprintf(&b, "---\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: %s\n  namespace: %s\n  labels:\n    myinfra.io/shared-disk: %q\nspec:\n  accessModes: [ReadWriteOnce]\n  resources:\n    requests:\n      storage: %dGi\n", SharedClaim(name), ns, name, sizes[name])
+		fmt.Fprintf(&b, "---\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: %s\n  namespace: %s\n  labels:\n    myinfra.io/shared-disk: %q\nspec:\n  accessModes: [ReadWriteOnce]\n  storageClassName: local-path\n  resources:\n    requests:\n      storage: %dGi\n", SharedClaim(name), ns, name, sizes[name])
 	}
 	for _, svc := range app.Services {
 		svc.configSum = withFiles(sum, svc)
@@ -447,7 +447,7 @@ func Render(app App) string {
 				strategy = "Recreate"
 			}
 			if svc.Disk {
-				fmt.Fprintf(&b, "---\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: %s\n  namespace: %s\nspec:\n  accessModes: [ReadWriteOnce]\n  resources:\n    requests:\n      storage: %dGi\n", svc.Name, ns, diskGiOf(svc))
+				fmt.Fprintf(&b, "---\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: %s\n  namespace: %s\nspec:\n  accessModes: [ReadWriteOnce]\n  storageClassName: local-path\n  resources:\n    requests:\n      storage: %dGi\n", svc.Name, ns, diskGiOf(svc))
 			}
 			writeClaims(&b, ns, svc)
 			fmt.Fprintf(&b, `---
@@ -685,6 +685,7 @@ spec:
         name: data
       spec:
         accessModes: [ReadWriteOnce]
+        storageClassName: local-path
         resources:
           requests:
             storage: %dGi
@@ -694,6 +695,7 @@ spec:
         name: %s
       spec:
         accessModes: [ReadWriteOnce]
+        storageClassName: local-path
         resources:
           requests:
             storage: %dGi

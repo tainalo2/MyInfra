@@ -40,6 +40,19 @@ func (a *API) retryDeploy(w http.ResponseWriter, r *http.Request) {
 	if len(steps) == 0 {
 		steps = stepsFor(row.ProviderID != "", row.ClusterID)
 	}
+	if deploy.Has(steps, "leave") {
+		if err := a.restartMove(ctx, owner, row, deploy.Resume(steps)); err != nil {
+			a.mapErr(w, err)
+			return
+		}
+		row, err = a.Store.Server(ctx, owner, id)
+		if err != nil {
+			a.mapErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a.toServer(row))
+		return
+	}
 	if row.Address != "" {
 		if !deploy.Done(steps, "machine") {
 			steps = deploy.Mark(steps, "machine", "done", row.Address)
@@ -131,6 +144,12 @@ func (a *API) runDeploy(owner, id, name, token, providerID, clusterID, clusterNa
 		a.finishAlone(ctx, owner, id, address, machineID, privateKey, publicKeys, name, steps, plan)
 		return
 	}
+	a.continueCluster(ctx, owner, id, name, clusterID, clusterName, address, machineID, privateKey, publicKeys, plan, self, steps)
+}
+
+// continueCluster installs WireGuard and Kubernetes on a machine that already
+// belongs to the cluster. A move skips the steps it does not list.
+func (a *API) continueCluster(ctx context.Context, owner, id, name, clusterID, clusterName, address, machineID, privateKey string, publicKeys []string, plan catalog.Plan, self store.Server, steps []deploy.Step) {
 	index, err := a.Store.EnsureWireGuardIndex(ctx, id)
 	if err != nil {
 		a.failDeploy(owner, id, steps, firstOpen(steps), address, machineID, err.Error())
@@ -158,7 +177,7 @@ func (a *API) runDeploy(owner, id, name, token, providerID, clusterID, clusterNa
 		"cluster":    "kubeconfig du cluster " + clusterName + ".",
 	}
 	for _, tag := range []string{"keys", "wireguard", "kubernetes", "cluster"} {
-		if deploy.Done(steps, tag) {
+		if !deploy.Has(steps, tag) || deploy.Done(steps, tag) {
 			continue
 		}
 		steps = deploy.Mark(steps, tag, "running", labels[tag])
@@ -173,7 +192,18 @@ func (a *API) runDeploy(owner, id, name, token, providerID, clusterID, clusterNa
 			}
 		}
 		if tag == "kubernetes" {
-			join, err := a.joinsCluster(ctx, owner, self)
+			var join bool
+			var err error
+			if deploy.Has(steps, "leave") {
+				// The machine keeps its age, so the oldest control plane of a
+				// cluster it joins is not decided by when it was bought.
+				join, err = a.anotherPlane(ctx, owner, self)
+				if err == nil && !self.ControlPlane {
+					join = true
+				}
+			} else {
+				join, err = a.joinsCluster(ctx, owner, self)
+			}
 			if err != nil {
 				a.failDeploy(owner, id, steps, tag, address, machineID, "Le déploiement n'a pas pu continuer.")
 				return
@@ -256,7 +286,7 @@ func (a *API) runDeploy(owner, id, name, token, providerID, clusterID, clusterNa
 // proxy. The applications are then delivered over SSH by the delivery loop.
 func (a *API) finishAlone(ctx context.Context, owner, id, address, machineID, privateKey string, publicKeys []string, name string, steps []deploy.Step, plan catalog.Plan) {
 	host := deploy.Host{Address: address, PrivateKey: privateKey, PublicKeys: publicKeys, NodeName: deploy.NodeName(name), Role: "server"}
-	if !deploy.Done(steps, "keys") {
+	if deploy.Has(steps, "keys") && !deploy.Done(steps, "keys") {
 		steps = deploy.Mark(steps, "keys", "running", "Dépôt des clés SSH.")
 		if err := a.saveDeploy(owner, id, "deploying", address, machineID, steps); err != nil {
 			return
@@ -274,7 +304,13 @@ func (a *API) finishAlone(ctx context.Context, owner, id, address, machineID, pr
 		}
 		install, err := agent.Install()
 		if err == nil {
-			_, err = deploy.SSH(ctx, host, deploy.RunScript("cloud-init status --wait >/dev/null 2>&1 || true\n"+install))
+			boot := "cloud-init status --wait >/dev/null 2>&1 || true\n"
+			// A machine that left a cluster had Docker stopped so Kubernetes
+			// could take ports 80 and 443. Start it again.
+			if deploy.Has(steps, "leave") {
+				boot += "systemctl enable --now docker >/dev/null 2>&1 || true\n"
+			}
+			_, err = deploy.SSH(ctx, host, deploy.RunScript(boot+install))
 		}
 		if err != nil {
 			a.failDeploy(owner, id, steps, "docker", address, machineID, err.Error())
@@ -391,6 +427,12 @@ func (a *API) reconcileFirewall(ctx context.Context, owner, clusterID string) er
 	return a.applyFirewall(ctx, owner, clusterID)
 }
 
+// firewallWhileDeploying reports whether a machine that is still being
+// installed can take the cluster firewall.
+func firewallWhileDeploying(steps []deploy.Step) bool {
+	return !deploy.Has(steps, "keys") || deploy.Done(steps, "keys")
+}
+
 func (a *API) applyFirewall(ctx context.Context, owner, clusterID string) error {
 	if clusterID == "" || deploy.Engine() != "k3s" {
 		return nil
@@ -430,10 +472,11 @@ func (a *API) applyFirewall(ctx context.Context, owner, clusterID string) error 
 	}
 	open := openPorts(exposed)
 	for _, row := range nodes {
-		// A node without its keys yet cannot be reached: it applies the
-		// firewall itself at its WireGuard step. Waiting for it here would
-		// fail the node being deployed.
-		if row.Status == "deploying" && !deploy.Done(stepsOf(row.Deploy), "keys") {
+		// A first install has no SSH keys until that step is done, so it cannot
+		// be reached yet. A move keeps its keys and has no such step: it must
+		// receive the cluster firewall, or the pods of the other nodes never
+		// reach it.
+		if row.Status == "deploying" && !firewallWhileDeploying(stepsOf(row.Deploy)) {
 			continue
 		}
 		keyIDs, err := a.Store.ServerKeyIDs(ctx, row.ID)
@@ -457,6 +500,20 @@ func (a *API) applyFirewall(ctx context.Context, owner, clusterID string) error 
 		}
 	}
 	return nil
+}
+
+// anotherPlane reports whether the cluster already has a control plane besides self.
+func (a *API) anotherPlane(ctx context.Context, owner string, self store.Server) (bool, error) {
+	rows, err := a.Store.ListServers(ctx, owner)
+	if err != nil {
+		return false, err
+	}
+	for _, row := range rows {
+		if row.ID != self.ID && row.ClusterID == self.ClusterID && row.ControlPlane {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (a *API) joinsCluster(ctx context.Context, owner string, self store.Server) (bool, error) {

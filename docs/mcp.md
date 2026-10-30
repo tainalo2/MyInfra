@@ -72,6 +72,7 @@ Chaque action faite par un assistant est dans **Activité**, marquée **MCP** av
 - « Je veux exactement un CCX23 à Helsinki. » S'il n'existe pas, l'assistant propose le modèle le plus proche ou un autre lieu.
 - « Ajoute deux nœuds au cluster SW. »
 - « Ajoute mon serveur 203.0.113.10 au cluster SW. » MyInfra s'y connecte lui-même en root par SSH, avec une clé dont il garde la clé privée et que la machine accepte déjà. Si la machine refuse root, comme les images Debian (« Please login as the user debian »), précisez l'utilisateur : MyInfra prépare l'accès root par sudo, sans mot de passe. Rien n'est à coller sur la machine. La commande à coller, l'autre façon de relier une machine, ne se donne que dans l'interface, parce qu'elle contient un jeton.
+- « Sors maison du cluster SW. » · « Passe le serveur seul atelier dans le cluster SW. » Une machine déjà dans MyInfra se déplace avec `attach_server` : elle quitte Kubernetes ou Docker, puis rejoint l'autre rôle.
 - « Un serveur seul pour un petit site, budget 5 €. » S'il n'y en a pas : « rien sous 5 € avec 2 Go ; le plus proche est … à 5,49 € ».
 
 La recherche respecte le provider, le pays, le continent, le lieu, le processeur, la mémoire, le disque (un volume est ajouté si l'offre le permet), le nombre et le modèle de cartes graphiques, le prix maximum et le modèle exact. Quand rien ne convient, elle rend les offres les plus proches, chacune avec ce qui lui manque, et dit pourquoi :
