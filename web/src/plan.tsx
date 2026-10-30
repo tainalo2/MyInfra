@@ -1,19 +1,19 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Box, DatabaseBackup, Globe, HardDrive, Shield, type LucideIcon } from "lucide-react";
-import type { AppRuntime, Application, Package } from "./api";
+import { Box, DatabaseBackup, Globe, HardDrive, LayoutGrid, Network, Server as ServerIcon, Shield, type LucideIcon } from "lucide-react";
+import type { AppRuntime, Application, Package, TemplateApp, TemplateBody, TemplateServer } from "./api";
 import { text, type MsgKey } from "./i18n";
 import { focus } from "./ui";
 
 // A plan shows what makes a package or an application and what talks to
 // what: three bands (entry, services, storage) and six kinds of links.
 
-export type Band = "entry" | "services" | "storage";
-export type LinkKind = "proxy" | "direct" | "internal" | "disk" | "redundancy" | "backup";
+export type Band = "entry" | "apps" | "services" | "machines" | "storage";
+export type LinkKind = "proxy" | "direct" | "internal" | "disk" | "redundancy" | "backup" | "hosts";
 
 export type PlanNode = {
   key: string;
   band: Band;
-  kind: "internet" | "proxy" | "service" | "disk" | "backup";
+  kind: "internet" | "proxy" | "service" | "disk" | "backup" | "app" | "server" | "cluster";
   label: string;
   detail?: string;
   // status is a word of statusLabel: running, failed, starting…
@@ -28,11 +28,13 @@ export type PlanModel = { nodes: PlanNode[]; links: PlanLink[] };
 
 const bands: { key: Band; label: MsgKey }[] = [
   { key: "entry", label: "plan.band.entry" },
+  { key: "apps", label: "plan.band.apps" },
   { key: "services", label: "plan.band.services" },
+  { key: "machines", label: "plan.band.machines" },
   { key: "storage", label: "plan.band.storage" },
 ];
 
-const icons: Record<PlanNode["kind"], LucideIcon> = { internet: Globe, proxy: Shield, service: Box, disk: HardDrive, backup: DatabaseBackup };
+const icons: Record<PlanNode["kind"], LucideIcon> = { internet: Globe, proxy: Shield, service: Box, disk: HardDrive, backup: DatabaseBackup, app: LayoutGrid, server: ServerIcon, cluster: Network };
 
 // The six strokes never change: a reader learns them once.
 const strokes: Record<LinkKind, { color: string; width: number; dash?: string; cap?: "round" }> = {
@@ -42,6 +44,7 @@ const strokes: Record<LinkKind, { color: string; width: number; dash?: string; c
   disk: { color: "var(--color-muted)", width: 2.5, dash: "2 3" },
   redundancy: { color: "var(--color-ink)", width: 1.5, dash: "10 3 2 3" },
   backup: { color: "var(--color-faint)", width: 2, dash: "1 5", cap: "round" },
+  hosts: { color: "var(--color-faint)", width: 1 },
 };
 
 export const linkLabels: Record<LinkKind, MsgKey> = {
@@ -51,6 +54,7 @@ export const linkLabels: Record<LinkKind, MsgKey> = {
   disk: "plan.link.disk",
   redundancy: "plan.link.redundancy",
   backup: "plan.link.backup",
+  hosts: "plan.link.hosts",
 };
 
 type Rect = { x: number; y: number; w: number; h: number };
@@ -167,7 +171,7 @@ export function Plan({
           const nodes = model.nodes.filter((node) => node.band === band.key);
           if (nodes.length === 0) return null;
           return (
-            <div key={band.key} data-band={band.key} className={`relative flex flex-col gap-2 rounded-md px-3 ${compact ? "py-2" : "pb-4 pt-2"} ${band.key === "storage" ? "bg-canvas" : "bg-status/40"}`}>
+            <div key={band.key} data-band={band.key} className={`relative flex flex-col gap-2 rounded-md px-3 ${compact ? "py-2" : "pb-4 pt-2"} ${band.key === "storage" || band.key === "machines" ? "bg-canvas" : "bg-status/40"}`}>
               {compact ? null : (
                 <span data-band={band.key} className="text-[12px] text-faint">
                   {text(band.label)}
@@ -194,7 +198,7 @@ export function Plan({
                       }}
                       className={`relative z-[1] flex min-w-0 max-w-[220px] items-center gap-2 bg-surface text-left transition-opacity ${node.kind === "internet" ? "rounded-full" : "rounded-md"} ${
                         on ? "border-2 border-ink" : node.draft ? "border border-dashed border-faint" : node.kind === "backup" ? "border border-dashed border-[#d6d3d1]" : "border border-[#d6d3d1] dark:border-line"
-                      } ${node.band === "storage" ? "bg-canvas" : ""} ${compact ? "px-2.5 py-1" : on ? "px-[11px] py-[7px]" : "px-3 py-2"} ${dim ? "opacity-40" : ""} ${focus}`}
+                      } ${node.band === "storage" || node.band === "machines" ? "bg-canvas" : ""} ${compact ? "px-2.5 py-1" : on ? "px-[11px] py-[7px]" : "px-3 py-2"} ${dim ? "opacity-40" : ""} ${focus}`}
                     >
                       <Glyph size={16} strokeWidth={1.5} aria-hidden className="shrink-0 text-muted" />
                       <span className="flex min-w-0 flex-col">
@@ -336,6 +340,51 @@ export function appPlan(app: Application, runtime: AppRuntime | null): PlanModel
   return { nodes, links };
 }
 
+// templatePlan draws a template before it is deployed: its applications,
+// the cluster they run on and the servers that make it. An element still
+// missing a setting is marked.
+export function templatePlan(
+  body: TemplateBody,
+  options: { cluster: string; serverReady: (server: TemplateServer) => boolean; appReady: (app: TemplateApp) => boolean },
+): PlanModel {
+  const nodes: PlanNode[] = [];
+  const links: PlanLink[] = [];
+  const apps = body.applications ?? [];
+  const servers = body.servers ?? [];
+  if (apps.length > 0) {
+    nodes.push({ key: "internet", band: "entry", kind: "internet", label: text("plan.internet") });
+    nodes.push({ key: "proxy", band: "entry", kind: "proxy", label: text("plan.proxy"), detail: text("plan.proxyDetail") });
+    links.push({ from: "internet", to: "proxy", kind: "proxy", label: "HTTPS" });
+  }
+  if (options.cluster || servers.length > 0) {
+    nodes.push({ key: "cluster", band: "machines", kind: "cluster", label: options.cluster || text("plan.clusterToChoose"), status: options.cluster ? undefined : "warn" });
+  }
+  apps.forEach((app, index) => {
+    const key = `app:${index}`;
+    const copies = (app.replicas ?? 1) > 1 ? text("apps.copyMany", { count: app.replicas ?? 1 }) : "";
+    const what = app.package ? app.package.name : shortImage(app.source || "");
+    nodes.push({ key, band: "apps", kind: "app", label: app.name || "…", detail: [what, copies].filter(Boolean).join(" · "), status: options.appReady(app) ? undefined : "warn" });
+    const name = (app.names ?? []).find((item) => item.subdomain.trim());
+    links.push({ from: "proxy", to: key, kind: "proxy", label: name ? `${name.subdomain}.${name.zone}` : undefined });
+    if (options.cluster || servers.length > 0) links.push({ from: key, to: "cluster", kind: "hosts" });
+  });
+  const marked = servers.some((server) => server.controlPlane);
+  servers.forEach((server, index) => {
+    const key = `server:${index}`;
+    const pilot = server.controlPlane || (!marked && index === 0 && Boolean(body.clusterName));
+    nodes.push({
+      key,
+      band: "machines",
+      kind: "server",
+      label: server.name || "…",
+      detail: [pilot ? text("server.pilot") : "", server.location ?? ""].filter(Boolean).join(" · "),
+      status: options.serverReady(server) ? undefined : "warn",
+    });
+    links.push({ from: "cluster", to: key, kind: "hosts" });
+  });
+  return { nodes, links };
+}
+
 // serviceOfPod finds the service a pod runs: the one whose name the pod's
 // starts with, longest first.
 export function serviceOfPod(services: { name: string }[], pod: string) {
@@ -360,6 +409,7 @@ export function PlanPanel({
   selected,
   onSelect,
   children,
+  summary,
 }: {
   model: PlanModel;
   label: string;
@@ -367,6 +417,8 @@ export function PlanPanel({
   selected: string | null;
   onSelect: (key: string | null) => void;
   children?: ReactNode;
+  // summary follows the word Plan: what the plan holds.
+  summary?: string;
 }) {
   const [flows, setFlows] = useState(false);
   const [compact, setCompact] = useState(false);
@@ -396,7 +448,7 @@ export function PlanPanel({
           <h2 className="flex items-baseline gap-2">
             {text("plan.title")}
             <span className="text-[13px] text-muted">
-              {model.nodes.filter((node) => node.kind === "service").length} {text("plan.band.services").toLowerCase()}
+              {summary ?? `${model.nodes.filter((node) => node.kind === "service").length} ${text("plan.band.services").toLowerCase()}`}
             </span>
           </h2>
           <div className="flex flex-wrap items-center gap-2">

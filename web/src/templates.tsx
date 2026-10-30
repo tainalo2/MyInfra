@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { LayoutTemplate, Plus, Rocket } from "lucide-react";
 import {
@@ -21,7 +21,8 @@ import { CancelDeployment } from "./deployments";
 import { currentLang, text, knownMessage } from "./i18n";
 import { Code } from "./code-lazy";
 import { OfferFields, OfferStorage, formatPrice } from "./offers";
-import { ConfirmDialog, Sheet, Spinner, StatusBadge, Steps, useToast } from "./kit";
+import { ConfirmDialog, Sheet, Spinner, StatusBadge, Steps, Tabs, useToast } from "./kit";
+import { PlanPanel, templatePlan } from "./plan";
 import { ProgressSteps } from "./progress";
 import { usePoll } from "./poll";
 import { AppLogo } from "./app-logo";
@@ -410,6 +411,9 @@ export function TemplateLaunch() {
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
+  // The element of the plan whose settings show, and which of its parts.
+  const [chosen, setChosen] = useState<string | null>(null);
+  const [part, setPart] = useState("general");
 
   useEffect(() => {
     Promise.all([
@@ -459,6 +463,16 @@ export function TemplateLaunch() {
   const missing = hasGaps(body, zones);
   const choices = clusters.filter((cluster) => (servers.length > 0 ? cluster.origin !== "imported" : true));
 
+  const clusterLabel = body.clusterName || choices.find((cluster) => cluster.id === target)?.name || "";
+  const model = templatePlan(body, {
+    cluster: clusterLabel,
+    serverReady,
+    appReady: (app) => !(app.names ?? []).some((name) => name.subdomain.trim() !== "" && !knownZone(name.zone, zones)),
+  });
+  const canContinue = !missing && (!needsCluster(body) || Boolean(target));
+  const setServer = (index: number, next: TemplateServer) => setBody({ ...body, servers: servers.map((item, i) => (i === index ? next : item)) });
+  const setApp = (index: number, next: TemplateApp) => setBody({ ...body, applications: apps.map((item, i) => (i === index ? next : item)) });
+
   return (
     <>
       <PageTitle title={template.name} icon={LayoutTemplate} />
@@ -467,7 +481,59 @@ export function TemplateLaunch() {
           <ErrorText>{error}</ErrorText>
         </div>
       ) : null}
-      {phase === "fill" ? (
+      <div className="mb-8">
+        <PlanPanel
+          model={model}
+          label={text("plan.labelTemplate")}
+          whole={text("plan.wholeTemplate")}
+          summary={text("plan.templateSummary", { apps: apps.length, servers: servers.length })}
+          selected={chosen}
+          onSelect={(key) => {
+            setChosen(key);
+            setPart("general");
+          }}
+        >
+          {chosen ? (
+            <ElementSettings
+              chosen={chosen}
+              part={part}
+              onPart={setPart}
+              body={body}
+              setBody={setBody}
+              setServer={setServer}
+              setApp={setApp}
+              target={target}
+              setTarget={setTarget}
+              choices={choices}
+              providers={providers}
+              keys={keys}
+              zones={zones}
+            />
+          ) : null}
+        </PlanPanel>
+      </div>
+      {chosen ? (
+        <div className="flex max-w-[720px] flex-wrap items-center gap-4">
+          {phase === "fill" ? (
+            <Button
+              type="button"
+              disabled={!canContinue}
+              onClick={() => {
+                setPhase("summary");
+                setChosen(null);
+              }}
+            >
+              {text("auth.continue")}
+            </Button>
+          ) : (
+            <Button type="button" onClick={() => void validate()} disabled={launching || !canContinue}>
+              {launching ? <Spinner /> : null}
+              {text("ui.valider")}
+            </Button>
+          )}
+          {model.nodes.some((node) => node.status === "warn") ? <span className="text-[13px] text-warn">{text("plan.missing")}</span> : null}
+        </div>
+      ) : phase === "fill" ? (
         <form
           className="flex max-w-[720px] flex-col gap-8"
           onSubmit={(event) => {
@@ -599,6 +665,135 @@ export function TemplateLaunch() {
         </div>
       )}
     </>
+  );
+}
+
+// ElementSettings shows the settings of one element of a template's plan;
+// an element with several kinds of settings has a nav to go from one to the other.
+function ElementSettings({
+  chosen,
+  part,
+  onPart,
+  body,
+  setBody,
+  setServer,
+  setApp,
+  target,
+  setTarget,
+  choices,
+  providers,
+  keys,
+  zones,
+}: {
+  chosen: string;
+  part: string;
+  onPart: (part: string) => void;
+  body: TemplateBody;
+  setBody: (body: TemplateBody) => void;
+  setServer: (index: number, server: TemplateServer) => void;
+  setApp: (index: number, app: TemplateApp) => void;
+  target: string;
+  setTarget: (id: string) => void;
+  choices: Cluster[];
+  providers: Secret[];
+  keys: Secret[];
+  zones: DnsZone[];
+}) {
+  const [kind, raw] = chosen.split(":");
+  const index = Number(raw);
+  let parts: { key: string; label: string; body: ReactNode }[] = [];
+  if (kind === "cluster") {
+    parts = [
+      {
+        key: "general",
+        label: text("tpl.part.general"),
+        body: body.clusterName ? (
+          <Field label={text("template.createdCluster")}>
+            <Input value={body.clusterName} onChange={(e) => setBody({ ...body, clusterName: e.target.value })} required />
+          </Field>
+        ) : choices.length === 0 ? (
+          <p className="text-muted">{text("template.noCluster")}</p>
+        ) : (
+          <Field label={text("field.cluster")}>
+            <Select value={target} onChange={(e) => setTarget(e.target.value)} required>
+              <option value="">{text("common.choose")}</option>
+              {choices.map((cluster) => (
+                <option key={cluster.id} value={cluster.id}>
+                  {cluster.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ),
+      },
+    ];
+  } else if (kind === "server") {
+    const servers = body.servers ?? [];
+    const server = servers[index];
+    if (!server) return null;
+    const marked = servers.some((item) => item.controlPlane);
+    const pilot = server.controlPlane || (!marked && index === 0 && Boolean(body.clusterName));
+    parts = [
+      {
+        key: "general",
+        label: text("tpl.part.general"),
+        body: (
+          <>
+            <p className="text-muted">{pilot ? text("tpl.pilotHint") : text("tpl.appsHint")}</p>
+            <ServerLine server={server} providers={providers} keys={keys} />
+            {serverReady(server) ? null : <p className="text-[13px] text-warn">{text("plan.missing")}</p>}
+          </>
+        ),
+      },
+      {
+        key: "machine",
+        label: text("tpl.part.machine"),
+        body: <MachineFields server={server} providers={providers} keys={keys} onChange={(next) => setServer(index, next)} />,
+      },
+    ];
+  } else if (kind === "app") {
+    const app = (body.applications ?? [])[index];
+    if (!app) return null;
+    const change = (next: TemplateApp) => setApp(index, next);
+    parts = [
+      { key: "general", label: text("tpl.part.general"), body: <AppGeneral app={app} onChange={change} /> },
+      { key: "addresses", label: text("tpl.part.addresses"), body: <AppNames app={app} zones={zones} onChange={change} /> },
+      ...(app.package ? [] : [{ key: "services", label: text("tpl.part.services"), body: <AppServicesFields app={app} onChange={change} /> }]),
+      { key: "copies", label: text("tpl.part.copies"), body: <AppCopies app={app} onChange={change} /> },
+      { key: "variables", label: text("tpl.part.variables"), body: <AppVariables key={chosen} app={app} onChange={change} /> },
+    ];
+  } else {
+    const names = (body.applications ?? []).flatMap((app) => (app.names ?? []).filter((name) => name.subdomain.trim()).map((name) => ({ app: app.name, host: `${name.subdomain}.${name.zone}` })));
+    parts = [
+      {
+        key: "general",
+        label: text("tpl.part.addresses"),
+        body:
+          names.length === 0 ? (
+            <p className="text-muted">{text("names.none")}</p>
+          ) : (
+            <ul className="overflow-hidden rounded-md border border-line bg-surface">
+              {names.map((name) => (
+                <li key={name.host} className="flex flex-wrap items-baseline justify-between gap-x-4 border-t border-line px-4 py-2 first:border-t-0">
+                  <span className="break-all font-mono text-[13px]">{name.host}</span>
+                  <span className="text-[13px] text-muted">{name.app}</span>
+                </li>
+              ))}
+            </ul>
+          ),
+      },
+    ];
+  }
+  const shown = parts.find((item) => item.key === part) ?? parts[0];
+  return (
+    <div className="mb-6 flex max-w-[720px] flex-col gap-4">
+      {parts.length > 1 ? (
+        <Tabs label={text("tpl.part.parts")} active={shown.key} onChange={onPart} tabs={parts.map((item) => ({ key: item.key, label: item.label }))} />
+      ) : null}
+      <div role={parts.length > 1 ? "tabpanel" : undefined} className="flex flex-col gap-4">
+        {shown.body}
+      </div>
+    </div>
   );
 }
 
@@ -898,16 +1093,27 @@ function StorageFields({
   );
 }
 
+type AppPart = { app: TemplateApp; onChange: (app: TemplateApp) => void };
+
+// AppFields is every setting of an application of a template, in one form.
+// Its parts also show one at a time, under the plan of the template.
 function AppFields({ app, zones, onChange }: { app: TemplateApp; zones: DnsZone[]; onChange: (app: TemplateApp) => void }) {
-  const names = app.names ?? [];
-  const services = app.services ?? [];
-  // The text is kept as typed: a line being written has no "=" yet, and
-  // rebuilding it from the parsed values would erase it.
-  const [variables, setVariables] = useState(() =>
-    Object.entries(app.variables ?? {})
-      .map(([key, value]) => `${key}=${value}`)
-      .join("\n"),
+  return (
+    <>
+      <AppGeneral app={app} onChange={onChange} />
+      <AppNames app={app} zones={zones} onChange={onChange} />
+      {app.package ? null : (
+        <Fold title={text("field.services")}>
+          <AppServicesFields app={app} onChange={onChange} />
+        </Fold>
+      )}
+      <AppCopies app={app} onChange={onChange} />
+      <AppVariables app={app} onChange={onChange} />
+    </>
   );
+}
+
+function AppGeneral({ app, onChange }: AppPart) {
   return (
     <>
       <Field label={text("field.name")}>
@@ -924,71 +1130,92 @@ function AppFields({ app, zones, onChange }: { app: TemplateApp; zones: DnsZone[
               <Input value={app.inputs?.[input.key] ?? ""} onChange={(e) => onChange({ ...app, inputs: { ...app.inputs, [input.key]: e.target.value } })} required />
             </Field>
           ))}
-          <NameList names={names} zones={zones} onChange={(next) => onChange({ ...app, names: next })} />
         </>
       ) : (
-      <>
-      <Field label={text("field.source")}>
-        <Select value={app.sourceKind} onChange={(e) => onChange({ ...app, sourceKind: e.target.value })}>
-          <option value="image">{text("common.image")}</option>
-          {/* Kept for a template written before: no build from Git yet. */}
-          {app.sourceKind === "git" ? <option value="git">{text("ui.depot")}</option> : null}
-        </Select>
-      </Field>
-      <Field label={app.sourceKind === "git" ? text("ui.depot") : text("common.image")}>
-        <Input value={app.source} onChange={(e) => onChange({ ...app, source: e.target.value })} required />
-      </Field>
-      <NameList names={names} zones={zones} onChange={(next) => onChange({ ...app, names: next })} />
-      <Fold title={text("field.services")}>
-        <div className="flex flex-col gap-3">
-          {services.map((service, index) => (
-            <div key={index} className="flex flex-col gap-2 rounded-md border border-line p-3">
-              <Input value={service.name} placeholder={text("field.name")} aria-label={text("field.name")} onChange={(e) => onChange({ ...app, services: services.map((item, i) => (i === index ? { ...item, name: e.target.value } : item)) })} />
-              <Input value={service.image} placeholder={text("common.image")} aria-label={text("common.image")} onChange={(e) => onChange({ ...app, services: services.map((item, i) => (i === index ? { ...item, image: e.target.value } : item)) })} />
-              <label className="flex items-center gap-2 text-muted">
-                <input type="checkbox" checked={service.published} onChange={() => onChange({ ...app, services: services.map((item, i) => ({ ...item, published: i === index })) })} />
-                {text("status.ready")}
-              </label>
-              <label className="flex items-center gap-2 text-muted">
-                <input
-                  type="checkbox"
-                  checked={service.disk}
-                  onChange={(e) => onChange({ ...app, services: services.map((item, i) => (i === index ? { ...item, disk: e.target.checked } : item)) })}
-                />
-                {text("common.disk")}
-              </label>
-            </div>
-          ))}
-          <TextButton type="button" onClick={() => onChange({ ...app, services: [...services, { name: "", image: "", published: services.length === 0, disk: false }] })}>
-            <Icon icon={Plus} />
-            {text("ui.ajouterUnService")}
-          </TextButton>
-        </div>
-      </Fold>
-      </>
+        <>
+          <Field label={text("field.source")}>
+            <Select value={app.sourceKind} onChange={(e) => onChange({ ...app, sourceKind: e.target.value })}>
+              <option value="image">{text("common.image")}</option>
+              {/* Kept for a template written before: no build from Git yet. */}
+              {app.sourceKind === "git" ? <option value="git">{text("ui.depot")}</option> : null}
+            </Select>
+          </Field>
+          <Field label={app.sourceKind === "git" ? text("ui.depot") : text("common.image")}>
+            <Input value={app.source} onChange={(e) => onChange({ ...app, source: e.target.value })} required />
+          </Field>
+        </>
       )}
+    </>
+  );
+}
+
+function AppNames({ app, zones, onChange }: AppPart & { zones: DnsZone[] }) {
+  return <NameList names={app.names ?? []} zones={zones} onChange={(next) => onChange({ ...app, names: next })} />;
+}
+
+function AppServicesFields({ app, onChange }: AppPart) {
+  const services = app.services ?? [];
+  return (
+    <div className="flex flex-col gap-3">
+      {services.map((service, index) => (
+        <div key={index} className="flex flex-col gap-2 rounded-md border border-line p-3">
+          <Input value={service.name} placeholder={text("field.name")} aria-label={text("field.name")} onChange={(e) => onChange({ ...app, services: services.map((item, i) => (i === index ? { ...item, name: e.target.value } : item)) })} />
+          <Input value={service.image} placeholder={text("common.image")} aria-label={text("common.image")} onChange={(e) => onChange({ ...app, services: services.map((item, i) => (i === index ? { ...item, image: e.target.value } : item)) })} />
+          <label className="flex items-center gap-2 text-muted">
+            <input type="checkbox" checked={service.published} onChange={() => onChange({ ...app, services: services.map((item, i) => ({ ...item, published: i === index })) })} />
+            {text("status.ready")}
+          </label>
+          <label className="flex items-center gap-2 text-muted">
+            <input
+              type="checkbox"
+              checked={service.disk}
+              onChange={(e) => onChange({ ...app, services: services.map((item, i) => (i === index ? { ...item, disk: e.target.checked } : item)) })}
+            />
+            {text("common.disk")}
+          </label>
+        </div>
+      ))}
+      <TextButton type="button" onClick={() => onChange({ ...app, services: [...services, { name: "", image: "", published: services.length === 0, disk: false }] })}>
+        <Icon icon={Plus} />
+        {text("ui.ajouterUnService")}
+      </TextButton>
+    </div>
+  );
+}
+
+function AppCopies({ app, onChange }: AppPart) {
+  return (
+    <>
       <Field label={text("field.redundancy")}>
-        <Input
-          value={String(app.replicas ?? 1)}
-          inputMode="numeric"
-          onChange={(e) => onChange({ ...app, replicas: Number(e.target.value) || 1 })}
-        />
+        <Input value={String(app.replicas ?? 1)} inputMode="numeric" onChange={(e) => onChange({ ...app, replicas: Number(e.target.value) || 1 })} />
       </Field>
       <p className="text-faint">{text("app.replicasHint")}</p>
-      <Field label={text("app.variables")}>
-        <Code
-          value={variables}
-          language="env"
-          label={text("app.variables")}
-          placeholder="NOM=valeur"
-          minHeight="6rem"
-          onChange={(next) => {
-            setVariables(next);
-            onChange({ ...app, variables: parseVariables(next) });
-          }}
-        />
-      </Field>
     </>
+  );
+}
+
+function AppVariables({ app, onChange }: AppPart) {
+  // The text is kept as typed: a line being written has no "=" yet, and
+  // rebuilding it from the parsed values would erase it.
+  const [variables, setVariables] = useState(() =>
+    Object.entries(app.variables ?? {})
+      .map(([key, value]) => `${key}=${value}`)
+      .join("\n"),
+  );
+  return (
+    <Field label={text("app.variables")}>
+      <Code
+        value={variables}
+        language="env"
+        label={text("app.variables")}
+        placeholder="NOM=valeur"
+        minHeight="6rem"
+        onChange={(next) => {
+          setVariables(next);
+          onChange({ ...app, variables: parseVariables(next) });
+        }}
+      />
+    </Field>
   );
 }
 
