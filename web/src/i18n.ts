@@ -1561,6 +1561,17 @@ const fr = {
   "nav.appsShort": "Apps",
   "settings.totpOnShort": "2FA",
   "settings.totpOffShort": "Sans 2FA",
+  "apps.filter.all": "Toutes",
+  "apps.online": "{count} en ligne sur {total}",
+  "apps.singleHint": "Si ce serveur tombe, l'app s'arrête.",
+  "apps.singleShort": "Un seul serveur : l'app s'arrête s'il tombe.",
+  "apps.addCopy": "Ajouter une copie",
+  "apps.filterPlaceholder": "Filtrer par nom ou adresse",
+  "apps.filterLabel": "Filtrer les applications",
+  "apps.statusGroup": "Statut",
+  "apps.triangleHint": "Le triangle signale une app sur un seul serveur : si le serveur tombe, elle s'arrête.",
+  "apps.actionsOf": "Actions de {name}",
+  "apps.openSite": "Ouvrir le site",
 } as const;
 
 export type MsgKey = keyof typeof fr;
@@ -3056,6 +3067,17 @@ const en: Record<MsgKey, string> = {
   "nav.appsShort": "Apps",
   "settings.totpOnShort": "2FA",
   "settings.totpOffShort": "No 2FA",
+  "apps.filter.all": "All",
+  "apps.online": "{count} online out of {total}",
+  "apps.singleHint": "If this server goes down, the app stops.",
+  "apps.singleShort": "One server only: the app stops if it goes down.",
+  "apps.addCopy": "Add a copy",
+  "apps.filterPlaceholder": "Filter by name or address",
+  "apps.filterLabel": "Filter applications",
+  "apps.statusGroup": "Status",
+  "apps.triangleHint": "The triangle marks an app on a single server: if the server goes down, it stops.",
+  "apps.actionsOf": "Actions for {name}",
+  "apps.openSite": "Open the site",
 };
 
 const pt: Record<MsgKey, string> = {
@@ -4528,6 +4550,17 @@ const pt: Record<MsgKey, string> = {
   "nav.appsShort": "Apps",
   "settings.totpOnShort": "2FA",
   "settings.totpOffShort": "Sem 2FA",
+  "apps.filter.all": "Todas",
+  "apps.online": "{count} online de {total}",
+  "apps.singleHint": "Se este servidor cair, a app para.",
+  "apps.singleShort": "Um só servidor: a app para se ele cair.",
+  "apps.addCopy": "Adicionar uma cópia",
+  "apps.filterPlaceholder": "Filtrar por nome ou endereço",
+  "apps.filterLabel": "Filtrar aplicações",
+  "apps.statusGroup": "Estado",
+  "apps.triangleHint": "O triângulo assinala uma app num só servidor: se o servidor cair, ela para.",
+  "apps.actionsOf": "Ações de {name}",
+  "apps.openSite": "Abrir o site",
 };
 
 const it: Record<MsgKey, string> = {
@@ -5999,6 +6032,17 @@ const it: Record<MsgKey, string> = {
   "nav.appsShort": "App",
   "settings.totpOnShort": "2FA",
   "settings.totpOffShort": "Senza 2FA",
+  "apps.filter.all": "Tutte",
+  "apps.online": "{count} online su {total}",
+  "apps.singleHint": "Se questo server cade, l'app si ferma.",
+  "apps.singleShort": "Un solo server: l'app si ferma se cade.",
+  "apps.addCopy": "Aggiungi una copia",
+  "apps.filterPlaceholder": "Filtra per nome o indirizzo",
+  "apps.filterLabel": "Filtra le applicazioni",
+  "apps.statusGroup": "Stato",
+  "apps.triangleHint": "Il triangolo segnala un'app su un solo server: se il server cade, si ferma.",
+  "apps.actionsOf": "Azioni di {name}",
+  "apps.openSite": "Apri il sito",
 };
 
 const de: Record<MsgKey, string> = {
@@ -7472,6 +7516,17 @@ const de: Record<MsgKey, string> = {
   "nav.appsShort": "Apps",
   "settings.totpOnShort": "2FA",
   "settings.totpOffShort": "Ohne 2FA",
+  "apps.filter.all": "Alle",
+  "apps.online": "{count} von {total} online",
+  "apps.singleHint": "Fällt dieser Server aus, stoppt die App.",
+  "apps.singleShort": "Nur ein Server: Fällt er aus, stoppt die App.",
+  "apps.addCopy": "Kopie hinzufügen",
+  "apps.filterPlaceholder": "Nach Name oder Adresse filtern",
+  "apps.filterLabel": "Anwendungen filtern",
+  "apps.statusGroup": "Status",
+  "apps.triangleHint": "Das Dreieck markiert eine App auf nur einem Server: Fällt der Server aus, stoppt sie.",
+  "apps.actionsOf": "Aktionen für {name}",
+  "apps.openSite": "Website öffnen",
 };
 
 const tables: Record<Lang, Record<MsgKey, string>> = { fr, en, pt, it, de };

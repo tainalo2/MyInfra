@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ChevronDown, ChevronUp, ExternalLink, Map as MapIcon, Search, X } from "lucide-react";
 import { api, peek, type Application, type Overview as OverviewData, type OverviewPod, type OverviewServer, type UpdateItem } from "./api";
@@ -9,12 +9,13 @@ import { hourlyRate, money, rateCurrency } from "./measure";
 import { hostingLabel } from "./hosting";
 import { UsageMeters } from "./meters";
 import { placeOf } from "./places";
-import { Button, ErrorText, Field, HealthDot, Icon, IconButton, LoadingLines, Select, TextButton, focus, liveServer, podFailed, podHealth, serverState, statusLabel, useDeployments, useDestructions } from "./ui";
+import { Button, ErrorText, HealthDot, Icon, IconButton, LoadingLines, TextButton, focus, liveServer, podFailed, podHealth, serverState, statusLabel, useDeployments, useDestructions } from "./ui";
 import { EventList } from "./world";
 import { appHealth } from "./kit";
 import { urgent, useUpdates } from "./updates";
 import { WorldMap, healthOf, worst, type Inset, type MapSite, type Tone } from "./worldmap";
 import { useSession } from "./session";
+import { RedundancyDialog } from "./redundancy";
 
 type Mode = "serveurs" | "apps" | "pods";
 type Selection = { kind: "app" | "server" | "lieu" | "pod"; id: string } | null;
@@ -848,118 +849,6 @@ function AppCard({
         )}
       </div>
     </>
-  );
-}
-
-type RedundancyPlan = { scaled: string[]; failover: string[]; database: string[]; alone: string[] };
-type RedundancyOptions = { plan: RedundancyPlan; nodes: number; storageNodes: number; backedUp: string[] };
-
-function RedundancyDialog({ app, nodes, onClose, onDone }: { app: Application; nodes: number; onClose: () => void; onDone: () => void }) {
-  const [copies, setCopies] = useState(Math.min(3, nodes));
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState("");
-  // The server knows how each service keeps its data, and so what it can become.
-  const [options, setOptions] = useState<RedundancyOptions | null>(null);
-  useEffect(() => {
-    let stop = false;
-    api<RedundancyOptions>(`/api/applications/${app.id}/redundancy`)
-      .then((next) => {
-        if (!stop) setOptions(next);
-      })
-      .catch((err) => {
-        if (!stop) setError(err instanceof Error ? err.message : text("common.error"));
-      });
-    return () => {
-      stop = true;
-    };
-  }, [app.id]);
-  const plan = options?.plan;
-  const needsCopies = Boolean(plan && plan.scaled.length + plan.database.length > 0);
-  const needsStorage = Boolean(plan && plan.failover.length + plan.database.length > 0);
-  const storageShort = Boolean(options && needsStorage && options.nodes < options.storageNodes);
-  const actionable = Boolean(plan && plan.scaled.length + plan.failover.length + plan.database.length > 0);
-  const choices = Array.from({ length: Math.max(0, nodes - 1) }, (_, i) => i + 2);
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setSending(true);
-    setError("");
-    try {
-      await api(`/api/applications/${app.id}/redundancy`, { method: "POST", body: JSON.stringify({ copies: needsCopies ? copies : 0 }) });
-      onDone();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : text("common.error"));
-      setSending(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-ink/40 px-6" role="dialog" aria-modal="true" aria-labelledby="redundancy-title">
-      <form onSubmit={submit} className="flex max-h-[80vh] w-full max-w-md flex-col rounded-md border border-line bg-surface p-6">
-        <h2 id="redundancy-title" className="mb-3 text-lg">{text("redundancy.title", { name: app.name })}</h2>
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <p className="mb-6 text-muted">{text("redundancy.intro")}</p>
-          {!options && !error ? <LoadingLines lines={2} label={text("field.services")} /> : null}
-          {plan && !actionable ? <p className="mb-6 text-warn">{text("redundancy.none")}</p> : null}
-          {storageShort ? <p className="mb-6 text-warn">{text("redundancy.storageShort", { count: options?.storageNodes ?? 3 })}</p> : null}
-          {plan && actionable ? (
-            <>
-              {needsCopies ? (
-                <div className="mb-6">
-                  <Field label={text("redundancy.copies")}>
-                    <Select value={copies} onChange={(e) => setCopies(Number(e.target.value))} autoFocus>
-                      {choices.map((count) => (
-                        <option key={count} value={count}>
-                          {text("redundancy.option", { count })}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                </div>
-              ) : null}
-              <ul className="mb-6">
-                {plan.scaled.map((name) => (
-                  <li key={name} className="border-t border-line py-2">
-                    {text("redundancy.scaled", { name, count: copies })}
-                  </li>
-                ))}
-                {plan.database.map((name) => (
-                  <li key={name} className="border-t border-line py-2">
-                    {text("redundancy.database", { name, count: copies })}
-                  </li>
-                ))}
-                {plan.failover.map((name) => (
-                  <li key={name} className="border-t border-line py-2">
-                    {options?.backedUp.includes(name) ? text("redundancy.failoverOn", { name }) : text("redundancy.failover", { name })}
-                  </li>
-                ))}
-                {plan.alone.map((name) => (
-                  <li key={name} className="border-t border-line py-2 text-muted">
-                    {text("redundancy.alone", { name })}
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : null}
-          {error ? (
-            <div className="mb-6">
-              <ErrorText>{error}</ErrorText>
-            </div>
-          ) : null}
-        </div>
-        <div className="flex items-center gap-4">
-          {actionable ? (
-            <Button type="submit" disabled={sending || storageShort || (needsCopies && choices.length === 0)}>
-              {sending ? <span className="size-4 animate-spin rounded-full border border-current border-t-transparent" /> : null}
-              {text("redundancy.deploy")}
-            </Button>
-          ) : null}
-          <TextButton type="button" onClick={onClose}>
-            {text("common.cancel")}
-          </TextButton>
-        </div>
-      </form>
-    </div>
   );
 }
 

@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { langNames, langs, text, type MsgKey } from "./i18n";
 import { useI18n } from "./lang";
@@ -543,7 +544,8 @@ function useCrumbs() {
 function Breadcrumb() {
   useI18n();
   const crumbs = useCrumbs();
-  if (crumbs.length === 0) return null;
+  // A trail of one step says nothing the title does not.
+  if (crumbs.length < 2) return null;
   return (
     <nav aria-label={text("crumb.trail")} className="breadcrumb mb-8 hidden md:block">
       <ol className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -567,6 +569,19 @@ function Breadcrumb() {
   );
 }
 
+// PhoneAction puts the one action of a page in the phone's top bar.
+function PhoneAction({ icon: Glyph, label, onClick }: { icon: LucideIcon; label: string; onClick: () => void }) {
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => setSlot(document.getElementById("phone-action")), []);
+  if (!slot) return null;
+  return createPortal(
+    <button type="button" onClick={onClick} aria-label={label} className={`inline-flex size-10 items-center justify-center rounded-full text-ink md:hidden ${focus}`}>
+      <Glyph size={22} strokeWidth={1.75} aria-hidden />
+    </button>,
+    slot,
+  );
+}
+
 // MobileBar heads a page on a phone: the way back on the left, the search
 // and what is running on the right. The page title follows, large.
 function MobileBar() {
@@ -587,6 +602,7 @@ function MobileBar() {
       <span className="flex items-center gap-1">
         <BusyIndicator />
         <SearchButton compact />
+        <span id="phone-action" className="contents" />
       </span>
     </div>
   );
@@ -737,12 +753,18 @@ export function PageTitle({
   title,
   icon,
   mark,
+  note,
   action,
+  phoneAction,
 }: {
   title: string;
   icon?: LucideIcon;
   mark?: ReactNode;
+  // note follows the title in small words: a count, a cost.
+  note?: ReactNode;
   action?: ReactNode;
+  // phoneAction replaces action on a phone: one icon in the top bar.
+  phoneAction?: { icon: LucideIcon; label: string; onClick: () => void };
 }) {
   // Each page names its tab, so that several tabs can be told apart. A page
   // without a title, such as the overview, leaves just MyInfra.
@@ -757,8 +779,10 @@ export function PageTitle({
       <h1 className="flex min-w-0 items-center gap-3 text-[28px] font-medium leading-[1.2] md:text-2xl md:leading-8">
         {mark ? mark : icon ? <Icon icon={icon} /> : null}
         {title}
+        {note ? <span className="hidden self-end pb-1 text-[15px] font-normal leading-normal text-muted sm:inline">{note}</span> : null}
       </h1>
-      {action}
+      {phoneAction && action ? <div className="hidden md:block">{action}</div> : action}
+      {phoneAction ? <PhoneAction {...phoneAction} /> : null}
     </div>
   );
 }
