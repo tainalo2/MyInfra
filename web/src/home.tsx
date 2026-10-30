@@ -42,6 +42,7 @@ export function Home() {
   const toast = useToast();
   const [pausing, setPausing] = useState<Application | null>(null);
   const [spreading, setSpreading] = useState<Application | null>(null);
+  const [restarting, setRestarting] = useState<Application | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
 
@@ -166,6 +167,7 @@ export function Home() {
                     mode={mode}
                     removal={<RemovalNotice job={removalOf(jobs, "application", app.id)} />}
                     onPause={app.guarded || !canDeploy ? undefined : () => pause(app)}
+                    onRestart={app.guarded || !canDeploy ? undefined : () => setRestarting(app)}
                   />
                 </li>
               ))}
@@ -176,6 +178,20 @@ export function Home() {
       {pausing ? (
         <ConfirmDialog title={text("apps.pauseTitle", { name: pausing.name })} confirmLabel={text("apps.pauseAction")} onConfirm={() => setPaused(pausing, true)} onClose={() => setPausing(null)}>
           {text("apps.pauseHint")}
+        </ConfirmDialog>
+      ) : null}
+      {restarting ? (
+        <ConfirmDialog
+          title={text("apps.restartTitle", { name: restarting.name })}
+          confirmLabel={text("apps.restart")}
+          onConfirm={async () => {
+            await api(`/api/applications/${restarting.id}/restart`, { method: "POST", body: "{}" });
+            toast(text("apps.restarted", { name: restarting.name }));
+            setRestarting(null);
+          }}
+          onClose={() => setRestarting(null)}
+        >
+          {restarting.clusterId ? text("apps.restartHintCluster") : text("apps.restartHintMachine")}
         </ConfirmDialog>
       ) : null}
       {spreading ? (
@@ -193,6 +209,11 @@ export function Home() {
   );
 }
 
+function loadLine(place?: Placement) {
+  if (!place?.load) return "";
+  return text("apps.load", { cpu: place.load.cpu, ram: place.load.ram });
+}
+
 function whereLine(place?: Placement) {
   if (!place || place.pods === 0) return "";
   const pods = place.pods === 1 ? text("overview.pod1") : text("overview.podN", { count: place.pods });
@@ -206,6 +227,7 @@ function AppEntry({
   mode,
   removal,
   onPause,
+  onRestart,
 }: {
   app: Application;
   status: string;
@@ -213,6 +235,7 @@ function AppEntry({
   mode: "cards" | "rows";
   removal: ReactNode;
   onPause?: () => void;
+  onRestart?: () => void;
 }) {
   const navigate = useNavigate();
   const line = whereLine(place);
@@ -223,6 +246,7 @@ function AppEntry({
       ) : null}
       <MenuItem onClick={() => navigate(`/applications/${app.id}`)}>{text("overview.open")}</MenuItem>
       {onPause ? <MenuItem onClick={onPause}>{app.paused ? text("home.resume") : text("apps.pauseAction")}</MenuItem> : null}
+      {onRestart && !app.paused ? <MenuItem onClick={onRestart}>{text("apps.restart")}</MenuItem> : null}
     </ActionsMenu>
   );
   const domain = app.hostname ? (
@@ -248,7 +272,7 @@ function AppEntry({
           <StatusBadge status={status} />
         </span>
         <span className="min-w-0 flex-[1_1_200px]">{domain}</span>
-        <span className="min-w-0 flex-[1_1_180px] truncate text-[13px] text-muted">{line}</span>
+        <span className="min-w-0 flex-[1_1_180px] truncate text-[13px] text-muted">{[line, loadLine(place)].filter(Boolean).join(" · ")}</span>
         {warning ? <span title={text("apps.singleShort")}>{warning}</span> : null}
         {menu}
         {removal}
@@ -272,7 +296,12 @@ function AppEntry({
       </div>
       {removal}
       {domain}
-      {line ? <div className="mt-auto flex flex-wrap justify-between gap-x-3 gap-y-1 border-t border-line pt-3 text-[13px] text-muted">{line}</div> : null}
+      {line ? (
+        <div className="mt-auto flex flex-wrap justify-between gap-x-3 gap-y-1 border-t border-line pt-3 text-[13px] text-muted">
+          <span>{line}</span>
+          {loadLine(place) ? <span>{loadLine(place)}</span> : null}
+        </div>
+      ) : null}
       {warning}
     </div>
   );

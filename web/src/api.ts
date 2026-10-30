@@ -215,7 +215,7 @@ export type InfraEvent = {
   serverName?: string;
   clusterId?: string;
   clusterName?: string;
-  source?: "ui" | "api" | "mcp";
+  source?: "ui" | "api" | "mcp" | "auto";
   actor?: string;
 };
 
@@ -351,6 +351,9 @@ export type OverviewPod = {
   phase: string;
   reason?: string;
   ready: boolean;
+  // cpu in millicores and memory in bytes, from the last reading.
+  cpu?: number;
+  memory?: number;
 };
 
 export type Overview = {
@@ -550,6 +553,14 @@ export type VersionView = {
   image?: string;
   stoppable: boolean;
 };
+
+// QuietUpdate is an update that stops no application: applied with the
+// others in one go, or at night.
+export type QuietUpdate = { kind: "app" | "server" | "cluster" | "library" | "myinfra"; id: string; name: string; reason: string };
+
+export type QuietResult = QuietUpdate & { error?: string };
+
+export type AutoUpdates = { enabled: boolean; hour: number; lastRun?: string };
 
 export type UpdatesView = {
   updates: UpdateItem[];

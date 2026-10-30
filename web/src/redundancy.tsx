@@ -6,7 +6,7 @@ import { Button, ErrorText, Field, LoadingLines, Select, TextButton, liveServer 
 
 // Placement says where an application runs: its pods, the places of their
 // servers, and the one server it hangs on when its cluster could spread it.
-export type Placement = { pods: number; places: string[]; servers: string[]; single: string; nodes: number };
+export type Placement = { pods: number; places: string[]; servers: string[]; single: string; nodes: number; load?: { cpu: number; ram: number } };
 
 export function placements(data: Overview | null) {
   const out = new Map<string, Placement>();
@@ -23,7 +23,19 @@ export function placements(data: Overview | null) {
     const nodes = app.clusterId ? data.servers.filter((server) => server.clusterId === app.clusterId && liveServer(server)).length : 0;
     // A copy that restarts elsewhere from its replicated data is not a single point.
     const single = app.clusterId && !app.paused && !app.failover && nodes >= 2 && hosts.size === 1 ? [...hosts][0] : "";
+    // The load is the share of its servers the app's pods use, when read.
+    let load: Placement["load"];
+    const hostRows = [...hosts].map((id) => serverById.get(id)).filter((server) => server?.usage?.measured);
+    const cpuTotal = hostRows.reduce((sum, server) => sum + (server?.usage?.cpu.total ?? 0), 0);
+    const ramTotal = hostRows.reduce((sum, server) => sum + (server?.usage?.memory.total ?? 0), 0);
+    if (pods.some((pod) => pod.cpu !== undefined || pod.memory !== undefined) && cpuTotal > 0 && ramTotal > 0) {
+      load = {
+        cpu: Math.round((pods.reduce((sum, pod) => sum + (pod.cpu ?? 0), 0) / cpuTotal) * 100),
+        ram: Math.round((pods.reduce((sum, pod) => sum + (pod.memory ?? 0), 0) / ramTotal) * 100),
+      };
+    }
     out.set(app.id, {
+      load,
       pods: pods.length,
       places: [...new Set([...hosts].map(placeLabel).filter(Boolean))],
       servers: [...hosts].map((id) => serverById.get(id)?.name ?? "").filter(Boolean),

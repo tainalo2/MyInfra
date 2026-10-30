@@ -1,13 +1,13 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowUpCircle, RefreshCw, ShieldAlert } from "lucide-react";
-import { api, type Impact, type ImpactEffect, type Server, type UpdateItem, type UpdateJob, type UpdateJobStep, type UpdatesView, type VersionView } from "./api";
+import { api, type AutoUpdates, type Impact, type QuietResult, type QuietUpdate, type ImpactEffect, type Server, type UpdateItem, type UpdateJob, type UpdateJobStep, type UpdatesView, type VersionView } from "./api";
 import { currentLocale, knownMessage, text, type MsgKey } from "./i18n";
 import { Sheet, Spinner, useToast } from "./kit";
 import { useI18n } from "./lang";
 import { usePoll } from "./poll";
 import { useSession } from "./session";
-import { Button, ErrorText, Icon, LoadingLines, PageTitle, SectionTitle, TextButton, focus } from "./ui";
+import { Button, ErrorText, Icon, LoadingLines, PageTitle, SectionTitle, Select, TextButton, focus } from "./ui";
 
 type UpdatesState = { view: UpdatesView | null; reload: () => void };
 
@@ -458,6 +458,39 @@ export function UpdatesPage() {
   const lastCheck = view?.checkedAt ? new Date(view.checkedAt).toLocaleString(currentLocale(), { dateStyle: "short", timeStyle: "short" }) : "";
   const busyCheck = checking || Boolean(view?.checking);
 
+  const quietPoll = usePoll<{ updates: QuietUpdate[] }>("/api/updates/quiet", 0);
+  const quiet = quietPoll.data?.updates ?? [];
+  // A new list of updates may change which pass without interruption.
+  useEffect(() => {
+    void quietPoll.reload();
+  }, [view?.checkedAt, items.length]);
+  const quietKeys = new Set(quiet.map((item) => `${item.kind}:${item.id}`));
+  const isQuiet = (item: UpdateItem) => {
+    if (item.kind === "server") {
+      const server = servers.find((row) => row.id === item.id);
+      return quietKeys.has(`server:${item.id}`) || (server?.clusterId ? quietKeys.has(`cluster:${server.clusterId}`) : false);
+    }
+    return quietKeys.has(`${item.kind}:${item.id}`);
+  };
+  const [applying, setApplying] = useState(false);
+
+  async function applyQuiet() {
+    setApplying(true);
+    try {
+      const answer = await api<{ results: QuietResult[] }>("/api/updates/quiet", { method: "POST", body: "{}" });
+      const failed = answer.results.filter((result) => result.error);
+      if (failed.length > 0) toast(failed.map((result) => `${result.name} : ${result.error}`).join(" · "), "bad");
+      else toast(text("upd.quiet.started", { count: answer.results.length }));
+      if (answer.results.some((result) => result.kind === "myinfra" && !result.error) && version?.latest) setRestarting(version.latest);
+      await reload();
+      await quietPoll.reload();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : text("common.error"), "bad");
+    } finally {
+      setApplying(false);
+    }
+  }
+
   const security = items.filter((item) => item.kind !== "library" && urgent(item));
   const versions = items.filter((item) => item.kind !== "library" && !urgent(item));
   const clusterOf = (item: UpdateItem) => (item.kind === "server" ? servers.find((row) => row.id === item.id) : undefined);
@@ -513,7 +546,15 @@ export function UpdatesPage() {
           </span>
           {item.kind === "myinfra" && version && !version.canUpdate && version.reason ? <span className="text-[13px] text-muted">{knownMessage(version.reason)}</span> : null}
         </div>
-        <span className={`text-[13px] ${urgent(item) ? "text-warn" : "text-muted"} md:w-[180px]`}>{levelLabel(item)}</span>
+        <span className="flex flex-col text-[13px] md:w-[180px]">
+          <span className={urgent(item) ? "text-warn" : "text-muted"}>{levelLabel(item)}</span>
+          {isQuiet(item) ? (
+            <span className="inline-flex items-center gap-1.5 text-ok">
+              <span aria-hidden className="size-2 rounded-full bg-ok" />
+              {text("upd.effect.none")}
+            </span>
+          ) : null}
+        </span>
         {canDeploy && target ? (
           <TextButton type="button" onClick={() => setTarget(target)}>
             {text("upd.update")}
@@ -567,6 +608,22 @@ export function UpdatesPage() {
               ) : null}
             </span>
           </div>
+          {quiet.length > 0 ? (
+            <section className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-md border border-line bg-surface px-4 py-3">
+              <span className="flex min-w-0 flex-col">
+                <span>{text("upd.quiet.title", { count: quiet.length })}</span>
+                <span className="text-[13px] text-muted">
+                  {quiet.map((item) => item.name).join(", ")}.{quiet.length < items.length ? ` ${text("upd.quiet.others")}` : ""}
+                </span>
+              </span>
+              {canDeploy ? (
+                <Button type="button" onClick={() => void applyQuiet()} disabled={applying}>
+                  {applying ? <Spinner /> : null}
+                  {text("upd.quiet.apply", { count: quiet.length })}
+                </Button>
+              ) : null}
+            </section>
+          ) : null}
           {!myinfra ? (
             <p className="text-[13px] text-muted">
               MyInfra · {version?.latest ? text("upd.myinfra.current", { version: version?.current ?? "" }) + " · " + text("upd.upToDate") : text("upd.myinfra.unknown")}
@@ -589,6 +646,7 @@ export function UpdatesPage() {
               </ul>
             </section>
           ) : null}
+          <NightlyPatches canDeploy={canDeploy} />
           <UpdateJobs />
         </div>
       )}
@@ -603,6 +661,65 @@ export function UpdatesPage() {
       ) : null}
       {restarting ? <MyInfraRestarting version={restarting} /> : null}
     </>
+  );
+}
+
+// NightlyPatches turns on, each night from an hour, the updates that pass
+// without interruption. Major versions and what interrupts an application
+// always wait for the person.
+function NightlyPatches({ canDeploy }: { canDeploy: boolean }) {
+  useI18n();
+  const toast = useToast();
+  const { data, setData } = usePoll<AutoUpdates>("/api/updates/auto", 0);
+  const [busy, setBusy] = useState(false);
+  if (!data) return null;
+
+  async function save(next: { enabled: boolean; hour: number }) {
+    setBusy(true);
+    try {
+      setData(await api<AutoUpdates>("/api/updates/auto", { method: "PUT", body: JSON.stringify(next) }));
+      toast(next.enabled ? text("upd.auto.on", { hour: String(next.hour).padStart(2, "0") }) : text("upd.auto.off"));
+    } catch (err) {
+      toast(err instanceof Error ? err.message : text("common.error"), "bad");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="flex flex-col gap-2">
+      <h2>{text("upd.auto.title")}</h2>
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-md border border-line bg-surface px-4 py-3">
+        <label className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={data.enabled}
+            disabled={!canDeploy || busy}
+            onChange={(event) => void save({ enabled: event.target.checked, hour: data.hour })}
+          />
+          <span className="flex flex-col">
+            <span>{text("upd.auto.label")}</span>
+            <span className="text-[13px] text-muted">{text("upd.auto.hint")}</span>
+          </span>
+        </label>
+        <label className="flex items-center gap-2 text-[13px] text-muted">
+          {text("upd.auto.from")}
+          <span className="w-24">
+            <Select value={String(data.hour)} disabled={!canDeploy || busy} onChange={(event) => void save({ enabled: data.enabled, hour: Number(event.target.value) })}>
+              {Array.from({ length: 24 }, (_, hour) => (
+                <option key={hour} value={hour}>
+                  {String(hour).padStart(2, "0")}:00
+                </option>
+              ))}
+            </Select>
+          </span>
+        </label>
+      </div>
+      {data.lastRun ? (
+        <p className="text-[13px] text-muted">{text("upd.auto.last", { when: new Date(data.lastRun).toLocaleString(currentLocale(), { dateStyle: "medium", timeStyle: "short" }) })}</p>
+      ) : null}
+    </section>
   );
 }
 

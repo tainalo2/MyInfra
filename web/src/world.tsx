@@ -147,6 +147,7 @@ function EventRow({ event }: { event: InfraEvent }) {
 }
 
 function who(event: InfraEvent) {
+  if (event.source === "auto") return text("activity.night");
   if (event.source === "mcp") return `${text("mcp.badge")}${event.actor ? ` · ${event.actor}` : ""}`;
   if (event.source === "api") return `${text("mcp.badgeApi")}${event.actor ? ` · ${event.actor}` : ""}`;
   return event.actor || "MyInfra";

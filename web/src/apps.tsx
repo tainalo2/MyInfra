@@ -784,7 +784,7 @@ export function ApplicationPage() {
   const runtimePoll = usePoll<AppRuntime>(id ? `/api/applications/${id}/runtime` : null, 8000);
   const runtime = runtimePoll.data ?? (runtimePoll.error ? emptyRuntime : null);
   const [copied, setCopied] = useState("");
-  const [confirm, setConfirm] = useState<"" | "delete" | "pause">("");
+  const [confirm, setConfirm] = useState<"" | "delete" | "pause" | "restart">("");
   const [pausing, setPausing] = useState(false);
   const [editingNames, setEditingNames] = useState(false);
   const [planned, setPlanned] = useState<string | null>(null);
@@ -887,6 +887,7 @@ export function ApplicationPage() {
           </Button>
           <ActionsMenu label={text("apps.more")}>
             {app.sourceKind === "image" && !locked ? <MenuItem onClick={() => navigate(`/applications/${app.id}/services`)}>{text("appServices.edit")}</MenuItem> : null}
+            {!app.paused && !locked ? <MenuItem onClick={() => setConfirm("restart")}>{text("apps.restart")}</MenuItem> : null}
             <MenuItem onClick={() => void keepAsPackage()}>{text("appServices.keep")}</MenuItem>
             <MenuItem tone="danger" onClick={() => setConfirm("delete")}>
               {text("common.delete")}
@@ -1031,6 +1032,21 @@ export function ApplicationPage() {
             toast(text("names.saved", { name: next.name }));
           }}
         />
+      ) : null}
+      {confirm === "restart" ? (
+        <ConfirmDialog
+          title={text("apps.restartTitle", { name: app.name })}
+          confirmLabel={text("apps.restart")}
+          onConfirm={async () => {
+            await api(`/api/applications/${app.id}/restart`, { method: "POST", body: "{}" });
+            toast(text("apps.restarted", { name: app.name }));
+            setConfirm("");
+            void runtimePoll.reload();
+          }}
+          onClose={() => setConfirm("")}
+        >
+          {app.clusterId ? text("apps.restartHintCluster") : text("apps.restartHintMachine")}
+        </ConfirmDialog>
       ) : null}
       {confirm === "pause" ? (
         <ConfirmDialog title={text("apps.pauseTitle", { name: app.name })} confirmLabel={text("apps.pauseAction")} onConfirm={() => setPaused(true)} onClose={() => setConfirm("")}>
