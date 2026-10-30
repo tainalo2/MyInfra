@@ -1,15 +1,16 @@
 import { FormEvent, useCallback, useEffect, useState, type ReactNode } from "react";
 import { DnsRecords } from "./dnsrecords";
 import { Cloud, Container, GitBranch, Globe, Plus, Trash2, type LucideIcon } from "lucide-react";
-import { api, type Secret } from "./api";
+import { Link } from "react-router-dom";
+import { api, type Secret, type Server } from "./api";
 import { text } from "./i18n";
 import { CredentialFields, emptyCredentials, registryOptions, type Credentials } from "./credentials";
 import { ConfirmDialog, Spinner, useToast } from "./kit";
 import { ProviderLogo } from "./logos";
 import { ProviderGuide, hasGuide } from "./provider-guide";
-import { ProviderSelect, type ProviderOption } from "./provider-select";
+import type { ProviderOption } from "./provider-select";
 import { useSession } from "./session";
-import { ActionsMenu, Button, EmptyList, ErrorText, Field, Icon, Input, ItemList, ListActions, ListModeButton, LoadingCards, LoadingLines, PageTitle, MenuItem, Skeleton, TextButton, entryClass, focus, useListMode } from "./ui";
+import { ActionsMenu, Button, EmptyList, ErrorText, Icon, Input, ItemList, ListActions, ListModeButton, LoadingCards, LoadingLines, PageTitle, MenuItem, Skeleton, TextButton, entryClass, focus, useListMode } from "./ui";
 
 export const providerOptions = [
   { value: "hetzner", label: "Hetzner" },
@@ -119,6 +120,12 @@ function TokenPage({
   const { canAdmin } = useSession();
   const [mode, toggleMode] = useListMode();
   const chosen = provider !== "";
+  // A provider account says which servers it rents.
+  const [rented, setRented] = useState<Server[]>([]);
+  useEffect(() => {
+    if (kind !== "provider_token") return;
+    api<Server[]>("/api/servers").then(setRented).catch(() => undefined);
+  }, [kind]);
 
   async function reload() {
     const rows = await api<Secret[]>("/api/secrets");
@@ -253,46 +260,68 @@ function TokenPage({
         </div>
       ) : null}
       {canAdmin && (creating || editing) ? (
-      <form onSubmit={save} className="flex max-w-[720px] flex-col gap-6">
-        {editing ? (
-          <p className="flex items-center gap-2">
-            <ProviderLogo id={provider} />
-            {options.find((option) => option.value === provider)?.label ?? provider}
-            <span className="text-muted">{editing.name}</span>
-          </p>
-        ) : (
-        <ProviderSelect
-          label={selectLabel}
-          value={provider}
-          options={options}
-          onChange={(value) => {
-            setProvider(value);
-            setCreds(emptyCredentials);
-          }}
-        />
-        )}
+      <form onSubmit={save} className="flex max-w-[720px] flex-col gap-8">
+        <section className="flex flex-col gap-3">
+          <h2>
+            <span className="mr-2 text-muted">1</span>
+            {selectLabel}
+          </h2>
+          {editing ? (
+            <p className="flex items-center gap-2">
+              <ProviderLogo id={provider} />
+              {options.find((option) => option.value === provider)?.label ?? provider}
+              <span className="text-muted">{editing.name}</span>
+            </p>
+          ) : (
+            <ProviderTiles
+              label={selectLabel}
+              value={provider}
+              options={options}
+              onChange={(value) => {
+                setProvider(value);
+                setCreds(emptyCredentials);
+              }}
+            />
+          )}
+        </section>
         {chosen && hasGuide(kind, provider) ? (
-          <button
-            type="button"
-            className={`self-start underline ${focus}`}
-            onClick={() => setGuideOpen(true)}
-          >
-            {text("ui.ouObtenirCesCles")}
-          </button>
+          <section className="flex flex-col gap-2">
+            <h2>
+              <span className="mr-2 text-muted">2</span>
+              {text("provider.makeKey", { name: options.find((option) => option.value === provider)?.label ?? provider })}
+            </h2>
+            <p className="text-[13px] text-muted">{text("provider.makeKeyHint")}</p>
+            <div>
+              <TextButton type="button" onClick={() => setGuideOpen(true)}>
+                {text("ui.ouObtenirCesCles")}
+              </TextButton>
+            </div>
+          </section>
         ) : null}
         {chosen ? (
           <>
+            <section className="flex flex-col gap-4">
+              <h2>
+                <span className="mr-2 text-muted">{hasGuide(kind, provider) ? 3 : 2}</span>
+                {text("provider.pasteKey")}
+              </h2>
+              <CredentialFields kind={kind} provider={provider} value={creds} onChange={setCreds} />
+            </section>
             {editing ? null : (
-              <Field label={text("field.name")}>
-                <Input value={name} onChange={(e) => setName(e.target.value)} required />
-              </Field>
+              <section className="flex flex-col gap-4">
+                <h2>
+                  <span className="mr-2 text-muted">{hasGuide(kind, provider) ? 4 : 3}</span>
+                  {text("field.name")}
+                </h2>
+                <Input value={name} onChange={(e) => setName(e.target.value)} aria-label={text("field.name")} required />
+              </section>
             )}
-            <CredentialFields kind={kind} provider={provider} value={creds} onChange={setCreds} />
-            <div>
+            <div className="flex flex-wrap items-center gap-4">
               <Button type="submit" disabled={checking}>
                 {checking ? <Spinner /> : <Icon icon={Plus} />}
                 {checking ? text("ui.verificationDeLaConnexion") : text("common.save")}
               </Button>
+              <span className="text-[13px] text-muted">{text("provider.keySafe")}</span>
             </div>
           </>
         ) : null}
@@ -327,6 +356,7 @@ function TokenPage({
                     {options.find((option) => option.value === secret.provider)?.label ?? secret.provider}
                     {kind === "provider_token" ? null : <span>····{secret.hint}</span>}
                   </span>
+                  {kind === "provider_token" ? <RentedLine servers={rented.filter((server) => server.providerId === secret.id)} /> : null}
                   {(kind === "provider_token" || kind === "registry_token") && secret.keyId ? (
                     <span className="mt-1 block break-all font-mono text-muted">{secret.keyId}</span>
                   ) : null}
@@ -364,6 +394,39 @@ function TokenPage({
       </ItemList>
       )}
       {after && !creating && !editing && loaded && secrets.length > 0 ? <div className="mt-12">{after}</div> : null}
+      {kind === "provider_token" && canAdmin && !creating && !editing && loaded && secrets.length > 0 ? (
+        <section className="mt-12">
+          <h2 className="mb-3">{text("provider.others")}</h2>
+          <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+            {options
+              .filter((option) => !secrets.some((secret) => secret.provider === option.value))
+              .map((option) => (
+                <li key={option.value}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditing(null);
+                      setProvider(option.value);
+                      setCreds(emptyCredentials);
+                      setCreating(true);
+                    }}
+                    className={`flex w-full items-center gap-2 rounded-md border border-line bg-surface px-3 py-2 text-left ${focus}`}
+                  >
+                    <ProviderLogo id={option.logo ?? option.value} />
+                    <span className="truncate">{option.label}</span>
+                  </button>
+                </li>
+              ))}
+          </ul>
+          <p className="mt-4 text-[13px] text-muted">
+            {text("provider.manualBefore")}{" "}
+            <Link to="/clusters" className={`text-link ${focus}`}>
+              {text("provider.manualLink")}
+            </Link>
+            {text("provider.manualAfter")}
+          </p>
+        </section>
+      ) : null}
       {guideOpen && chosen ? <ProviderGuide kind={kind} provider={provider} onClose={() => setGuideOpen(false)} /> : null}
       {canAdmin && removing ? (
         <ConfirmDialog
@@ -391,6 +454,53 @@ export function Providers() {
       empty={text("connect.noProvider")}
       createLabel={text("connect.newProvider")}
     />
+  );
+}
+
+// ProviderTiles picks a provider among tiles: the first ones shown, the
+// others one click away.
+function ProviderTiles({ label, value, options, onChange }: { label: string; value: string; options: ProviderOption[]; onChange: (value: string) => void }) {
+  const [all, setAll] = useState(false);
+  const first = 8;
+  const shown = all || options.length <= first + 1 ? options : options.slice(0, first).concat(options.slice(first).filter((option) => option.value === value));
+  return (
+    <div className="flex flex-col gap-2">
+      <div role="radiogroup" aria-label={label} className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {shown.map((option) => {
+          const on = option.value === value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => onChange(option.value)}
+              className={`flex min-w-0 items-center gap-2 rounded-md border bg-surface px-3 py-2 text-left ${on ? "border-ink shadow-[inset_0_0_0_1px_var(--color-ink)]" : "border-line"} ${focus}`}
+            >
+              <ProviderLogo id={option.logo ?? option.value} />
+              <span className="truncate">{option.label}</span>
+            </button>
+          );
+        })}
+      </div>
+      {options.length > first + 1 && !all ? (
+        <div>
+          <TextButton type="button" onClick={() => setAll(true)}>
+            {text("provider.seeOthers", { count: options.length - first })}
+          </TextButton>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function RentedLine({ servers }: { servers: Server[] }) {
+  if (servers.length === 0) return <span className="mt-1 block text-[13px] text-muted">{text("provider.noServer")}</span>;
+  const names = servers.map((server) => (server.clusterName ? `${server.name} (${server.clusterName})` : server.name)).join(", ");
+  return (
+    <span className="mt-1 block text-[13px] text-muted">
+      {servers.length === 1 ? text("server.count1") : text("server.countN", { count: servers.length })} · {names}
+    </span>
   );
 }
 
