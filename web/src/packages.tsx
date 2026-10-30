@@ -6,7 +6,7 @@ import { Code, languageOf } from "./code-lazy";
 import { knownMessage, text, type MsgKey } from "./i18n";
 import { useI18n } from "./lang";
 import { PlanPanel, packagePlan } from "./plan";
-import { AppsTabs, ConfirmDialog, Sheet, Tabs, useToast } from "./kit";
+import { AppsTabs, ConfirmDialog, Sheet, Spinner, Tabs, useToast } from "./kit";
 import { useSession } from "./session";
 import { ToolInstall } from "./tools";
 import { AppLogo } from "./app-logo";
@@ -26,6 +26,7 @@ import {
   PageTitle,
   Select,
   TextButton,
+  useTrail,
 } from "./ui";
 
 const blank: Package = {
@@ -161,7 +162,7 @@ export function Packages() {
 
   function start(choice: StartChoice) {
     setStarting(false);
-    if (choice === "blank") navigate("/applications/paquets/nouveau");
+    if (choice === "blank") navigate("/applications/paquets/nouveau", { state: { blank: true } });
     else if (choice === "file" || choice === "helm") setImporting(choice);
     else if (choice === "catalogue") setCopying(true);
     else navigate("/applications/paquets/nouveau", { state: { example: choice } });
@@ -174,7 +175,7 @@ export function Packages() {
         icon={LayoutGrid}
         action={
           canDeploy && rows && rows.length > 0 ? (
-            <Button type="button" onClick={() => setStarting(true)}>
+            <Button type="button" onClick={() => navigate("/applications/paquets/nouveau")}>
               <Icon icon={Plus} />
               {text("package.new")}
             </Button>
@@ -330,6 +331,146 @@ function StartChoices({ onChoose }: { onChoose: (choice: StartChoice) => void })
         </li>
       ))}
     </ul>
+  );
+}
+
+// PackageNew starts a package: from a docker-compose pasted here, from the
+// catalogue, a chart or nothing, or from an example. A draft, an example or
+// a blank start opens the editor itself.
+export function PackageNew() {
+  const location = useLocation();
+  const state = location.state as { draft?: Draft; example?: string; blank?: boolean } | null;
+  if (state?.draft || state?.example || state?.blank) return <PackageEditor />;
+  return <PackageStart />;
+}
+
+function PackageStart() {
+  useI18n();
+  const navigate = useNavigate();
+  const [compose, setCompose] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [importing, setImporting] = useState<"file" | "helm" | null>(null);
+  const [copying, setCopying] = useState(false);
+  const [about, setAbout] = useState(false);
+  useTrail([
+    { label: text("nav.apps"), to: "/applications" },
+    { label: text("nav.packages"), to: "/applications/paquets" },
+    { label: text("package.new") },
+  ]);
+
+  async function convert() {
+    setBusy(true);
+    setError("");
+    try {
+      const converted = await api<Converted>("/api/packages/convert", { method: "POST", body: JSON.stringify({ text: compose }) });
+      if (converted.format === "package" && converted.problems.length === 0) {
+        const row = await api<PackageRow>("/api/packages/import", { method: "POST", body: JSON.stringify({ text: converted.yaml }) });
+        navigate(`/applications/paquets/${row.id}`, { state: { saved: true } });
+      } else {
+        navigate("/applications/paquets/nouveau", { state: { draft: { yaml: converted.yaml, warnings: converted.warnings, format: converted.format } } });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : text("common.error"));
+      setBusy(false);
+    }
+  }
+
+  const others: { key: StartChoice; title: string; body: string; icon: typeof Plus }[] = [
+    { key: "catalogue", title: text("package.fromCatalogue"), body: text("package.fromCatalogueHint"), icon: Copy },
+    { key: "file", title: text("package.fromCompose"), body: text("package.fromComposeHint"), icon: Upload },
+    { key: "helm", title: text("package.fromHelm"), body: text("package.fromHelmChoice"), icon: Ship },
+    { key: "blank", title: text("package.fromBlank"), body: text("package.fromBlankHint"), icon: Plus },
+  ];
+
+  function choose(key: StartChoice) {
+    if (key === "blank") navigate("/applications/paquets/nouveau", { state: { blank: true } });
+    else if (key === "file" || key === "helm") setImporting(key);
+    else if (key === "catalogue") setCopying(true);
+    else navigate("/applications/paquets/nouveau", { state: { example: key } });
+  }
+
+  return (
+    <>
+      <PageTitle
+        title={text("package.new")}
+        action={
+          <TextButton type="button" onClick={() => setAbout((open) => !open)} aria-expanded={about}>
+            {text("package.whatTitle")}
+          </TextButton>
+        }
+      />
+      <div className="flex max-w-[860px] flex-col gap-10">
+        <p className="-mt-2 text-muted md:-mt-8">{text("package.whatHint")}</p>
+        {about ? <PackagesIntro open /> : null}
+        <section className="flex flex-col gap-3">
+          <div>
+            <h2>{text("package.composeTitle")}</h2>
+            <p className="text-[13px] text-muted">{text("package.composeHint")}</p>
+          </div>
+          <Code value={compose} onChange={setCompose} language="yaml" label={text("package.composeTitle")} placeholder={"services:\n  web:\n    image: nginx:1.27"} minHeight="12rem" />
+          {error ? <ErrorText>{error}</ErrorText> : null}
+          <div className="flex flex-wrap items-center gap-4">
+            <Button type="button" onClick={() => void convert()} disabled={busy || compose.trim() === ""}>
+              {busy ? <Spinner /> : null}
+              {text("package.convert")}
+            </Button>
+            <TextButton type="button" onClick={() => setImporting("file")}>
+              <Icon icon={Upload} />
+              {text("package.fromFile")}
+            </TextButton>
+          </div>
+        </section>
+        <section className="flex flex-col gap-3">
+          <h2>{text("package.orFrom")}</h2>
+          <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {others.map((choice) => (
+              <li key={choice.key}>
+                <button type="button" onClick={() => choose(choice.key)} className={`card-link flex h-full w-full items-start gap-3 rounded-md border border-line bg-surface p-4 text-left ${focus}`}>
+                  <Icon icon={choice.icon} className="mt-1 shrink-0 text-muted" />
+                  <span>
+                    <span className="block">{choice.title}</span>
+                    <span className="block text-[13px] text-muted">{choice.body}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+        <section className="flex flex-col gap-3">
+          <h2>{text("package.examplesTitle")}</h2>
+          <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {examples.map((example) => {
+              const pkg = example.pkg();
+              return (
+                <li key={example.key}>
+                  <button type="button" onClick={() => choose(example.key)} className={`card-link flex h-full w-full flex-col gap-2 rounded-md border border-line bg-surface p-4 text-left ${focus}`}>
+                    <span>{example.title()}</span>
+                    <span className="text-[13px] text-muted">{example.summary()}</span>
+                    <span className="flex flex-wrap gap-1.5">
+                      {pkg.services.map((service) => (
+                        <span key={service.name} className="rounded border border-line px-1.5 font-mono text-[12px] text-muted">
+                          {service.name}
+                        </span>
+                      ))}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      </div>
+      {importing ? (
+        <ImportSheet
+          initial={importing}
+          onClose={() => setImporting(null)}
+          onDone={(row) => navigate(`/applications/paquets/${row.id}`, { state: { saved: true } })}
+          onDraft={(draft) => navigate("/applications/paquets/nouveau", { state: { draft } })}
+        />
+      ) : null}
+      {copying ? <CopyArticleSheet onClose={() => setCopying(false)} onDone={(row) => navigate(`/applications/paquets/${row.id}`, { state: { saved: true } })} /> : null}
+    </>
   );
 }
 

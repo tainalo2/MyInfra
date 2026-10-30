@@ -1691,6 +1691,11 @@ const fr = {
   "provider.pasteKey": "Collez la clé",
   "provider.keySafe": "MyInfra vérifie la clé avant de l'enregistrer. Elle est chiffrée et ne s'affiche plus ensuite.",
   "provider.seeOthers": "Voir les {count} autres",
+  "package.composeTitle": "Vous avez déjà un docker-compose ?",
+  "package.composeHint": "Collez-le ou choisissez le fichier : MyInfra en fait un paquet, puis vous montre ce qui reste à vérifier.",
+  "package.convert": "Convertir en paquet",
+  "package.orFrom": "Ou partez de…",
+  "package.examplesTitle": "Exemples à copier",
 } as const;
 
 export type MsgKey = keyof typeof fr;
@@ -3316,6 +3321,11 @@ const en: Record<MsgKey, string> = {
   "provider.pasteKey": "Paste the key",
   "provider.keySafe": "MyInfra checks the key before saving it. It is encrypted and never shown again.",
   "provider.seeOthers": "See the {count} others",
+  "package.composeTitle": "Already have a docker-compose?",
+  "package.composeHint": "Paste it or pick the file: MyInfra turns it into a package, then shows what is left to check.",
+  "package.convert": "Convert to a package",
+  "package.orFrom": "Or start from…",
+  "package.examplesTitle": "Examples to copy",
 };
 
 const pt: Record<MsgKey, string> = {
@@ -4918,6 +4928,11 @@ const pt: Record<MsgKey, string> = {
   "provider.pasteKey": "Cole a chave",
   "provider.keySafe": "O MyInfra verifica a chave antes de a guardar. É cifrada e não volta a ser mostrada.",
   "provider.seeOthers": "Ver os outros {count}",
+  "package.composeTitle": "Já tem um docker-compose?",
+  "package.composeHint": "Cole-o ou escolha o ficheiro: o MyInfra faz dele um pacote e mostra o que falta verificar.",
+  "package.convert": "Converter em pacote",
+  "package.orFrom": "Ou comece a partir de…",
+  "package.examplesTitle": "Exemplos para copiar",
 };
 
 const it: Record<MsgKey, string> = {
@@ -6519,6 +6534,11 @@ const it: Record<MsgKey, string> = {
   "provider.pasteKey": "Incolla la chiave",
   "provider.keySafe": "MyInfra verifica la chiave prima di salvarla. Viene cifrata e non viene più mostrata.",
   "provider.seeOthers": "Vedi gli altri {count}",
+  "package.composeTitle": "Hai già un docker-compose?",
+  "package.composeHint": "Incollalo o scegli il file: MyInfra ne fa un pacchetto, poi ti mostra cosa resta da verificare.",
+  "package.convert": "Converti in pacchetto",
+  "package.orFrom": "Oppure parti da…",
+  "package.examplesTitle": "Esempi da copiare",
 };
 
 const de: Record<MsgKey, string> = {
@@ -8122,6 +8142,11 @@ const de: Record<MsgKey, string> = {
   "provider.pasteKey": "Schlüssel einfügen",
   "provider.keySafe": "MyInfra prüft den Schlüssel vor dem Speichern. Er wird verschlüsselt und nie wieder angezeigt.",
   "provider.seeOthers": "Die {count} anderen anzeigen",
+  "package.composeTitle": "Haben Sie schon ein docker-compose?",
+  "package.composeHint": "Fügen Sie es ein oder wählen Sie die Datei: MyInfra macht daraus ein Paket und zeigt, was noch zu prüfen ist.",
+  "package.convert": "In Paket umwandeln",
+  "package.orFrom": "Oder beginnen Sie mit…",
+  "package.examplesTitle": "Beispiele zum Kopieren",
 };
 
 const tables: Record<Lang, Record<MsgKey, string>> = { fr, en, pt, it, de };

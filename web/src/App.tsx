@@ -44,6 +44,7 @@ const TemplateLaunch = page(() => import("./templates"), "TemplateLaunch");
 const TemplateRunPage = page(() => import("./templates"), "TemplateRunPage");
 const Packages = page(() => import("./packages"), "Packages");
 const PackageEditor = page(() => import("./packages"), "PackageEditor");
+const PackageNew = page(() => import("./packages"), "PackageNew");
 const AppServices = page(() => import("./packages"), "AppServices");
 const DestructionPage = page(() => import("./destructions"), "DestructionPage");
 const DestructionsPage = page(() => import("./destructions"), "DestructionsPage");
@@ -293,7 +294,7 @@ export function App() {
         <Route path="/templates/:id" element={<TemplateEditor />} />
         <Route path="/templates/:id/deploy" element={<RequireDeploy><TemplateLaunch /></RequireDeploy>} />
         <Route path="/applications/paquets" element={<Packages />} />
-        <Route path="/applications/paquets/nouveau" element={<RequireDeploy><PackageEditor /></RequireDeploy>} />
+        <Route path="/applications/paquets/nouveau" element={<RequireDeploy><PackageNew /></RequireDeploy>} />
         <Route path="/applications/paquets/:id" element={<PackageEditor />} />
         <Route path="/paquets/*" element={<Navigate to="/applications/paquets" replace />} />
         <Route path="/compte" element={<Account />} />
