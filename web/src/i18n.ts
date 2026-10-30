@@ -1617,6 +1617,19 @@ const fr = {
   "server.col.size": "Taille",
   "server.col.load": "Charge",
   "server.col.pods": "Pods",
+  "upd.kind.app": "Application",
+  "upd.kind.myinfra": "Console",
+  "upd.kind.server": "Serveur",
+  "upd.kind.machine": "Machine seule",
+  "upd.group.security": "Sécurité",
+  "upd.group.versions": "Nouvelles versions",
+  "upd.clusterHint": "Cluster {name} : un serveur après l'autre",
+  "upd.none": "Tout est à jour.",
+  "upd.count": "{count} disponible(s).",
+  "upd.countSecurity": "{count} disponible(s), dont {security} de sécurité.",
+  "upd.nothingAlone": "Rien n'est appliqué sans vous.",
+  "upd.checkedAt": "Vérifié le {when}",
+  "upd.checkShort": "Vérifier",
 } as const;
 
 export type MsgKey = keyof typeof fr;
@@ -3168,6 +3181,19 @@ const en: Record<MsgKey, string> = {
   "server.col.size": "Size",
   "server.col.load": "Load",
   "server.col.pods": "Pods",
+  "upd.kind.app": "Application",
+  "upd.kind.myinfra": "Console",
+  "upd.kind.server": "Server",
+  "upd.kind.machine": "Single machine",
+  "upd.group.security": "Security",
+  "upd.group.versions": "New versions",
+  "upd.clusterHint": "Cluster {name}: one server after the other",
+  "upd.none": "Everything is up to date.",
+  "upd.count": "{count} available.",
+  "upd.countSecurity": "{count} available, {security} of them for security.",
+  "upd.nothingAlone": "Nothing is applied without you.",
+  "upd.checkedAt": "Checked on {when}",
+  "upd.checkShort": "Check",
 };
 
 const pt: Record<MsgKey, string> = {
@@ -4696,6 +4722,19 @@ const pt: Record<MsgKey, string> = {
   "server.col.size": "Tamanho",
   "server.col.load": "Carga",
   "server.col.pods": "Pods",
+  "upd.kind.app": "Aplicação",
+  "upd.kind.myinfra": "Consola",
+  "upd.kind.server": "Servidor",
+  "upd.kind.machine": "Máquina isolada",
+  "upd.group.security": "Segurança",
+  "upd.group.versions": "Novas versões",
+  "upd.clusterHint": "Cluster {name}: um servidor após o outro",
+  "upd.none": "Tudo está atualizado.",
+  "upd.count": "{count} disponível(is).",
+  "upd.countSecurity": "{count} disponível(is), das quais {security} de segurança.",
+  "upd.nothingAlone": "Nada é aplicado sem si.",
+  "upd.checkedAt": "Verificado em {when}",
+  "upd.checkShort": "Verificar",
 };
 
 const it: Record<MsgKey, string> = {
@@ -6223,6 +6262,19 @@ const it: Record<MsgKey, string> = {
   "server.col.size": "Dimensione",
   "server.col.load": "Carico",
   "server.col.pods": "Pod",
+  "upd.kind.app": "Applicazione",
+  "upd.kind.myinfra": "Console",
+  "upd.kind.server": "Server",
+  "upd.kind.machine": "Macchina singola",
+  "upd.group.security": "Sicurezza",
+  "upd.group.versions": "Nuove versioni",
+  "upd.clusterHint": "Cluster {name}: un server dopo l'altro",
+  "upd.none": "Tutto è aggiornato.",
+  "upd.count": "{count} disponibile/i.",
+  "upd.countSecurity": "{count} disponibile/i, di cui {security} di sicurezza.",
+  "upd.nothingAlone": "Nulla viene applicato senza di te.",
+  "upd.checkedAt": "Verificato il {when}",
+  "upd.checkShort": "Verifica",
 };
 
 const de: Record<MsgKey, string> = {
@@ -7752,6 +7804,19 @@ const de: Record<MsgKey, string> = {
   "server.col.size": "Größe",
   "server.col.load": "Last",
   "server.col.pods": "Pods",
+  "upd.kind.app": "Anwendung",
+  "upd.kind.myinfra": "Konsole",
+  "upd.kind.server": "Server",
+  "upd.kind.machine": "Einzelmaschine",
+  "upd.group.security": "Sicherheit",
+  "upd.group.versions": "Neue Versionen",
+  "upd.clusterHint": "Cluster {name}: ein Server nach dem anderen",
+  "upd.none": "Alles ist aktuell.",
+  "upd.count": "{count} verfügbar.",
+  "upd.countSecurity": "{count} verfügbar, davon {security} für die Sicherheit.",
+  "upd.nothingAlone": "Nichts wird ohne Sie angewendet.",
+  "upd.checkedAt": "Geprüft am {when}",
+  "upd.checkShort": "Prüfen",
 };
 
 const tables: Record<Lang, Record<MsgKey, string>> = { fr, en, pt, it, de };

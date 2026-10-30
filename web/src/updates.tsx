@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ArrowUpCircle, ExternalLink, RefreshCw, ShieldAlert } from "lucide-react";
+import { ArrowUpCircle, RefreshCw, ShieldAlert } from "lucide-react";
 import { api, type Impact, type ImpactEffect, type Server, type UpdateItem, type UpdateJob, type UpdateJobStep, type UpdatesView, type VersionView } from "./api";
 import { currentLocale, knownMessage, text, type MsgKey } from "./i18n";
 import { Sheet, Spinner, useToast } from "./kit";
@@ -427,8 +427,6 @@ export function UpdatesPage() {
   const [checking, setChecking] = useState(false);
   const items = view?.updates ?? [];
   const myinfra = items.find((item) => item.kind === "myinfra");
-  const apps = items.filter((item) => item.kind === "app");
-  const serverItems = items.filter((item) => item.kind === "server");
   const libraryItems = items.filter((item) => item.kind === "library");
   const version = view?.version;
 
@@ -457,160 +455,140 @@ export function UpdatesPage() {
     }
   }
 
-  // Servers grouped by cluster: a cluster is updated node after node.
-  const groups = new Map<string, { clusterId?: string; name: string; items: UpdateItem[] }>();
-  for (const item of serverItems) {
-    const server = servers.find((row) => row.id === item.id);
-    const key = server?.clusterId || `alone:${item.id}`;
-    const group = groups.get(key) ?? { clusterId: server?.clusterId, name: server?.clusterName || item.name, items: [] };
-    group.items.push(item);
-    groups.set(key, group);
-  }
-
   const lastCheck = view?.checkedAt ? new Date(view.checkedAt).toLocaleString(currentLocale(), { dateStyle: "short", timeStyle: "short" }) : "";
   const busyCheck = checking || Boolean(view?.checking);
 
+  const security = items.filter((item) => item.kind !== "library" && urgent(item));
+  const versions = items.filter((item) => item.kind !== "library" && !urgent(item));
+  const clusterOf = (item: UpdateItem) => (item.kind === "server" ? servers.find((row) => row.id === item.id) : undefined);
+  // A cluster is updated server after server: its row heads the group.
+  const clustersIn = (rows: UpdateItem[]) => {
+    const seen = new Map<string, { id: string; name: string; k3s: boolean }>();
+    for (const item of rows) {
+      const server = clusterOf(item);
+      if (!server?.clusterId) continue;
+      const known = seen.get(server.clusterId) ?? { id: server.clusterId, name: server.clusterName || "", k3s: false };
+      known.k3s = known.k3s || Boolean(item.detail.k3sNext);
+      seen.set(server.clusterId, known);
+    }
+    return [...seen.values()];
+  };
+  const securityCount = items.filter(urgent).length;
+
+  const row = (item: UpdateItem) => {
+    const server = clusterOf(item);
+    const link = item.kind === "app" ? `/applications/${item.id}` : item.kind === "server" ? `/serveurs/${item.id}` : "";
+    const kind = item.kind === "app" ? text("upd.kind.app") : item.kind === "myinfra" ? text("upd.kind.myinfra") : server?.clusterId ? text("upd.kind.server") : text("upd.kind.machine");
+    const target: UpdateTarget | null =
+      item.kind === "myinfra"
+        ? version?.canUpdate
+          ? { kind: "myinfra", name: "MyInfra", item, version }
+          : null
+        : item.kind === "app"
+          ? { kind: "app", id: item.id, name: item.name, item }
+          : { kind: "server", id: item.id, name: item.name, item };
+    return (
+      <li key={`${item.kind}:${item.id}`} className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-line px-4 py-3 first:border-t-0">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="flex flex-wrap items-baseline gap-x-2">
+            {link ? (
+              <Link to={link} className={`text-ink ${focus}`}>
+                {item.name}
+              </Link>
+            ) : (
+              <span>{item.name || "MyInfra"}</span>
+            )}
+            <span className="text-[13px] text-muted">{kind}</span>
+          </span>
+          <span className="text-[13px] text-muted [overflow-wrap:anywhere]">
+            {summary(item)}
+            {item.detail.url ? (
+              <>
+                {" · "}
+                <a href={item.detail.url} target="_blank" rel="noreferrer" className={`text-link ${focus}`}>
+                  {text("upd.notes")}
+                </a>
+              </>
+            ) : null}
+          </span>
+          {item.kind === "myinfra" && version && !version.canUpdate && version.reason ? <span className="text-[13px] text-muted">{knownMessage(version.reason)}</span> : null}
+        </div>
+        <span className={`text-[13px] ${urgent(item) ? "text-warn" : "text-muted"} md:w-[180px]`}>{levelLabel(item)}</span>
+        {canDeploy && target ? (
+          <TextButton type="button" onClick={() => setTarget(target)}>
+            {text("upd.update")}
+          </TextButton>
+        ) : null}
+      </li>
+    );
+  };
+
+  const group = (title: string, rows: UpdateItem[]) =>
+    rows.length === 0 ? null : (
+      <section className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h2>
+            {title} · {rows.length}
+          </h2>
+        </div>
+        {clustersIn(rows).map((cluster) => (
+          <div key={cluster.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[13px] text-muted">
+            <span>{text("upd.clusterHint", { name: cluster.name })}</span>
+            {canDeploy ? (
+              <TextButton type="button" onClick={() => setTarget({ kind: "cluster", id: cluster.id, name: cluster.name, k3s: cluster.k3s })}>
+                {text("upd.cluster.update")}
+              </TextButton>
+            ) : null}
+          </div>
+        ))}
+        <ul className="overflow-hidden rounded-md border border-line bg-surface">{rows.map(row)}</ul>
+      </section>
+    );
+
   return (
     <>
-      <PageTitle
-        title={text("nav.updates")}
-        icon={ArrowUpCircle}
-        action={
-          canDeploy ? (
-            <Button type="button" variant="secondary" onClick={checkNow} disabled={busyCheck}>
-              {busyCheck ? <Spinner /> : <Icon icon={RefreshCw} />}
-              {busyCheck ? text("upd.checking") : text("upd.check")}
-            </Button>
-          ) : null
-        }
-      />
+      <PageTitle title={text("nav.updates")} />
       {!view ? (
         <LoadingLines lines={4} label={text("nav.updates")} />
       ) : (
-        <div className="flex flex-col gap-12">
-          <p className="-mt-6 text-muted md:-mt-8">
-            {text("upd.intro")} {lastCheck ? text("upd.lastCheck", { when: lastCheck }) : ""}
-          </p>
-
-          <section className="flex flex-col gap-3">
-            <SectionTitle>MyInfra</SectionTitle>
-            <div className="flex flex-wrap items-center justify-between gap-4 rounded-md border border-line p-4">
-              <div className="min-w-0">
-                <p className="font-medium">
-                  {myinfra ? `${myinfra.current} → ${myinfra.available}` : text("upd.myinfra.current", { version: version?.current ?? "" })}
-                </p>
-                <p className="text-[13px] text-muted">
-                  {myinfra ? levelLabel(myinfra) : version?.latest ? text("upd.upToDate") : text("upd.myinfra.unknown")}
-                  {myinfra?.detail.url ? (
-                    <>
-                      {" · "}
-                      <a href={myinfra.detail.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline">
-                        {text("upd.notes")}
-                        <Icon icon={ExternalLink} className="size-3.5" />
-                      </a>
-                    </>
-                  ) : null}
-                </p>
-                {myinfra && version && !version.canUpdate && version.reason ? <p className="mt-2 text-[13px] text-muted">{knownMessage(version.reason)}</p> : null}
-              </div>
-              {myinfra && version?.canUpdate && canDeploy ? (
-                <Button type="button" onClick={() => setTarget({ kind: "myinfra", name: "MyInfra", item: myinfra, version })}>
-                  {text("upd.update")}
-                </Button>
+        <div className="flex flex-col gap-10">
+          <div className="-mt-2 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 md:-mt-8">
+            <p className="text-muted">
+              {items.length === 0 ? text("upd.none") : securityCount > 0 ? text("upd.countSecurity", { count: items.length, security: securityCount }) : text("upd.count", { count: items.length })}{" "}
+              {text("upd.nothingAlone")}
+            </p>
+            <span className="flex items-center gap-3 text-[13px] text-muted">
+              {lastCheck ? text("upd.checkedAt", { when: lastCheck }) : null}
+              {canDeploy ? (
+                <TextButton type="button" onClick={checkNow} disabled={busyCheck}>
+                  {busyCheck ? <Spinner /> : <Icon icon={RefreshCw} />}
+                  {busyCheck ? text("upd.checking") : text("upd.checkShort")}
+                </TextButton>
               ) : null}
-            </div>
-          </section>
-
-          <section className="flex flex-col gap-3">
-            <SectionTitle>{text("nav.apps")}</SectionTitle>
-            {apps.length === 0 ? (
-              <p className="text-muted">{text("upd.apps.none")}</p>
-            ) : (
-              <ul className="flex flex-col">
-                {apps.map((item) => (
-                  <li key={item.id} className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-line py-4">
-                    <div className="min-w-0">
-                      <p className="flex flex-wrap items-center gap-2">
-                        <Link to={`/applications/${item.id}`} className="font-medium underline-offset-2 hover:underline">
-                          {item.name}
-                        </Link>
-                        <span className="text-[13px] text-muted">{levelLabel(item)}</span>
-                      </p>
-                      <p className="text-[13px] text-muted [overflow-wrap:anywhere]">{summary(item)}</p>
-                    </div>
-                    {canDeploy ? (
-                      <Button type="button" variant="secondary" onClick={() => setTarget({ kind: "app", id: item.id, name: item.name, item })}>
-                        {text("upd.update")}
-                      </Button>
-                    ) : null}
-                  </li>
+            </span>
+          </div>
+          {!myinfra ? (
+            <p className="text-[13px] text-muted">
+              MyInfra · {version?.latest ? text("upd.myinfra.current", { version: version?.current ?? "" }) + " · " + text("upd.upToDate") : text("upd.myinfra.unknown")}
+            </p>
+          ) : null}
+          {group(text("upd.group.security"), security)}
+          {group(text("upd.group.versions"), versions)}
+          {libraryItems.length > 0 ? (
+            <section className="flex flex-col gap-2">
+              <div>
+                <h2>
+                  {text("upd.library.title")} · {libraryItems.length}
+                </h2>
+                <p className="text-[13px] text-muted">{text("upd.library.hint")}</p>
+              </div>
+              <ul className="overflow-hidden rounded-md border border-line bg-surface">
+                {libraryItems.map((item) => (
+                  <LibraryUpdateRow key={item.id} item={item} canDeploy={canDeploy} onDone={reload} />
                 ))}
               </ul>
-            )}
-          </section>
-
-          <section className="flex flex-col gap-3">
-            <SectionTitle>{text("nav.servers")}</SectionTitle>
-            {groups.size === 0 ? (
-              <p className="text-muted">{text("upd.servers.none")}</p>
-            ) : (
-              [...groups.values()].map((group) => (
-                <div key={group.clusterId ?? group.items[0].id} className="flex flex-col">
-                  {group.clusterId ? (
-                    <div className="flex flex-wrap items-center justify-between gap-4 border-t border-line py-3">
-                      <p className="font-medium">{text("upd.cluster", { name: group.name })}</p>
-                      {canDeploy ? (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          onClick={() => setTarget({ kind: "cluster", id: group.clusterId!, name: group.name, k3s: group.items.some((item) => item.detail.k3sNext) })}
-                        >
-                          {text("upd.cluster.update")}
-                        </Button>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  <ul className="flex flex-col">
-                    {group.items.map((item) => (
-                      <li key={item.id} className={`flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-line py-4 ${group.clusterId ? "pl-4" : ""}`}>
-                        <div className="min-w-0">
-                          <p className="flex flex-wrap items-center gap-2">
-                            <Link to={`/serveurs/${item.id}`} className="font-medium underline-offset-2 hover:underline">
-                              {item.name}
-                            </Link>
-                            <UpdateBadge item={item} />
-                          </p>
-                          <p className="text-[13px] text-muted">{summary(item)}</p>
-                        </div>
-                        {canDeploy ? (
-                          <Button type="button" variant="secondary" onClick={() => setTarget({ kind: "server", id: item.id, name: item.name, item })}>
-                            {text("upd.update")}
-                          </Button>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))
-            )}
-          </section>
-
-          <section className="flex flex-col gap-3">
-            <SectionTitle>{text("upd.library.title")}</SectionTitle>
-            {libraryItems.length === 0 ? (
-              <p className="text-muted">{text("upd.library.none")}</p>
-            ) : (
-              <>
-                <p className="text-[13px] text-muted">{text("upd.library.hint")}</p>
-                <ul className="flex flex-col">
-                  {libraryItems.map((item) => (
-                    <LibraryUpdateRow key={item.id} item={item} canDeploy={canDeploy} onDone={reload} />
-                  ))}
-                </ul>
-              </>
-            )}
-          </section>
-
+            </section>
+          ) : null}
           <UpdateJobs />
         </div>
       )}
@@ -659,10 +637,10 @@ function LibraryUpdateRow({ item, canDeploy, onDone }: { item: UpdateItem; canDe
   }
 
   return (
-    <li className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-line py-4">
+    <li className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-line px-4 py-3 first:border-t-0">
       <div className="min-w-0">
         <p className="flex flex-wrap items-center gap-2">
-          <Link to={link} className="font-medium underline-offset-2 hover:underline">
+          <Link to={link} className={`text-ink ${focus}`}>
             {item.name}
           </Link>
           <span className="text-[13px] text-muted">
@@ -676,10 +654,10 @@ function LibraryUpdateRow({ item, canDeploy, onDone }: { item: UpdateItem; canDe
         {item.detail.edited ? <p className="text-[13px] text-bad">{text("upd.library.edited")}</p> : null}
       </div>
       {canDeploy ? (
-        <Button type="button" variant="secondary" onClick={() => void apply()} disabled={busy}>
+        <TextButton type="button" onClick={() => void apply()} disabled={busy}>
           {busy ? <Spinner /> : null}
           {confirming ? text("upd.library.confirm") : text("upd.update")}
-        </Button>
+        </TextButton>
       ) : null}
     </li>
   );
