@@ -297,7 +297,7 @@ export function Clusters() {
           <div className="mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
             <div>
               <h2>{text("server.aloneList")}</h2>
-              <p className="text-[13px] text-muted">{text("server.aloneHint")}</p>
+              <p className="text-[13px] text-muted">{text("server.aloneListHint")}</p>
             </div>
             {canDeploy ? (
               <TextButton type="button" onClick={() => setCreatingServer(alone)}>

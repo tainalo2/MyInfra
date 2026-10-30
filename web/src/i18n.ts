@@ -516,7 +516,7 @@ const fr = {
   "server.aloneList": "Machines seules",
   "server.newAlone": "Nouvelle machine seule",
   "server.aloneEmpty": "Aucune machine seule. Une machine seule fait tourner ses applications sans cluster.",
-  "server.aloneHint": "Elles font tourner leurs applications sans cluster.",
+  "server.aloneHint": "Cette machine fait tourner ses applications seule, sans cluster. MyInfra y installe le proxy et le certificat.",
   "server.firstPlane": "Le premier serveur est un control plane.",
   "server.manyPlanes": "Un cluster peut en compter plusieurs.",
   "server.evenPlanes": "Avec un nombre pair de control planes, la perte d'une machine arrête le cluster. Visez 1, 3 ou 5.",
@@ -1675,6 +1675,7 @@ const fr = {
   "plan.goSettings": "Ses réglages",
   "plan.pods": "Pods",
   "plan.links": "Ses liens",
+  "server.aloneListHint": "Elles font tourner leurs applications sans cluster.",
 } as const;
 
 export type MsgKey = keyof typeof fr;
@@ -2121,7 +2122,7 @@ const en: Record<MsgKey, string> = {
   "server.aloneList": "Standalone machines",
   "server.newAlone": "New standalone machine",
   "server.aloneEmpty": "No standalone machine. A standalone machine runs its applications without a cluster.",
-  "server.aloneHint": "They run their applications without a cluster.",
+  "server.aloneHint": "This machine runs its applications alone, without a cluster. MyInfra installs the proxy and the certificate on it.",
   "server.firstPlane": "The first server is a control plane.",
   "server.manyPlanes": "A cluster can have several.",
   "server.evenPlanes": "With an even number of control planes, losing one machine stops the cluster. Aim for 1, 3 or 5.",
@@ -3284,6 +3285,7 @@ const en: Record<MsgKey, string> = {
   "plan.goSettings": "Its settings",
   "plan.pods": "Pods",
   "plan.links": "Its links",
+  "server.aloneListHint": "They run their applications without a cluster.",
 };
 
 const pt: Record<MsgKey, string> = {
@@ -3709,7 +3711,7 @@ const pt: Record<MsgKey, string> = {
   "server.aloneList": "Máquinas isoladas",
   "server.newAlone": "Nova máquina isolada",
   "server.aloneEmpty": "Nenhuma máquina isolada. Uma máquina isolada executa as suas aplicações sem cluster.",
-  "server.aloneHint": "Correm as suas aplicações sem cluster.",
+  "server.aloneHint": "Esta máquina executa as suas aplicações sozinha, sem cluster. O MyInfra instala nela o proxy e o certificado.",
   "server.firstPlane": "O primeiro servidor é um control plane.",
   "server.manyPlanes": "Um cluster pode ter vários.",
   "server.evenPlanes": "Com um número par de control planes, a perda de uma máquina para o cluster. Prefira 1, 3 ou 5.",
@@ -4870,6 +4872,7 @@ const pt: Record<MsgKey, string> = {
   "plan.goSettings": "As suas definições",
   "plan.pods": "Pods",
   "plan.links": "As suas ligações",
+  "server.aloneListHint": "Correm as suas aplicações sem cluster.",
 };
 
 const it: Record<MsgKey, string> = {
@@ -5294,7 +5297,7 @@ const it: Record<MsgKey, string> = {
   "server.aloneList": "Macchine singole",
   "server.newAlone": "Nuova macchina singola",
   "server.aloneEmpty": "Nessuna macchina singola. Una macchina singola esegue le sue applicazioni senza cluster.",
-  "server.aloneHint": "Eseguono le loro applicazioni senza cluster.",
+  "server.aloneHint": "Questa macchina esegue le sue applicazioni da sola, senza cluster. MyInfra vi installa il proxy e il certificato.",
   "server.firstPlane": "Il primo server è un control plane.",
   "server.manyPlanes": "Un cluster può averne diversi.",
   "server.evenPlanes": "Con un numero pari di control plane, la perdita di una macchina ferma il cluster. Punta a 1, 3 o 5.",
@@ -6455,6 +6458,7 @@ const it: Record<MsgKey, string> = {
   "plan.goSettings": "Le sue impostazioni",
   "plan.pods": "Pod",
   "plan.links": "I suoi collegamenti",
+  "server.aloneListHint": "Eseguono le loro applicazioni senza cluster.",
 };
 
 const de: Record<MsgKey, string> = {
@@ -6881,7 +6885,7 @@ const de: Record<MsgKey, string> = {
   "server.aloneList": "Einzelne Maschinen",
   "server.newAlone": "Neue einzelne Maschine",
   "server.aloneEmpty": "Keine einzelne Maschine. Eine einzelne Maschine betreibt ihre Anwendungen ohne Cluster.",
-  "server.aloneHint": "Sie betreiben ihre Anwendungen ohne Cluster.",
+  "server.aloneHint": "Diese Maschine betreibt ihre Anwendungen allein, ohne Cluster. MyInfra installiert darauf den Proxy und das Zertifikat.",
   "server.firstPlane": "Der erste Server ist eine Control Plane.",
   "server.manyPlanes": "Ein Cluster kann mehrere haben.",
   "server.evenPlanes": "Bei einer geraden Anzahl von Control Planes stoppt der Ausfall einer Maschine den Cluster. Wählen Sie 1, 3 oder 5.",
@@ -8042,6 +8046,7 @@ const de: Record<MsgKey, string> = {
   "plan.goSettings": "Seine Einstellungen",
   "plan.pods": "Pods",
   "plan.links": "Seine Verbindungen",
+  "server.aloneListHint": "Sie betreiben ihre Anwendungen ohne Cluster.",
 };
 
 const tables: Record<Lang, Record<MsgKey, string>> = { fr, en, pt, it, de };

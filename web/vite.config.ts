@@ -12,6 +12,7 @@ export default defineConfig({
     proxy: {
       "/api": { target, ws: true },
       "/join": target,
+      "/mcp": target,
     },
   },
 });
