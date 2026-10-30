@@ -219,9 +219,19 @@ export function ServerForm({ clusterId }: { clusterId: string }) {
   const chosenKeys = keyIds.filter(Boolean);
   const canAddKey = keys.length > keyIds.length && chosenKeys.length === keyIds.length;
 
+  const providerRow = providers.find((row) => row.id === providerId);
+  const summary: [string, string][] = [
+    [text("ui.provider"), providerId === "manual" ? text("server.recap.manual") : providerRow ? providerRow.name : "—"],
+    [text("server.col.place"), providerId === "manual" ? "—" : placeLabel(location) || location || "—"],
+    [text("server.col.size"), offer ? machineLine(offer.name, offer.vcpu, offer.memoryMb, offer.gpus, offer.gpu) : "—"],
+    [text("server.recap.role"), controlPlane ? text("server.recap.pilot") : text("server.recap.apps")],
+    [text("server.recap.keys"), keys.filter((key) => chosenKeys.includes(key.id)).map((key) => key.name).join(", ") || "—"],
+  ];
+  const price = offer && catalog ? (period === "month" ? offer.monthly : offer.hourly) : "";
+
   return (
-    <>
-      <form onSubmit={addServer} className="flex max-w-[720px] flex-col gap-6">
+    <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
+      <form onSubmit={addServer} className="flex min-w-0 max-w-[720px] flex-1 flex-col gap-6">
         <Steps
           steps={[
             {
@@ -469,6 +479,24 @@ export function ServerForm({ clusterId }: { clusterId: string }) {
           }
         />
       </form>
+      <aside aria-label={text("server.recap.title")} className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4 lg:sticky lg:top-4 lg:w-[300px] lg:shrink-0">
+        <h2>{text("server.recap.title")}</h2>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[13px]">
+          {summary.map(([label, value]) => (
+            <div key={label} className="contents">
+              <dt className="text-muted">{label}</dt>
+              <dd className="min-w-0 break-words">{value}</dd>
+            </div>
+          ))}
+        </dl>
+        {price && catalog ? (
+          <p className="border-t border-line pt-3">
+            <span className="text-[20px] font-medium">{formatPrice(price, period !== "month", catalog.currency)}</span>
+            <span className="mt-1 block text-[12px] text-muted">{text("server.recap.priceHint")}</span>
+          </p>
+        ) : null}
+        <p className="text-[12px] text-muted">{clusterId ? text("server.recap.joins") : text("server.recap.alone")}</p>
+      </aside>
       {keySheet ? (
         <NewKeySheet
           onClose={() => setKeySheet(false)}
@@ -479,7 +507,7 @@ export function ServerForm({ clusterId }: { clusterId: string }) {
           }}
         />
       ) : null}
-    </>
+    </div>
   );
 }
 

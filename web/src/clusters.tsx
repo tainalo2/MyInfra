@@ -164,8 +164,8 @@ export function Clusters() {
   return (
     <>
       <PageTitle
-        title={text("nav.servers")}
-        note={ready && servers.length > 0 ? pageNote(servers) : undefined}
+        title={creatingServer ? (target ? text("server.newIn", { name: target.name }) : text("ui.nouveauServeur")) : creatingCluster ? text("cluster.new") : importing ? text("cluster.import") : text("nav.servers")}
+        note={!creating && ready && servers.length > 0 ? pageNote(servers) : undefined}
         phoneAction={!creating && ready && clusters.length > 0 && canDeploy ? { icon: Plus, label: clusters.length === 1 ? text("ui.nouveauServeur") : text("cluster.new"), onClick: () => (clusters.length === 1 ? setCreatingServer(clusters[0].id) : setCreatingCluster(true)) } : undefined}
         action={
           creating ? (

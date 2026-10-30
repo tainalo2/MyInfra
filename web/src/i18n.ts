@@ -1696,6 +1696,16 @@ const fr = {
   "package.convert": "Convertir en paquet",
   "package.orFrom": "Ou partez de…",
   "package.examplesTitle": "Exemples à copier",
+  "server.recap.title": "Récapitulatif",
+  "server.recap.manual": "Serveur existant",
+  "server.recap.role": "Rôle",
+  "server.recap.pilot": "Applications et pilote",
+  "server.recap.apps": "Applications",
+  "server.recap.keys": "Clés",
+  "server.recap.priceHint": "Prix annoncé par l'hébergeur, sans taxe ni trafic.",
+  "server.recap.joins": "Il rejoint le cluster tout seul. Vous suivez l'installation dans l'Activité.",
+  "server.recap.alone": "Il fera tourner ses applications seul. Vous suivez l'installation dans l'Activité.",
+  "server.newIn": "Nouveau serveur · dans {name}",
 } as const;
 
 export type MsgKey = keyof typeof fr;
@@ -3326,6 +3336,16 @@ const en: Record<MsgKey, string> = {
   "package.convert": "Convert to a package",
   "package.orFrom": "Or start from…",
   "package.examplesTitle": "Examples to copy",
+  "server.recap.title": "Summary",
+  "server.recap.manual": "Existing server",
+  "server.recap.role": "Role",
+  "server.recap.pilot": "Applications and driver",
+  "server.recap.apps": "Applications",
+  "server.recap.keys": "Keys",
+  "server.recap.priceHint": "Price announced by the provider, without tax or traffic.",
+  "server.recap.joins": "It joins the cluster on its own. You follow the setup in Activity.",
+  "server.recap.alone": "It will run its applications alone. You follow the setup in Activity.",
+  "server.newIn": "New server · in {name}",
 };
 
 const pt: Record<MsgKey, string> = {
@@ -4933,6 +4953,16 @@ const pt: Record<MsgKey, string> = {
   "package.convert": "Converter em pacote",
   "package.orFrom": "Ou comece a partir de…",
   "package.examplesTitle": "Exemplos para copiar",
+  "server.recap.title": "Resumo",
+  "server.recap.manual": "Servidor existente",
+  "server.recap.role": "Papel",
+  "server.recap.pilot": "Aplicações e piloto",
+  "server.recap.apps": "Aplicações",
+  "server.recap.keys": "Chaves",
+  "server.recap.priceHint": "Preço anunciado pelo fornecedor, sem impostos nem tráfego.",
+  "server.recap.joins": "Junta-se ao cluster sozinho. Acompanha a instalação na Atividade.",
+  "server.recap.alone": "Correrá as suas aplicações sozinho. Acompanha a instalação na Atividade.",
+  "server.newIn": "Novo servidor · em {name}",
 };
 
 const it: Record<MsgKey, string> = {
@@ -6539,6 +6569,16 @@ const it: Record<MsgKey, string> = {
   "package.convert": "Converti in pacchetto",
   "package.orFrom": "Oppure parti da…",
   "package.examplesTitle": "Esempi da copiare",
+  "server.recap.title": "Riepilogo",
+  "server.recap.manual": "Server esistente",
+  "server.recap.role": "Ruolo",
+  "server.recap.pilot": "Applicazioni e pilota",
+  "server.recap.apps": "Applicazioni",
+  "server.recap.keys": "Chiavi",
+  "server.recap.priceHint": "Prezzo annunciato dal provider, senza tasse né traffico.",
+  "server.recap.joins": "Si unisce al cluster da solo. Segui l'installazione nell'Attività.",
+  "server.recap.alone": "Eseguirà le sue applicazioni da solo. Segui l'installazione nell'Attività.",
+  "server.newIn": "Nuovo server · in {name}",
 };
 
 const de: Record<MsgKey, string> = {
@@ -8147,6 +8187,16 @@ const de: Record<MsgKey, string> = {
   "package.convert": "In Paket umwandeln",
   "package.orFrom": "Oder beginnen Sie mit…",
   "package.examplesTitle": "Beispiele zum Kopieren",
+  "server.recap.title": "Zusammenfassung",
+  "server.recap.manual": "Vorhandener Server",
+  "server.recap.role": "Rolle",
+  "server.recap.pilot": "Anwendungen und Steuerung",
+  "server.recap.apps": "Anwendungen",
+  "server.recap.keys": "Schlüssel",
+  "server.recap.priceHint": "Vom Anbieter angegebener Preis, ohne Steuern und Traffic.",
+  "server.recap.joins": "Er tritt dem Cluster selbst bei. Die Einrichtung verfolgen Sie unter Aktivität.",
+  "server.recap.alone": "Er betreibt seine Anwendungen allein. Die Einrichtung verfolgen Sie unter Aktivität.",
+  "server.newIn": "Neuer Server · in {name}",
 };
 
 const tables: Record<Lang, Record<MsgKey, string>> = { fr, en, pt, it, de };
