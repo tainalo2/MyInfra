@@ -899,11 +899,12 @@ export function ApplicationPage() {
         <UsageMeters sample={runtime} />
       </div>
       {(app.services ?? []).length > 0 && !app.guarded ? (
-        <div className="mt-8">
+        <>
+          <div className="mt-8" />
           <PlanPanel model={appPlan(app, runtime)} label={text("plan.label")} whole={text("plan.whole")} selected={planned} onSelect={setPlanned}>
             <PlanDetail app={app} pods={pods} selected={planned} />
           </PlanPanel>
-        </div>
+        </>
       ) : null}
       <section className="mt-8">
         <SectionTitle>{text("field.services")}</SectionTitle>

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Box, DatabaseBackup, Globe, HardDrive, LayoutGrid, Network, Server as ServerIcon, Shield, type LucideIcon } from "lucide-react";
 import type { AppRuntime, Application, Package, TemplateApp, TemplateBody, TemplateServer } from "./api";
 import { text, type MsgKey } from "./i18n";
@@ -84,21 +84,23 @@ export function Plan({
   onSelect,
   label,
   compact = false,
-  toolbar,
+  header,
 }: {
   model: PlanModel;
   selected: string | null;
   onSelect: (key: string | null) => void;
   label: string;
   compact?: boolean;
-  toolbar?: ReactNode;
+  // header heads the frame: the name of the plan and its buttons.
+  header?: ReactNode;
 }) {
   const frame = useRef<HTMLDivElement>(null);
   const refs = useRef(new Map<string, HTMLElement>());
   const [boxes, setBoxes] = useState<Map<string, Rect>>(new Map());
   const [size, setSize] = useState({ w: 0, h: 0 });
   const near = related(model, selected);
-  const shape = model.nodes.map((node) => node.key).join("|") + (compact ? "c" : "");
+  const [direction, setDirection] = useState("rows");
+  const shape = model.nodes.map((node) => node.key).join("|") + (compact ? "c" : "") + direction;
 
   // The links follow the boxes: they are measured after each layout.
   useLayoutEffect(() => {
@@ -120,6 +122,11 @@ export function Plan({
     return () => observer.disconnect();
   }, [shape]);
 
+  const shownBands = bands.filter((band) => model.nodes.some((node) => node.band === band.key));
+  const columns = useMemo(() => leftToRight(model, shownBands.length, size.w, compact), [model, shownBands.length, size.w, compact]);
+  // A change of direction moves every box: the links are measured again.
+  useLayoutEffect(() => setDirection(columns ? "columns" : "rows"), [columns]);
+
   // box draws one element of the plan.
   const box = (node: PlanNode) => {
     const Glyph = icons[node.kind];
@@ -139,9 +146,9 @@ export function Plan({
           event.stopPropagation();
           onSelect(on ? null : node.key);
         }}
-        className={`relative z-[2] flex min-w-0 max-w-[220px] items-center gap-2 bg-surface text-left transition-opacity ${node.kind === "internet" ? "rounded-full" : "rounded-md"} ${
+        className={`relative z-[2] flex min-w-0 items-center gap-2 bg-surface text-left transition-opacity ${columns ? "w-full" : "max-w-[220px]"} ${node.kind === "internet" ? "rounded-full" : "rounded-md"} ${
           on ? "border-2 border-ink" : node.draft ? "border border-dashed border-faint" : node.kind === "backup" ? "border border-dashed border-[#d6d3d1]" : "border border-[#d6d3d1] dark:border-line"
-        } ${node.band === "storage" || node.band === "machines" ? "bg-canvas" : ""} ${compact ? "px-2.5 py-1" : on ? "px-[11px] py-[7px]" : "px-3 py-2"} ${dim ? "opacity-40" : ""} ${focus}`}
+        } ${node.band === "storage" || node.band === "machines" ? "bg-canvas" : ""} ${compact ? "px-2 py-0.5" : on ? "px-[9px] py-[5px]" : "px-2.5 py-1.5"} ${dim ? "opacity-40" : ""} ${focus}`}
       >
         <Glyph size={16} strokeWidth={1.5} aria-hidden className="shrink-0 text-muted" />
         <span className="flex min-w-0 flex-col">
@@ -157,32 +164,20 @@ export function Plan({
 
   const used = new Set(model.links.map((link) => link.kind));
 
+  const legend = (Object.keys(strokes) as LinkKind[]).filter((kind) => used.has(kind));
+
   return (
-    <section aria-label={label} className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-muted" aria-label={text("plan.legend")}>
-          {(Object.keys(strokes) as LinkKind[])
-            .filter((kind) => used.has(kind))
-            .map((kind) => (
-              <li key={kind} className="inline-flex items-center gap-1.5">
-                <svg width="22" height="6" aria-hidden>
-                  <line x1="1" y1="3" x2="21" y2="3" stroke={strokes[kind].color} strokeWidth={strokes[kind].width} strokeDasharray={strokes[kind].dash} strokeLinecap={strokes[kind].cap} />
-                </svg>
-                {text(linkLabels[kind])}
-              </li>
-            ))}
-        </ul>
-        {toolbar}
-      </div>
+    <section aria-label={label}>
       <div
         ref={frame}
         role="group"
         aria-label={label}
-        className="relative flex flex-col gap-4 rounded-md border border-line bg-surface p-2"
+        className={`relative flex flex-col rounded-md border border-line bg-surface ${compact ? "gap-1.5 p-1.5" : "gap-2.5 p-2"}`}
         onClick={(event) => {
           if (event.target === event.currentTarget || (event.target as HTMLElement).dataset.band) onSelect(null);
         }}
       >
+        {header ? <div className="relative z-[2] px-1">{header}</div> : null}
         {/* The links run above the bands' backgrounds and under the boxes. */}
         <svg className="pointer-events-none absolute inset-0 z-[1]" width={size.w} height={size.h} aria-hidden>
           {model.links.map((link, index) => {
@@ -192,7 +187,7 @@ export function Plan({
             const style = strokes[link.kind];
             const lit = selected !== null && (link.from === selected || link.to === selected);
             const dim = selected !== null && !lit;
-            const path = curve(a, b);
+            const path = curve(a, b, columns);
             return (
               <g key={`${link.from}-${link.to}-${link.kind}-${index}`} opacity={dim ? 0.25 : 1}>
                 <path
@@ -205,71 +200,116 @@ export function Plan({
                   vectorEffect="non-scaling-stroke"
                   className={lit ? "plan-flow" : undefined}
                 />
-                {link.label && !compact ? <LinkLabel a={a} b={b} label={link.label} warn={link.kind === "direct"} /> : null}
+                {link.label && !compact && !columns ? <LinkLabel a={a} b={b} label={link.label} warn={link.kind === "direct"} /> : null}
               </g>
             );
           })}
         </svg>
-        {bands.map((band) => {
-          const nodes = model.nodes.filter((node) => node.band === band.key);
-          if (nodes.length === 0) return null;
-          return (
-            <div key={band.key} data-band={band.key} className={`relative flex flex-col gap-2 rounded-md px-3 ${compact ? "py-2" : "pb-4 pt-2"} ${band.key === "storage" || band.key === "machines" ? "bg-line/25" : "bg-status/40"}`}>
-              {compact ? null : (
-                <span data-band={band.key} className="text-[12px] text-faint">
-                  {text(band.label)}
-                </span>
-              )}
-              <div data-band={band.key} className={`flex flex-wrap items-center justify-center ${compact ? "gap-3" : "gap-x-10 gap-y-4"}`}>
-                {nodes.filter((node) => !node.parent).map((node) => {
-                  const members = model.nodes.filter((item) => item.parent === node.key);
-                  if (members.length === 0) return box(node);
-                  const on = node.key === selected;
-                  const dim = selected !== null && !near.has(node.key);
-                  const Glyph = icons[node.kind];
-                  return (
-                    // A container: its name heads a frame around what it holds.
-                    <div
-                      key={node.key}
-                      ref={(element) => {
-                        if (element) refs.current.set(node.key, element);
-                        else refs.current.delete(node.key);
-                      }}
-                      className={`relative z-[2] flex flex-col gap-2 rounded-md bg-surface/70 transition-opacity ${on ? "border-2 border-ink" : "border border-dashed border-muted"} ${compact ? "p-2" : on ? "px-[11px] pb-[11px] pt-[7px]" : "px-3 pb-3 pt-2"} ${dim ? "opacity-40" : ""}`}
-                    >
-                      <button
-                        type="button"
-                        aria-current={on ? "true" : undefined}
-                        aria-label={[text(`plan.kind.${node.kind}` as MsgKey), node.label, node.detail].filter(Boolean).join(" · ")}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onSelect(on ? null : node.key);
-                        }}
-                        className={`-mx-1 flex items-center gap-2 self-start rounded-md px-1 text-left ${focus}`}
-                      >
-                        <Glyph size={16} strokeWidth={1.5} aria-hidden className="shrink-0 text-muted" />
-                        {node.status ? <span aria-hidden className={`size-2 shrink-0 rounded-full ${node.status === "ok" ? "bg-ok" : node.status === "warn" ? "bg-warn" : "bg-bad"}`} /> : null}
-                        <span className="truncate">{node.label}</span>
-                        {node.detail && !compact ? <span className="truncate text-[12px] text-muted">{node.detail}</span> : null}
-                      </button>
-                      <div className={`flex flex-wrap ${compact ? "gap-2" : "gap-3"}`}>{members.map((member) => box(member))}</div>
-                    </div>
-                  );
-                })}
+        <div data-band="all" className={columns ? `flex items-stretch ${compact ? "gap-1.5" : "gap-2.5"}` : `flex flex-col ${compact ? "gap-1.5" : "gap-2.5"}`}>
+          {shownBands.map((band) => {
+            const nodes = model.nodes.filter((node) => node.band === band.key && !node.parent);
+            const tint = band.key === "storage" || band.key === "machines" ? "bg-line/25" : "bg-status/40";
+            const content = nodes.map((node) => {
+              const members = model.nodes.filter((item) => item.parent === node.key);
+              if (members.length === 0) return box(node);
+              const on = node.key === selected;
+              const dim = selected !== null && !near.has(node.key);
+              const Glyph = icons[node.kind];
+              return (
+                // A container: its name heads a frame around what it holds.
+                <div
+                  key={node.key}
+                  ref={(element) => {
+                    if (element) refs.current.set(node.key, element);
+                    else refs.current.delete(node.key);
+                  }}
+                  className={`relative z-[2] flex flex-col gap-2 rounded-md bg-surface/70 transition-opacity ${on ? "border-2 border-ink" : "border border-dashed border-muted"} ${compact ? "p-1.5" : on ? "px-[9px] pb-[9px] pt-[5px]" : "px-2.5 pb-2.5 pt-1.5"} ${dim ? "opacity-40" : ""}`}
+                >
+                  <button
+                    type="button"
+                    aria-current={on ? "true" : undefined}
+                    aria-label={[text(`plan.kind.${node.kind}` as MsgKey), node.label, node.detail].filter(Boolean).join(" · ")}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSelect(on ? null : node.key);
+                    }}
+                    className={`-mx-1 flex items-center gap-2 self-start rounded-md px-1 text-left ${focus}`}
+                  >
+                    <Glyph size={16} strokeWidth={1.5} aria-hidden className="shrink-0 text-muted" />
+                    {node.status ? <span aria-hidden className={`size-2 shrink-0 rounded-full ${node.status === "ok" ? "bg-ok" : node.status === "warn" ? "bg-warn" : "bg-bad"}`} /> : null}
+                    <span className="truncate">{node.label}</span>
+                    {node.detail && !compact ? <span className="truncate text-[12px] text-muted">{node.detail}</span> : null}
+                  </button>
+                  <div className={`flex ${columns ? "flex-col" : "flex-wrap"} ${compact ? "gap-2" : "gap-3"}`}>{members.map((member) => box(member))}</div>
+                </div>
+              );
+            });
+            if (columns) {
+              // Left to right: a column per band, its elements one under the other.
+              return (
+                <div key={band.key} data-band={band.key} className={`relative flex min-w-0 flex-1 flex-col gap-2 rounded-md px-2 ${compact ? "py-1" : "py-2"} ${tint}`}>
+                  {compact ? null : (
+                    <span data-band={band.key} className="text-[11px] text-faint">
+                      {text(band.label)}
+                    </span>
+                  )}
+                  <div data-band={band.key} className={`flex flex-1 flex-col justify-center ${compact ? "gap-1.5" : "gap-2.5"}`}>
+                    {content}
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <div key={band.key} data-band={band.key} className={`relative flex items-center gap-2 rounded-md px-2 ${compact ? "py-1" : "py-2"} ${tint}`}>
+                {compact ? null : (
+                  <span data-band={band.key} className="w-[72px] shrink-0 self-start pt-0.5 text-[11px] text-faint">
+                    {text(band.label)}
+                  </span>
+                )}
+                <div data-band={band.key} className={`flex min-w-0 flex-1 flex-wrap items-center justify-center ${compact ? "gap-2" : "gap-x-8 gap-y-3"}`}>
+                  {content}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
+        {compact || legend.length === 0 ? null : (
+          <ul className="relative z-[2] flex flex-wrap gap-x-4 gap-y-1 px-1 text-[11px] text-muted" aria-label={text("plan.legend")}>
+            {legend.map((kind) => (
+              <li key={kind} className="inline-flex items-center gap-1.5">
+                <svg width="20" height="6" aria-hidden>
+                  <line x1="1" y1="3" x2="19" y2="3" stroke={strokes[kind].color} strokeWidth={strokes[kind].width} strokeDasharray={strokes[kind].dash} strokeLinecap={strokes[kind].cap} />
+                </svg>
+                {text(linkLabels[kind])}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </section>
   );
 }
 
 // curve joins two boxes: from the bottom of the upper one to the top of the
-// lower one, or side to side within a band.
-function curve(a: Rect, b: Rect) {
+// lower one, or side to side within a band. Left to right, boxes of two
+// columns join side to side, and two boxes of one column by an arc beside it.
+function curve(a: Rect, b: Rect, columns = false) {
   const ax = a.x + a.w / 2;
   const bx = b.x + b.w / 2;
+  if (columns) {
+    const left = a.x <= b.x ? a : b;
+    const right = a.x <= b.x ? b : a;
+    const y1 = left.y + left.h / 2;
+    const y2 = right.y + right.h / 2;
+    const x1 = left.x + left.w;
+    const x2 = right.x;
+    if (x2 > x1 + 4) {
+      const bend = Math.max(12, (x2 - x1) / 2);
+      return `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`;
+    }
+    const edge = Math.max(a.x + a.w, b.x + b.w);
+    return `M ${a.x + a.w} ${a.y + a.h / 2} C ${edge + 28} ${a.y + a.h / 2}, ${edge + 28} ${b.y + b.h / 2}, ${b.x + b.w} ${b.y + b.h / 2}`;
+  }
   if (Math.abs(a.y + a.h / 2 - (b.y + b.h / 2)) < 8) {
     const left = a.x < b.x ? a : b;
     const right = a.x < b.x ? b : a;
@@ -291,6 +331,32 @@ function curve(a: Rect, b: Rect) {
   return `M ${ux} ${y1} C ${ux} ${mid}, ${dx} ${mid}, ${dx} ${y2}`;
 }
 
+// leftToRight chooses the direction of a plan: bands side by side when that
+// makes it lower, since what follows the plan needs the room. It weighs the
+// rows each direction needs at this width.
+function leftToRight(model: PlanModel, bandCount: number, width: number, compact: boolean) {
+  if (bandCount < 2 || width <= 0) return false;
+  const nodeW = compact ? 130 : 180;
+  const nodeH = compact ? 30 : 48;
+  const columnW = (width - 16 - (bandCount - 1) * 10) / bandCount;
+  if (columnW < (compact ? 120 : 150)) return false;
+  // Units: a box is one, a container is its members and a head.
+  const units = (band: Band) =>
+    model.nodes
+      .filter((node) => node.band === band && !node.parent)
+      .map((node) => {
+        const members = model.nodes.filter((item) => item.parent === node.key).length;
+        return members > 0 ? { width: members, height: members + 0.6 } : { width: 1, height: 1 };
+      });
+  const shown = bands.filter((band) => model.nodes.some((node) => node.band === band.key)).map((band) => units(band.key));
+  const perRow = Math.max(1, Math.floor((width - 16 - 88 + 32) / (nodeW + 32)));
+  const rowsH = shown.reduce((sum, band) => sum + Math.ceil(band.reduce((total, unit) => total + unit.width, 0) / perRow) * (nodeH + 12) + (compact ? 8 : 16), 0);
+  const columnsH = Math.max(...shown.map((band) => band.reduce((total, unit) => total + unit.height, 0) * (nodeH + (compact ? 6 : 10)))) + (compact ? 8 : 40);
+  return columnsH < rowsH * 0.9;
+}
+
+// LinkLabel names a link of a plan from top to bottom; side by side, columns
+// leave no room for it, and the table of interactions says it.
 function LinkLabel({ a, b, label, warn }: { a: Rect; b: Rect; label: string; warn: boolean }) {
   const row = Math.abs(a.y + a.h / 2 - (b.y + b.h / 2)) < 8;
   const x = row ? (Math.min(a.x + a.w, b.x + b.w) + Math.max(a.x, b.x)) / 2 : (a.x + a.w / 2 + b.x + b.w / 2) / 2;
@@ -468,54 +534,82 @@ export function PlanPanel({
   const [flows, setFlows] = useState(false);
   const [compact, setCompact] = useState(false);
   const box = useRef<HTMLDivElement>(null);
+  const mark = useRef<HTMLDivElement>(null);
 
+  // The plan shrinks once it is stuck under the trail, and opens again when
+  // the page comes back to it. The mark sits above the plan: shrinking moves
+  // what is below, never the mark, so the plan does not flicker. It shrinks
+  // only when the page is long enough to stay scrolled once it has.
   useLayoutEffect(() => {
-    const scroller = box.current?.closest("main");
-    if (!scroller) return;
-    const onScroll = () => {
-      const top = scroller.scrollTop;
-      setCompact((current) => (current ? top > 40 : top > 200));
+    const sticky = box.current;
+    const above = mark.current;
+    const scroller = above?.closest("main");
+    if (!sticky || !above || !scroller) return;
+    let frame = 0;
+    const check = () => {
+      frame = 0;
+      if (sticky.offsetParent === null) return;
+      const line = scroller.getBoundingClientRect().top + (parseFloat(getComputedStyle(sticky).top) || 0);
+      const top = above.getBoundingClientRect().top;
+      setCompact((current) => {
+        if (current) return top < line - 4;
+        const room = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop;
+        return top < line - 24 && room > sticky.offsetHeight;
+      });
     };
-    scroller.addEventListener("scroll", onScroll, { passive: true });
-    return () => scroller.removeEventListener("scroll", onScroll);
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(check);
+    };
+    scroller.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    check();
+    return () => {
+      scroller.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      if (frame) cancelAnimationFrame(frame);
+    };
   }, []);
 
   const name = (key: string) => model.nodes.find((node) => node.key === key)?.label ?? key;
   const chosen = model.nodes.find((node) => node.key === selected) ?? null;
+  const header = (
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+      <h2 className="flex items-baseline gap-2 text-[14px]">
+        {text("plan.title")}
+        <span className="text-[12px] text-muted">
+          {summary ?? `${model.nodes.filter((node) => node.kind === "service").length} ${text("plan.band.services").toLowerCase()}`}
+        </span>
+      </h2>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button type="button" aria-pressed={selected === null} onClick={() => onSelect(null)} className={`rounded-md border px-2 py-0.5 text-[12px] ${selected === null ? "border-ink text-ink" : "border-line text-muted"} ${focus}`}>
+          {whole}
+        </button>
+        <button type="button" aria-expanded={flows} onClick={() => setFlows((value) => !value)} className={`rounded-md border border-line px-2 py-0.5 text-[12px] text-muted ${focus}`}>
+          {text("plan.flows", { count: model.links.length })}
+        </button>
+      </div>
+    </div>
+  );
+  // The parts are siblings in the page, so that the plan stays stuck while
+  // all that follows it scrolls.
   return (
     <>
-    <PhoneList model={model} selected={selected} onSelect={onSelect}>
-      {children}
-    </PhoneList>
-    <div className="hidden md:block">
-      <div ref={box} className="sticky top-0 z-10 -mx-2 md:top-[49px] flex flex-col gap-3 bg-canvas px-2 pb-3 pt-2">
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <h2 className="flex items-baseline gap-2">
-            {text("plan.title")}
-            <span className="text-[13px] text-muted">
-              {summary ?? `${model.nodes.filter((node) => node.kind === "service").length} ${text("plan.band.services").toLowerCase()}`}
-            </span>
-          </h2>
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" aria-pressed={selected === null} onClick={() => onSelect(null)} className={`rounded-md border px-3 py-1 text-[13px] ${selected === null ? "border-ink text-ink" : "border-line text-muted"} ${focus}`}>
-              {whole}
-            </button>
-            <button type="button" aria-expanded={flows} onClick={() => setFlows((value) => !value)} className={`rounded-md border border-line px-3 py-1 text-[13px] text-muted ${focus}`}>
-              {text("plan.flows", { count: model.links.length })}
-            </button>
-          </div>
-        </div>
-        <Plan model={model} selected={selected} onSelect={onSelect} label={label} compact={compact} />
+      <PhoneList model={model} selected={selected} onSelect={onSelect}>
+        {children}
+      </PhoneList>
+      <div ref={mark} aria-hidden className="hidden h-0 md:block" />
+      <div ref={box} className="sticky top-0 z-10 -mx-2 hidden flex-col gap-2 bg-canvas px-2 pb-2 pt-1 md:top-[49px] md:flex">
+        <Plan model={model} selected={selected} onSelect={onSelect} label={label} compact={compact} header={header} />
         {chosen ? (
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-line pb-2">
-            <span className="text-[13px] text-muted">{text(`plan.kind.${chosen.kind}` as MsgKey)}</span>
-            <span className="text-[16px]">{chosen.label}</span>
-            {chosen.detail ? <span className="text-[13px] text-muted">{chosen.detail}</span> : null}
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-line pb-1.5">
+            <span className="text-[12px] text-muted">{text(`plan.kind.${chosen.kind}` as MsgKey)}</span>
+            <span>{chosen.label}</span>
+            {chosen.detail ? <span className="text-[12px] text-muted">{chosen.detail}</span> : null}
           </div>
         ) : null}
       </div>
       {flows ? (
-        <section aria-label={text("plan.flows", { count: model.links.length })} className="mb-6 mt-2 overflow-hidden rounded-md border border-line bg-surface">
+        <section aria-label={text("plan.flows", { count: model.links.length })} className="mb-4 mt-2 hidden overflow-hidden rounded-md border border-line bg-surface md:block">
           <div className="grid grid-cols-[1fr_1fr_1fr_1fr] gap-4 border-b border-line px-4 py-2 text-[12px] text-muted">
             <span>{text("plan.col.from")}</span>
             <span>{text("plan.col.to")}</span>
@@ -540,8 +634,7 @@ export function PlanPanel({
           </ul>
         </section>
       ) : null}
-      {children}
-    </div>
+      {children ? <div className="mt-3 hidden md:block">{children}</div> : null}
     </>
   );
 }

@@ -481,7 +481,7 @@ export function TemplateLaunch() {
           <ErrorText>{error}</ErrorText>
         </div>
       ) : null}
-      <div className="mb-8">
+      <>
         <PlanPanel
           model={model}
           label={text("plan.labelTemplate")}
@@ -511,7 +511,8 @@ export function TemplateLaunch() {
             />
           ) : null}
         </PlanPanel>
-      </div>
+        <div className="mb-8" />
+      </>
       {chosen ? (
         <div className="flex max-w-[720px] flex-wrap items-center gap-4">
           {phase === "fill" ? (

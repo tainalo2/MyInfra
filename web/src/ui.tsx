@@ -514,7 +514,9 @@ export function Shell() {
             </Suspense>
           </main>
         ) : (
-          <main className="min-w-0 flex-1 overflow-y-auto px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)] md:px-6 md:pb-12 md:pt-0">
+          // No scroll anchoring: when the plan of a page shrinks, the page must
+          // not jump back by what it saved, or the plan would grow again.
+          <main className="min-w-0 flex-1 overflow-y-auto px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)] [overflow-anchor:none] md:px-6 md:pb-12 md:pt-0">
             <MobileBar />
             <div className={`mx-auto w-full max-w-[960px] ${trail ? "" : "md:pt-8"}`}>
               <ReadOnlyBanner />

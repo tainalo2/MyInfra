@@ -952,11 +952,11 @@ function VisualEditor({
   const known = !only || pkg.services.some((service) => service.name === only);
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col">
       {pkg.services.length > 0 ? (
         <PlanPanel model={packagePlan(pkg)} label={text("plan.labelPackage")} whole={text("plan.wholePackage")} selected={known ? chosen : null} onSelect={setChosen} />
       ) : null}
-      <section className={`flex max-w-[720px] flex-col gap-4 ${only && known ? "hidden" : ""}`}>
+      <section className={`mt-6 flex max-w-[720px] flex-col gap-4 ${only && known ? "hidden" : ""}`}>
         <Field label={text("package.name")}>
           <Input value={pkg.name} onChange={(e) => set("name", e.target.value)} required />
         </Field>
@@ -974,6 +974,7 @@ function VisualEditor({
         <SharedDisks disks={pkg.disks ?? []} onChange={(disks) => set("disks", disks.length > 0 ? disks : undefined)} />
         {general.length > 0 ? <ProblemList problems={general} /> : null}
       </section>
+      <div className="mt-8" />
       <ServicesEditor services={pkg.services} onChange={(services) => set("services", services)} problems={problems} disks={(pkg.disks ?? []).map((disk) => disk.name).filter(Boolean)} only={known ? only : ""} />
     </div>
   );
