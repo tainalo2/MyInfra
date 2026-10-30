@@ -146,7 +146,7 @@ export function Plan({
           event.stopPropagation();
           onSelect(on ? null : node.key);
         }}
-        className={`relative z-[2] flex min-w-0 items-center gap-2 bg-surface text-left transition-opacity ${columns ? "w-full" : "max-w-[220px]"} ${node.kind === "internet" ? "rounded-full" : "rounded-md"} ${
+        className={`relative z-[2] flex min-w-0 items-center gap-2 bg-surface text-left transition-opacity ${columns ? "w-full max-w-[280px] self-center" : "max-w-[220px]"} ${node.kind === "internet" ? "rounded-full" : "rounded-md"} ${
           on ? "border-2 border-ink" : node.draft ? "border border-dashed border-faint" : node.kind === "backup" ? "border border-dashed border-[#d6d3d1]" : "border border-[#d6d3d1] dark:border-line"
         } ${node.band === "storage" || node.band === "machines" ? "bg-canvas" : ""} ${compact ? "px-2 py-0.5" : on ? "px-[9px] py-[5px]" : "px-2.5 py-1.5"} ${dim ? "opacity-40" : ""} ${focus}`}
       >
@@ -570,6 +570,30 @@ export function PlanPanel({
     };
   }, []);
 
+  // The plan takes the whole width of the page's area, past the narrower
+  // column of the page it sits in: a wide plan is a lower one.
+  const [span, setSpan] = useState<{ left: number; width: number } | null>(null);
+  useLayoutEffect(() => {
+    const sticky = box.current;
+    const parent = sticky?.parentElement;
+    const scroller = sticky?.closest("main");
+    if (!sticky || !parent || !scroller) return;
+    const measure = () => {
+      if (sticky.offsetParent === null) return setSpan(null);
+      const area = scroller.getBoundingClientRect();
+      const style = getComputedStyle(scroller);
+      const left = area.left + (parseFloat(style.paddingLeft) || 0);
+      const width = scroller.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
+      const next = { left: Math.round(left - parent.getBoundingClientRect().left), width: Math.round(width) };
+      setSpan((current) => (current && current.left === next.left && current.width === next.width ? current : next));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(scroller);
+    observer.observe(parent);
+    return () => observer.disconnect();
+  }, []);
+
   const name = (key: string) => model.nodes.find((node) => node.key === key)?.label ?? key;
   const chosen = model.nodes.find((node) => node.key === selected) ?? null;
   const header = (
@@ -598,7 +622,11 @@ export function PlanPanel({
         {children}
       </PhoneList>
       <div ref={mark} aria-hidden className="hidden h-0 md:block" />
-      <div ref={box} className="sticky top-0 z-10 -mx-2 hidden flex-col gap-2 bg-canvas px-2 pb-2 pt-1 md:top-[49px] md:flex">
+      <div
+        ref={box}
+        className="sticky top-0 z-10 hidden flex-col gap-2 bg-canvas pb-2 pt-1 md:top-[49px] md:flex"
+        style={span ? { marginLeft: span.left, width: span.width } : undefined}
+      >
         <Plan model={model} selected={selected} onSelect={onSelect} label={label} compact={compact} header={header} />
         {chosen ? (
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-line pb-1.5">
