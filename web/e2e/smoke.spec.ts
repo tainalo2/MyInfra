@@ -113,7 +113,7 @@ test.describe.serial("MyInfra", () => {
     await expect(card.getByText("Héberge")).toBeVisible();
     await page.goBack();
     await expect(page).toHaveURL(/sel=app/);
-    await expect(page.getByRole("region", { name: "Chiffres clés" }).getByRole("link", { name: /Applications\s*1\s*\/ 2 en ligne/ })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Chiffres clés" }).getByRole("link", { name: /^Applications.*1\s*\/ 2 en ligne/ })).toBeVisible();
   });
 
   test("the search goes to a page from anywhere", async ({ page }) => {
