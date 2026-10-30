@@ -1,13 +1,12 @@
 import { RunningList } from "./activity";
 import { useEffect, useState } from "react";
-import { Earth, History } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, peek, type InfraEvent } from "./api";
 import { currentLocale, text, type MsgKey } from "./i18n";
 import { Pill } from "./dnsrecords";
 import { StatusBadge } from "./kit";
 import { useI18n } from "./lang";
-import { Button, ErrorText, Icon, Input, LoadingLines, PageTitle, Select, focus } from "./ui";
+import { Button, ErrorText, Input, LoadingLines, PageTitle, Select, focus } from "./ui";
 
 type Kind = "all" | "problem" | "deploy" | "server" | "update" | "assistant";
 
@@ -51,14 +50,6 @@ export function HistoryPage() {
   );
   const test = kinds.find((item) => item.key === kind)!.test;
   const list = base.filter(test);
-  const groups: { day: string; rows: InfraEvent[] }[] = [];
-  for (const event of list.slice(0, shown)) {
-    const day = dayOf(event.at);
-    const last = groups[groups.length - 1];
-    if (last && last.day === day) last.rows.push(event);
-    else groups.push({ day, rows: [event] });
-  }
-
   return (
     <>
       <PageTitle title={text("nav.activity")} />
@@ -85,18 +76,7 @@ export function HistoryPage() {
       {error ? <ErrorText>{error}</ErrorText> : null}
       {!rows && !error ? <LoadingLines lines={4} label={text("nav.history")} /> : null}
       {rows && list.length === 0 ? <p className="text-muted">{text("ui.aucunEvenement")}</p> : null}
-      <div className="flex flex-col gap-8">
-        {groups.map((group) => (
-          <section key={group.day}>
-            <h3 className="mb-2 text-[13px] text-muted">{group.day}</h3>
-            <ul className="overflow-hidden rounded-md border border-line bg-surface">
-              {group.rows.map((event) => (
-                <EventRow key={event.id} event={event} />
-              ))}
-            </ul>
-          </section>
-        ))}
-      </div>
+      <EventFeed events={list.slice(0, shown)} />
       {list.length > shown ? (
         <div className="mt-6">
           <Button type="button" variant="secondary" onClick={() => setShown((count) => count + 40)}>
@@ -161,6 +141,8 @@ function eventQuery(server?: string, cluster?: string, source?: string) {
   return query.toString() ? `?${query}` : "";
 }
 
+// EventList reads and shows a history: the activity of a server, of the
+// assistants, the latest on the overview. It looks like the Activity page.
 export function EventList({ server, cluster, source, limit }: { server?: string; cluster?: string; source?: "mcp"; limit?: number }) {
   const [rows, setRows] = useState<InfraEvent[] | null>(() => peek<InfraEvent[]>(`/api/events${eventQuery(server, cluster, source)}`));
   const [error, setError] = useState("");
@@ -175,44 +157,31 @@ export function EventList({ server, cluster, source, limit }: { server?: string;
   if (error) return <ErrorText>{error}</ErrorText>;
   if (!rows) return <LoadingLines lines={4} label={text("nav.history")} />;
   if (rows.length === 0) return <p className="text-muted">{text("ui.aucunEvenement")}</p>;
+  return <EventFeed events={limit ? rows.slice(0, limit) : rows} />;
+}
+
+// EventFeed is the one way a history shows: events by day, each with its
+// time, what happened, on what and by whom.
+export function EventFeed({ events }: { events: InfraEvent[] }) {
+  const groups: { day: string; rows: InfraEvent[] }[] = [];
+  for (const event of events) {
+    const day = dayOf(event.at);
+    const last = groups[groups.length - 1];
+    if (last && last.day === day) last.rows.push(event);
+    else groups.push({ day, rows: [event] });
+  }
   return (
-    <ul className="max-w-[720px]">
-      {(limit ? rows.slice(0, limit) : rows).map((event) => (
-        <li key={event.id} className="border-t border-line py-3">
-          <div className="flex items-baseline justify-between gap-6">
-            <span>{event.message}</span>
-            <span className={levelTone(event.level)}>{when(event.at)}</span>
-          </div>
-          <p className="mt-1 flex items-center gap-2 text-muted">
-            <Icon icon={event.serverId ? History : Earth} />
-            {event.source === "mcp" || event.source === "api" ? (
-              <span className="rounded border border-line px-1.5 text-[12px]" title={text("mcp.badgeHint")}>
-                {event.source === "mcp" ? text("mcp.badge") : text("mcp.badgeApi")}
-                {event.actor ? ` · ${event.actor}` : ""}
-              </span>
-            ) : null}
-            {event.serverId ? (
-              <Link to={`/serveurs/${event.serverId}`} className="underline">{event.serverName || "Serveur"}</Link>
-            ) : null}
-            {event.clusterId ? (
-              <Link to={`/historique?cluster=${event.clusterId}`} className="underline">{event.clusterName || text("field.cluster")}</Link>
-            ) : null}
-          </p>
-        </li>
+    <div className="flex flex-col gap-6">
+      {groups.map((group) => (
+        <section key={group.day}>
+          <h3 className="mb-2 text-[13px] text-muted">{group.day}</h3>
+          <ul className="overflow-hidden rounded-md border border-line bg-surface">
+            {group.rows.map((event) => (
+              <EventRow key={event.id} event={event} />
+            ))}
+          </ul>
+        </section>
       ))}
-    </ul>
+    </div>
   );
-}
-
-function levelTone(level: string) {
-  if (level === "bad") return "text-bad";
-  if (level === "warn") return "text-warn";
-  if (level === "ok") return "text-ok";
-  return "text-muted";
-}
-
-function when(iso: string) {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString(currentLocale(), { dateStyle: "medium", timeStyle: "short" });
 }

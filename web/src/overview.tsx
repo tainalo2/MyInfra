@@ -202,7 +202,7 @@ export function Overview() {
   // keeps the current frame so the map does not jump under the pointer.
   const frame = selection && selection.kind !== "lieu" && lit.size > 0 ? [...lit] : sites.map((site) => site.key);
   // The card of the selection sits over the top left of the map.
-  const inset: Inset = wide ? { top: 16, right: 56, bottom: 16, left: selection ? 452 : 16 } : { top: 12, right: 12, bottom: 12, left: 12 };
+  const inset: Inset = wide ? { top: 56, right: 56, bottom: 16, left: selection ? 452 : 16 } : { top: 12, right: 12, bottom: 12, left: 12 };
   const fitKey = [wide, wide && selection ? 1 : 0, ...[...frame].sort()].join("|");
 
   async function togglePause(app: Application) {
@@ -286,11 +286,8 @@ export function Overview() {
   );
 
   return (
-    <div className={`flex flex-col gap-4 px-4 pb-4 md:h-full md:gap-6 md:overflow-y-auto md:px-6 md:py-8 ${selection && !wide ? "pb-[50vh]" : ""}`}>
-      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-        <PageTitleOnly />
-        {data ? <span className="hidden text-[13px] text-muted md:inline">{text("overview.fresh")}</span> : null}
-      </div>
+    <div className={`flex flex-col gap-4 px-4 pb-4 md:h-full md:gap-3 md:overflow-hidden md:px-6 md:py-4 ${selection && !wide ? "pb-[50vh]" : ""}`}>
+      <PageTitleOnly />
       <Figures model={model} loading={data === null} />
       {empty ? (
         <section className="flex max-w-[560px] flex-col gap-3 rounded-md border border-line bg-surface p-4">
@@ -305,17 +302,17 @@ export function Overview() {
         </section>
       ) : null}
       <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row md:items-stretch">
-        <div className="flex min-w-0 flex-col md:w-[360px] md:shrink-0 lg:w-[400px]">{panel}</div>
-        <section aria-label={mapLabel} className="flex min-w-0 flex-1 flex-col gap-4">
+        <div className="flex min-w-0 flex-col md:min-h-0 md:w-[340px] md:shrink-0 lg:w-[380px]">{panel}</div>
+        <section aria-label={mapLabel} className="flex min-w-0 flex-1 flex-col gap-4 md:min-h-0 md:gap-3">
           <div className="md:hidden">
             <TextButton type="button" aria-expanded={mapOpen} onClick={() => setMapOpen((open) => !open)}>
               <Icon icon={MapIcon} />
               {mapOpen ? text("overview.hideMap") : text("overview.showMap")}
             </TextButton>
           </div>
-          <div className={`relative h-[45vh] shrink-0 overflow-hidden rounded-md border border-line md:block md:h-auto md:min-h-[520px] md:flex-1 ${mapOpen ? "" : "hidden"}`}>
+          <div className={`relative h-[45vh] shrink-0 overflow-hidden rounded-md border border-line md:block md:h-auto md:min-h-0 md:flex-1 ${mapOpen ? "" : "hidden"}`}>
             <WorldMap sites={sites} frame={frame} inset={inset} fitKey={fitKey} label={mapLabel} onSelect={(key) => select(key ? `lieu:${key}` : null)} />
-            <Legend mode={mode} />
+            {selection && wide ? null : <Legend mode={mode} />}
             {selection && wide ? <div className="absolute left-4 top-4 z-10 w-[420px] max-w-[calc(100%-5rem)]">{card}</div> : null}
           </div>
           <RecentActivity />
@@ -334,13 +331,13 @@ function PageTitleOnly() {
       document.title = "MyInfra";
     };
   }, []);
-  return <h1 className="text-[28px] font-medium leading-[1.2] md:text-2xl md:leading-8">{text("overview.title")}</h1>;
+  return <h1 className="sr-only">{text("overview.title")}</h1>;
 }
 
 // Legend says what the rings and figures of the map mean.
 function Legend({ mode }: { mode: Mode }) {
   return (
-    <div className="absolute bottom-4 left-4 hidden flex-wrap gap-x-4 gap-y-2 rounded-md border border-line bg-surface px-3 py-2 text-[13px] text-muted md:flex">
+    <div className="absolute right-4 top-4 hidden max-w-[calc(100%-2rem)] flex-wrap justify-end gap-x-4 gap-y-1 rounded-md border border-line bg-surface px-3 py-1.5 text-[12px] text-muted md:flex">
       <span className="inline-flex items-center gap-1.5">
         <span aria-hidden className="size-2.5 rounded-full border-2 border-ok" />
         {text("overview.legendOk")}
@@ -356,14 +353,16 @@ function Legend({ mode }: { mode: Mode }) {
 
 function RecentActivity() {
   return (
-    <section className="rounded-md border border-line bg-surface px-4 py-3">
-      <div className="mb-2 flex items-center justify-between gap-4">
+    <section className="flex flex-col rounded-md border border-line bg-surface px-3 py-2 md:max-h-[34%] md:min-h-0 md:shrink-0">
+      <div className="mb-2 flex shrink-0 items-center justify-between gap-4">
         <h2>{text("overview.activity")}</h2>
         <Link to="/historique" className={`text-link ${focus}`}>
           {text("overview.seeAll")}
         </Link>
       </div>
-      <EventList limit={3} />
+      <div className="min-h-0 overflow-y-auto">
+        <EventList limit={3} />
+      </div>
     </section>
   );
 }
@@ -414,7 +413,7 @@ type Model = {
 };
 
 function Panel({ children }: { children: ReactNode }) {
-  return <section className="flex w-full flex-1 flex-col gap-3 rounded-md border border-line bg-surface p-4 md:max-h-[calc(100dvh-14rem)] md:min-h-[520px]">{children}</section>;
+  return <section className="flex w-full flex-1 flex-col gap-3 rounded-md border border-line bg-surface p-3 md:min-h-0">{children}</section>;
 }
 
 type Item = { key: string; tone: Tone; label: string; to?: string; onClick?: () => void };
@@ -642,7 +641,7 @@ function Figures({ model, loading }: { model: Model; loading: boolean }) {
   const cost = [...totals.entries()];
   const detail = [text("overview.costHint"), ...[...providers.entries()].map(([name, hourly]) => `${name} : ${money(hourly)}/h`)].join("\n");
   return (
-    <section aria-label={text("overview.figures")} className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+    <section aria-label={text("overview.figures")} className="grid shrink-0 grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
       <Kpi
         to="/applications"
         label={text("nav.apps")}
@@ -682,15 +681,17 @@ function Figures({ model, loading }: { model: Model; loading: boolean }) {
 function Kpi({ to, label, value, unit, note, tone = "text-muted", title }: { to?: string; label: string; value: string; unit: string; note?: string; tone?: string; title?: string }) {
   const body = (
     <>
-      <span className="text-[13px] text-muted">{label}</span>
-      <span className="text-[20px] font-medium leading-tight md:text-2xl">
-        {value}
-        <span className="text-[13px] font-normal text-muted md:text-[15px]">{unit}</span>
+      <span className="flex min-w-0 items-baseline justify-between gap-2 text-[12px]">
+        <span className="text-muted">{label}</span>
+        {note ? <span className={`truncate ${tone}`}>{note}</span> : null}
       </span>
-      {note ? <span className={`truncate text-[13px] ${tone}`}>{note}</span> : <span className="text-[13px]">&nbsp;</span>}
+      <span className="truncate text-[18px] font-medium leading-tight">
+        {value}
+        <span className="text-[13px] font-normal text-muted">{unit}</span>
+      </span>
     </>
   );
-  const cls = `flex min-w-0 flex-col gap-1 rounded-md border border-line bg-surface p-3 text-ink md:p-4 ${focus}`;
+  const cls = `flex min-w-0 flex-col gap-0.5 rounded-md border border-line bg-surface px-3 py-2 text-ink ${focus}`;
   return to ? (
     <Link to={to} className={`card-link ${cls}`} title={title}>
       {body}
