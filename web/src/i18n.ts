@@ -1717,6 +1717,7 @@ const fr = {
   "newApp.noPurchase": "L'app tourne sur vos serveurs : aucun serveur n'est commandé en plus.",
   "progress.label": "Étape {step} sur {total}",
   "progress.leave": "Vous pouvez quitter cette page : le déploiement continue.",
+  "plan.directShort": "direct",
 } as const;
 
 export type MsgKey = keyof typeof fr;
@@ -3368,6 +3369,7 @@ const en: Record<MsgKey, string> = {
   "newApp.noPurchase": "The app runs on your servers: no extra server is ordered.",
   "progress.label": "Step {step} of {total}",
   "progress.leave": "You can leave this page: the deployment goes on.",
+  "plan.directShort": "direct",
 };
 
 const pt: Record<MsgKey, string> = {
@@ -4996,6 +4998,7 @@ const pt: Record<MsgKey, string> = {
   "newApp.noPurchase": "A app corre nos seus servidores: nenhum servidor extra é encomendado.",
   "progress.label": "Passo {step} de {total}",
   "progress.leave": "Pode sair desta página: a implementação continua.",
+  "plan.directShort": "direto",
 };
 
 const it: Record<MsgKey, string> = {
@@ -6623,6 +6626,7 @@ const it: Record<MsgKey, string> = {
   "newApp.noPurchase": "L'app gira sui tuoi server: nessun server aggiuntivo viene ordinato.",
   "progress.label": "Passo {step} di {total}",
   "progress.leave": "Puoi lasciare questa pagina: la distribuzione continua.",
+  "plan.directShort": "diretto",
 };
 
 const de: Record<MsgKey, string> = {
@@ -8252,6 +8256,7 @@ const de: Record<MsgKey, string> = {
   "newApp.noPurchase": "Die App läuft auf Ihren Servern: Es wird kein zusätzlicher Server bestellt.",
   "progress.label": "Schritt {step} von {total}",
   "progress.leave": "Sie können diese Seite verlassen: Die Bereitstellung läuft weiter.",
+  "plan.directShort": "direkt",
 };
 
 const tables: Record<Lang, Record<MsgKey, string>> = { fr, en, pt, it, de };

@@ -956,7 +956,7 @@ function VisualEditor({
       {pkg.services.length > 0 ? (
         <PlanPanel model={packagePlan(pkg)} label={text("plan.labelPackage")} whole={text("plan.wholePackage")} selected={known ? chosen : null} onSelect={setChosen} />
       ) : null}
-      <section className={`flex max-w-[720px] flex-col gap-4 ${only && known ? "md:hidden" : ""}`}>
+      <section className={`flex max-w-[720px] flex-col gap-4 ${only && known ? "hidden" : ""}`}>
         <Field label={text("package.name")}>
           <Input value={pkg.name} onChange={(e) => set("name", e.target.value)} required />
         </Field>
@@ -1064,11 +1064,11 @@ function ServicesEditor({
           {text("package.addService")}
         </TextButton>
       </div>
-      <div className={only ? "md:hidden" : ""}>
+      <div className={only ? "hidden" : ""}>
         <Dependencies services={services} />
       </div>
       {services.map((service, index) => (
-        <div key={index} className={only && service.name !== only ? "md:hidden" : ""}>
+        <div key={index} className={only && service.name !== only ? "hidden" : ""}>
         <ServiceCard
           service={service}
           others={services.filter((_, at) => at !== index).map((other) => other.name)}

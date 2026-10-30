@@ -386,6 +386,10 @@ export function PlanPanel({
   const name = (key: string) => model.nodes.find((node) => node.key === key)?.label ?? key;
   const chosen = model.nodes.find((node) => node.key === selected) ?? null;
   return (
+    <>
+    <PhoneList model={model} selected={selected} onSelect={onSelect}>
+      {children}
+    </PhoneList>
     <div className="hidden md:block">
       <div ref={box} className="sticky top-0 z-10 -mx-2 flex flex-col gap-3 bg-canvas px-2 pb-3 pt-2">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
@@ -440,6 +444,54 @@ export function PlanPanel({
         </section>
       ) : null}
       {children}
+    </div>
+    </>
+  );
+}
+
+// PhoneList shows the elements of a plan on a phone: a list per band, the
+// chosen element's details right under its row.
+function PhoneList({ model, selected, onSelect, children }: { model: PlanModel; selected: string | null; onSelect: (key: string | null) => void; children?: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-6 md:hidden">
+      {bands.map((band) => {
+        const nodes = model.nodes.filter((node) => node.band === band.key);
+        if (nodes.length === 0) return null;
+        return (
+          <section key={band.key}>
+            <h2 className="mb-2 px-1 text-[13px] text-muted">{text(band.label)}</h2>
+            <div className="row-group overflow-hidden rounded-md border border-line bg-surface">
+              {nodes.map((node) => {
+                const Glyph = icons[node.kind];
+                const on = node.key === selected;
+                const links = model.links.filter((link) => link.from === node.key || link.to === node.key);
+                const direct = node.kind === "service" && links.some((link) => link.kind === "direct");
+                return (
+                  <div key={node.key} className="row-tiled">
+                    <button
+                      type="button"
+                      aria-expanded={on}
+                      onClick={() => onSelect(on ? null : node.key)}
+                      className={`row flex min-h-14 w-full items-center gap-3 px-4 py-2 text-left ${focus}`}
+                    >
+                      <span aria-hidden className="flex size-10 shrink-0 items-center justify-center rounded-md bg-status text-muted">
+                        <Glyph size={20} strokeWidth={1.75} />
+                      </span>
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate">{node.label}</span>
+                        {node.detail ? <span className="truncate text-[13px] text-muted">{node.detail}</span> : null}
+                      </span>
+                      {direct ? <span className="text-[12px] text-warn">{text("plan.directShort")}</span> : null}
+                      {node.status ? <span aria-hidden className={`size-2 shrink-0 rounded-full ${node.status === "ok" ? "bg-ok" : node.status === "warn" ? "bg-warn" : "bg-bad"}`} /> : null}
+                    </button>
+                    {on ? <div className="px-4 pb-3 [&>*]:mb-0">{children}</div> : null}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
 }
