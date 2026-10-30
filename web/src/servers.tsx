@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
-import { ConfirmDialog, Sheet, Spinner, StatusBadge, Steps, useToast } from "./kit";
+import { ConfirmDialog, CopyButton, Sheet, Spinner, StatusBadge, Steps, useToast } from "./kit";
 import { usePoll } from "./poll";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Copy, KeyRound, Plus, RotateCcw, Server as ServerIcon, SquareTerminal, Trash2 } from "lucide-react";
@@ -821,10 +821,23 @@ export function ServerPage() {
     )],
     ...(server.plan ? [[text("server.offer"), machineLine(server.plan.name, server.plan.vcpu, server.plan.memoryMb, server.plan.gpus, server.plan.gpu, server.plan.diskGb)] as [string, ReactNode]] : []),
     ...(placeLabel(server.plan?.location) || (!(canDeploy && !server.providerId) && placeLabel(server.place)) ? [[text("server.place"), placeLabel(server.plan?.location) || placeLabel(server.place)] as [string, ReactNode]] : []),
-    ...(server.address ? [[text("server.address"), <span className="break-all font-mono text-[13px]">{server.address}</span>] as [string, ReactNode]] : []),
+    ...(server.address ? [[text("server.address"), (
+      <span className="inline-flex min-w-0 items-center gap-1">
+        <span className="break-all font-mono text-[13px]">{server.address}</span>
+        {linked ? <CopyButton value={server.address} /> : null}
+      </span>
+    )] as [string, ReactNode]] : []),
     [text("server.cost"), server.cost ? billText(server.cost, false, hourlyRate(server)) : text("bill.none")],
     [text("server.uptime"), exploitation(server.createdAt, now)],
   ];
+
+  const terminal =
+    linked && canDeploy ? (
+      <Link to={`/serveurs/${server.id}/terminal`} className={`inline-flex min-h-11 items-center gap-2 rounded-md border border-line bg-surface px-4 py-2 sm:min-h-0 ${focus}`}>
+        <Icon icon={SquareTerminal} />
+        {text("server.terminal")}
+      </Link>
+    ) : null;
 
   return (
     <>
@@ -834,14 +847,32 @@ export function ServerPage() {
           <ErrorText>{error}</ErrorText>
         </div>
       ) : null}
-      <dl className="grid max-w-[720px] grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-[max-content_1fr]">
-        {facts.map(([label, value]) => (
-          <div key={label} className="contents">
-            <dt className="text-muted">{label}</dt>
-            <dd className="-mt-2 mb-1 min-w-0 sm:m-0">{value}</dd>
-          </div>
-        ))}
-      </dl>
+      <div className={linked ? "flex flex-col gap-8 lg:flex-row lg:items-start" : ""}>
+      {linked ? (
+        // A running server keeps what matters in sight while the page scrolls.
+        <aside aria-label={text("server.essentials")} className="flex flex-col gap-4 rounded-md border border-line bg-surface p-4 lg:sticky lg:top-4 lg:order-last lg:w-[320px] lg:shrink-0">
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-[13px]">
+            {facts.map(([label, value]) => (
+              <div key={label} className="contents">
+                <dt className="text-muted">{label}</dt>
+                <dd className="min-w-0 break-words">{value}</dd>
+              </div>
+            ))}
+          </dl>
+          {terminal ? <div className="border-t border-line pt-4">{terminal}</div> : null}
+        </aside>
+      ) : null}
+      <div className={linked ? "min-w-0 flex-1" : ""}>
+      {linked ? null : (
+        <dl className="grid max-w-[720px] grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-[max-content_1fr]">
+          {facts.map(([label, value]) => (
+            <div key={label} className="contents">
+              <dt className="text-muted">{label}</dt>
+              <dd className="-mt-2 mb-1 min-w-0 sm:m-0">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
       {!server.providerId && canDeploy ? (
         <div className="mt-6 max-w-[720px]">
           <ServerPlace
@@ -869,13 +900,7 @@ export function ServerPage() {
           {copied ? <span className="text-muted">{text("common.copied")}</span> : null}
         </div>
       ) : null}
-      <div className="mt-6 flex flex-wrap items-center gap-3">
-        {linked && canDeploy ? (
-          <Link to={`/serveurs/${server.id}/terminal`} className={`inline-flex min-h-11 items-center gap-2 rounded-md border border-line bg-surface px-4 py-2 sm:min-h-0 ${focus}`}>
-            <Icon icon={SquareTerminal} />
-            {text("server.terminal")}
-          </Link>
-        ) : null}
+      <div className={`flex flex-wrap items-center gap-3 ${linked ? "" : "mt-6"}`}>
         {canDeploy && failed ? (
           <Button type="button" onClick={() => void retry()} disabled={retrying || locked}>
             {retrying ? <Spinner /> : <Icon icon={RotateCcw} />}
@@ -956,6 +981,8 @@ export function ServerPage() {
         <div className="mt-4">
           <EventList server={server.id} />
         </div>
+      </div>
+      </div>
       </div>
       {moving ? (
         <MoveServerDialog

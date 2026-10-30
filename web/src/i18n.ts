@@ -771,7 +771,7 @@ const fr = {
   "apps.copyMany": "{count} pods",
   "common.advanced": "Avancé",
   "server.status": "État",
-  "server.provider": "Provider",
+  "server.provider": "Hébergeur",
   "server.cluster": "Cluster",
   "server.move": "Changer de cluster",
   "server.moveTitle": "Déplacer {name}",
@@ -1735,6 +1735,7 @@ const fr = {
   "upd.auto.off": "Correctifs de nuit désactivés.",
   "upd.auto.last": "Dernier passage : {when}.",
   "activity.night": "MyInfra · nuit",
+  "server.essentials": "L'essentiel du serveur",
 } as const;
 
 export type MsgKey = keyof typeof fr;
@@ -3404,6 +3405,7 @@ const en: Record<MsgKey, string> = {
   "upd.auto.off": "Nightly patches off.",
   "upd.auto.last": "Last run: {when}.",
   "activity.night": "MyInfra · night",
+  "server.essentials": "Server essentials",
 };
 
 const pt: Record<MsgKey, string> = {
@@ -5050,6 +5052,7 @@ const pt: Record<MsgKey, string> = {
   "upd.auto.off": "Correções noturnas desativadas.",
   "upd.auto.last": "Última execução: {when}.",
   "activity.night": "MyInfra · noite",
+  "server.essentials": "O essencial do servidor",
 };
 
 const it: Record<MsgKey, string> = {
@@ -6695,6 +6698,7 @@ const it: Record<MsgKey, string> = {
   "upd.auto.off": "Correzioni notturne disattivate.",
   "upd.auto.last": "Ultima esecuzione: {when}.",
   "activity.night": "MyInfra · notte",
+  "server.essentials": "L'essenziale del server",
 };
 
 const de: Record<MsgKey, string> = {
@@ -8342,6 +8346,7 @@ const de: Record<MsgKey, string> = {
   "upd.auto.off": "Nächtliche Korrekturen aus.",
   "upd.auto.last": "Letzter Lauf: {when}.",
   "activity.night": "MyInfra · Nacht",
+  "server.essentials": "Das Wichtigste zum Server",
 };
 
 const tables: Record<Lang, Record<MsgKey, string>> = { fr, en, pt, it, de };

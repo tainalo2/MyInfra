@@ -43,7 +43,7 @@ function share(gauge: Gauge) {
 function Meter({ label, used, total, ratio }: { label: string; used: string; total: string; ratio: number }) {
   return (
     <div>
-      <div className="mb-2 flex items-baseline justify-between gap-3">
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3">
         <span>{label}</span>
         <span className="whitespace-nowrap text-muted">
           {used} / {total} · {Math.round(ratio * 100)} %

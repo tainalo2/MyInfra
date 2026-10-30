@@ -686,12 +686,12 @@ function crumbsFor(pathname: string, names: Record<string, string>): Crumb[] {
     else if (app[2]) crumbs.push({ label: text("crumb.terminal") });
     return current(crumbs);
   }
-  if (path === "/clusters") return [{ label: text("nav.clusters") }];
+  if (path === "/clusters") return [{ label: text("nav.servers") }];
   if (path === "/historique") return [{ label: text("nav.history") }];
   const server = path.match(/^\/serveurs\/([^/]+)(\/terminal)?$/);
   if (server) {
     const id = decodeURIComponent(server[1]);
-    const crumbs: Crumb[] = [{ label: text("nav.clusters"), to: "/clusters" }, { label: names[`server:${id}`] || text("crumb.server"), to: `/serveurs/${id}` }];
+    const crumbs: Crumb[] = [{ label: text("nav.servers"), to: "/clusters" }, { label: names[`server:${id}`] || text("crumb.server"), to: `/serveurs/${id}` }];
     if (server[2]) crumbs.push({ label: text("crumb.terminal") });
     return current(crumbs);
   }
