@@ -1676,6 +1676,11 @@ const fr = {
   "plan.pods": "Pods",
   "plan.links": "Ses liens",
   "server.aloneListHint": "Elles font tourner leurs applications sans cluster.",
+  "mcp.introApi": "Pilotez MyInfra depuis un programme (API) ou un assistant IA (MCP). Les deux passent par les mêmes jetons et les mêmes vérifications que l'interface.",
+  "mcp.addresses": "Adresses",
+  "mcp.mcpHint": "Pour Claude, Cursor, VS Code… Transport : Streamable HTTP.",
+  "mcp.apiHint": "Pour vos scripts. Le jeton va dans l'en-tête Authorization.",
+  "mcp.plugClient": "Brancher un client",
 } as const;
 
 export type MsgKey = keyof typeof fr;
@@ -3286,6 +3291,11 @@ const en: Record<MsgKey, string> = {
   "plan.pods": "Pods",
   "plan.links": "Its links",
   "server.aloneListHint": "They run their applications without a cluster.",
+  "mcp.introApi": "Drive MyInfra from a program (API) or an AI assistant (MCP). Both go through the same tokens and the same checks as the interface.",
+  "mcp.addresses": "Addresses",
+  "mcp.mcpHint": "For Claude, Cursor, VS Code… Transport: Streamable HTTP.",
+  "mcp.apiHint": "For your scripts. The token goes in the Authorization header.",
+  "mcp.plugClient": "Plug in a client",
 };
 
 const pt: Record<MsgKey, string> = {
@@ -4873,6 +4883,11 @@ const pt: Record<MsgKey, string> = {
   "plan.pods": "Pods",
   "plan.links": "As suas ligações",
   "server.aloneListHint": "Correm as suas aplicações sem cluster.",
+  "mcp.introApi": "Controle o MyInfra a partir de um programa (API) ou de um assistente de IA (MCP). Ambos usam os mesmos tokens e as mesmas verificações que a interface.",
+  "mcp.addresses": "Endereços",
+  "mcp.mcpHint": "Para Claude, Cursor, VS Code… Transporte: Streamable HTTP.",
+  "mcp.apiHint": "Para os seus scripts. O token vai no cabeçalho Authorization.",
+  "mcp.plugClient": "Ligar um cliente",
 };
 
 const it: Record<MsgKey, string> = {
@@ -6459,6 +6474,11 @@ const it: Record<MsgKey, string> = {
   "plan.pods": "Pod",
   "plan.links": "I suoi collegamenti",
   "server.aloneListHint": "Eseguono le loro applicazioni senza cluster.",
+  "mcp.introApi": "Gestisci MyInfra da un programma (API) o da un assistente IA (MCP). Entrambi usano gli stessi token e gli stessi controlli dell'interfaccia.",
+  "mcp.addresses": "Indirizzi",
+  "mcp.mcpHint": "Per Claude, Cursor, VS Code… Trasporto: Streamable HTTP.",
+  "mcp.apiHint": "Per i tuoi script. Il token va nell'intestazione Authorization.",
+  "mcp.plugClient": "Collega un client",
 };
 
 const de: Record<MsgKey, string> = {
@@ -8047,6 +8067,11 @@ const de: Record<MsgKey, string> = {
   "plan.pods": "Pods",
   "plan.links": "Seine Verbindungen",
   "server.aloneListHint": "Sie betreiben ihre Anwendungen ohne Cluster.",
+  "mcp.introApi": "Steuern Sie MyInfra aus einem Programm (API) oder einem KI-Assistenten (MCP). Beide nutzen dieselben Tokens und Prüfungen wie die Oberfläche.",
+  "mcp.addresses": "Adressen",
+  "mcp.mcpHint": "Für Claude, Cursor, VS Code… Transport: Streamable HTTP.",
+  "mcp.apiHint": "Für Ihre Skripte. Das Token gehört in den Authorization-Header.",
+  "mcp.plugClient": "Client verbinden",
 };
 
 const tables: Record<Lang, Record<MsgKey, string>> = { fr, en, pt, it, de };

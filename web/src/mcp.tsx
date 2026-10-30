@@ -1,12 +1,13 @@
 import { FormEvent, useEffect, useState } from "react";
-import { BookOpen, Bot, KeyRound, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { BookOpen, KeyRound, Plus, ShieldCheck } from "lucide-react";
 import { api, type ApiToken, type McpInfo } from "./api";
 import { Code } from "./code-lazy";
 import { currentLocale, text, type MsgKey } from "./i18n";
 import { ConfirmDialog, CopyButton, Sheet, Tabs, useToast } from "./kit";
 import { useI18n } from "./lang";
 import { useSession } from "./session";
-import { Button, ErrorText, Field, Fold, Icon, Input, LoadingLines, PageTitle, Select, TextButton } from "./ui";
+import { Button, ErrorText, Field, Fold, Icon, Input, LoadingLines, PageTitle, Select, TextButton, focus } from "./ui";
 import { EventList } from "./world";
 
 type Role = ApiToken["role"];
@@ -87,42 +88,40 @@ export function McpPage() {
     <>
       <PageTitle
         title={text("nav.mcp")}
-        icon={Bot}
+        phoneAction={!creating ? { icon: Plus, label: text("mcp.tokenNew"), onClick: () => setCreating(true) } : undefined}
         action={
-          <TextButton type="button" onClick={() => setGuide(true)}>
-            <Icon icon={BookOpen} />
-            {text("mcp.guide")}
-          </TextButton>
+          !creating ? (
+            <Button type="button" onClick={() => setCreating(true)}>
+              <Icon icon={Plus} />
+              {text("mcp.tokenNew")}
+            </Button>
+          ) : null
         }
       />
       <div className="flex max-w-[860px] flex-col gap-10">
-        <p className="text-muted">{text("mcp.intro")}</p>
+        <p className="-mt-2 text-muted md:-mt-8">{text("mcp.introApi")}</p>
         {error ? <ErrorText>{error}</ErrorText> : null}
 
-        <section className="flex flex-col gap-3">
-          <h2 className="text-base">{text("mcp.address")}</h2>
-          <p className="text-muted">{text("mcp.addressHint")}</p>
+        <section className="flex flex-col gap-2">
+          <h2>{text("mcp.addresses")}</h2>
           {url ? (
-            <div className="flex items-center gap-3 rounded-md border border-line bg-surface px-3 py-2">
-              <code className="min-w-0 flex-1 break-all font-mono text-[13px]">{url}</code>
-              <CopyButton value={url} />
+            <div className="row-group overflow-hidden rounded-md border border-line bg-surface">
+              <Address label="MCP" value={url} hint={text("mcp.mcpHint")} />
+              <Address label="API" value={url.replace(/\/mcp$/, "/api")} hint={text("mcp.apiHint")} />
             </div>
           ) : (
-            <LoadingLines lines={1} />
+            <LoadingLines lines={2} />
           )}
         </section>
 
-        <section className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-baseline justify-between gap-4">
-            <h2 className="text-base">{text("mcp.tokens")}</h2>
-            {!creating ? (
-              <Button type="button" variant="secondary" onClick={() => setCreating(true)}>
-                <Icon icon={Plus} />
-                {text("mcp.tokenNew")}
-              </Button>
-            ) : null}
+        <section className="flex flex-col gap-3">
+          <div>
+            <h2>
+              {text("mcp.tokens")}
+              {tokens ? ` · ${tokens.length}` : ""}
+            </h2>
+            <p className="text-[13px] text-muted">{text("mcp.tokensHint")}</p>
           </div>
-          <p className="text-muted">{text("mcp.tokensHint")}</p>
 
           {creating ? (
             <form onSubmit={create} className="flex flex-col gap-5 rounded-md border border-line p-4">
@@ -185,9 +184,9 @@ export function McpPage() {
           ) : tokens.length === 0 ? (
             <p className="text-muted">{text("mcp.tokenEmpty")}</p>
           ) : (
-            <ul>
+            <ul className="overflow-hidden rounded-md border border-line bg-surface">
               {tokens.map((token) => (
-                <li key={token.id} className="flex flex-wrap items-start justify-between gap-4 border-t border-line py-3">
+                <li key={token.id} className="flex flex-wrap items-start justify-between gap-4 border-t border-line px-4 py-3 first:border-t-0">
                   <span className="flex min-w-0 items-start gap-3">
                     <Icon icon={KeyRound} className="mt-1 text-muted" />
                     <span className="min-w-0">
@@ -208,7 +207,6 @@ export function McpPage() {
                   </span>
                   {token.mine || canAdmin ? (
                     <TextButton type="button" tone="danger" onClick={() => setRevoking(token)}>
-                      <Icon icon={Trash2} />
                       {text("mcp.revoke")}
                     </TextButton>
                   ) : null}
@@ -218,9 +216,11 @@ export function McpPage() {
           )}
         </section>
 
+        <ClientSnippets url={url} onGuide={() => setGuide(true)} />
+
         <section className="flex flex-col gap-3">
-          <h2 className="text-base">{text("mcp.examples")}</h2>
-          <ul className="flex list-disc flex-col gap-1 pl-5 text-muted">
+          <h2>{text("mcp.examples")}</h2>
+          <ul className="flex flex-col gap-1 rounded-md border border-line bg-surface px-4 py-3 text-muted">
             {(["mcp.ex1", "mcp.ex2", "mcp.ex3", "mcp.ex4", "mcp.ex5", "mcp.ex6"] as MsgKey[]).map((key) => (
               <li key={key}>« {text(key)} »</li>
             ))}
@@ -250,7 +250,12 @@ export function McpPage() {
         ) : null}
 
         <section className="flex flex-col gap-3">
-          <h2 className="text-base">{text("mcp.recent")}</h2>
+          <div className="flex items-center justify-between gap-4">
+            <h2>{text("mcp.recent")}</h2>
+            <Link to="/historique" className={`text-link ${focus}`}>
+              {text("overview.seeAll")}
+            </Link>
+          </div>
           <EventList source="mcp" limit={10} />
         </section>
       </div>
@@ -268,6 +273,45 @@ export function McpPage() {
         </ConfirmDialog>
       ) : null}
     </>
+  );
+}
+
+function Address({ label, value, hint }: { label: string; value: string; hint: string }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3">
+      <span className="w-12 shrink-0 text-[13px] text-muted">{label}</span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <code className="break-all font-mono text-[13px]">{value}</code>
+        <span className="text-[13px] text-muted">{hint}</span>
+      </span>
+      <CopyButton value={value} />
+    </div>
+  );
+}
+
+// ClientSnippets shows what to paste in each client, on the page itself.
+function ClientSnippets({ url, onGuide }: { url: string; onGuide: () => void }) {
+  const [active, setActive] = useState<Client>("code");
+  const client = clients.find((item) => item.key === active) ?? clients[0];
+  const value = snippet(active, url, "");
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h2>{text("mcp.plugClient")}</h2>
+        <TextButton type="button" onClick={onGuide}>
+          <Icon icon={BookOpen} />
+          {text("mcp.guide")}
+        </TextButton>
+      </div>
+      <div className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4">
+        <Tabs tabs={clients.map((item) => ({ key: item.key, label: item.label || text("mcp.otherClient") }))} active={active} onChange={setActive} label={text("mcp.plugClient")} />
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[13px] text-muted">{text("mcp.snippetSlot", { slot })}</span>
+          <CopyButton value={value} />
+        </div>
+        {url ? <Code value={value} language={client.language} readOnly label={client.label || text("mcp.otherClient")} minHeight="4rem" maxHeight="18rem" /> : null}
+      </div>
+    </section>
   );
 }
 
