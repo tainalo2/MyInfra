@@ -123,7 +123,9 @@ export function Plan({
   }, [shape]);
 
   const shownBands = bands.filter((band) => model.nodes.some((node) => node.band === band.key));
-  const columns = useMemo(() => leftToRight(model, shownBands.length, size.w, compact), [model, shownBands.length, size.w, compact]);
+  const shownRef = useRef(false);
+  const columns = useMemo(() => leftToRight(model, size.w, compact, shownRef.current), [model, size.w, compact]);
+  shownRef.current = columns;
   // A change of direction moves every box: the links are measured again.
   useLayoutEffect(() => setDirection(columns ? "columns" : "rows"), [columns]);
 
@@ -331,28 +333,66 @@ function curve(a: Rect, b: Rect, columns = false) {
   return `M ${ux} ${y1} C ${ux} ${mid}, ${dx} ${mid}, ${dx} ${y2}`;
 }
 
-// leftToRight chooses the direction of a plan: bands side by side when that
-// makes it lower, since what follows the plan needs the room. It weighs the
-// rows each direction needs at this width.
-function leftToRight(model: PlanModel, bandCount: number, width: number, compact: boolean) {
-  if (bandCount < 2 || width <= 0) return false;
-  const nodeW = compact ? 130 : 180;
-  const nodeH = compact ? 30 : 48;
-  const columnW = (width - 16 - (bandCount - 1) * 10) / bandCount;
-  if (columnW < (compact ? 120 : 150)) return false;
-  // Units: a box is one, a container is its members and a head.
-  const units = (band: Band) =>
+// leftToRight chooses the direction of a plan: the one that makes it lower,
+// since what follows the plan needs the room. Each direction is laid out on
+// paper from the size of every box, guessed from its words so that the guess
+// does not depend on the direction shown. Top to bottom wins a tie, and the
+// shown direction is kept unless the other saves a tenth of the height, so
+// that resizing the window does not make the plan swing.
+function leftToRight(model: PlanModel, width: number, compact: boolean, current: boolean) {
+  const shown = bands.filter((band) => model.nodes.some((node) => node.band === band.key));
+  if (shown.length < 2 || width <= 0) return false;
+  const gap = compact ? 8 : 12;
+  const bandGap = compact ? 6 : 10;
+  const bandPad = compact ? 8 : 16;
+  const frame = compact ? 12 : 16;
+  const head = compact ? 0 : 30; // the plan's own head and legend lines are the same both ways
+  const boxW = (node: PlanNode) =>
+    compact
+      ? Math.min(180, Math.max(80, node.label.length * 7.2 + 40))
+      : Math.min(220, Math.max(100, Math.max(node.label.length * 7.2, (node.detail ?? "").length * 5.4) + 44));
+  const boxH = (node: PlanNode) => (compact ? 28 : node.detail ? 46 : 36);
+  // Each top element of a band, as a block: a box, or a container and what it holds.
+  const blocks = (band: Band, columns: boolean) =>
     model.nodes
       .filter((node) => node.band === band && !node.parent)
       .map((node) => {
-        const members = model.nodes.filter((item) => item.parent === node.key).length;
-        return members > 0 ? { width: members, height: members + 0.6 } : { width: 1, height: 1 };
+        const members = model.nodes.filter((item) => item.parent === node.key);
+        if (members.length === 0) return { w: boxW(node), h: boxH(node) };
+        const top = compact ? 22 : 28;
+        if (columns) return { w: Math.max(...members.map(boxW)) + 20, h: top + members.reduce((sum, item) => sum + boxH(item) + gap, 0) + 8 };
+        return { w: members.reduce((sum, item) => sum + boxW(item) + gap, 0) + 20, h: top + Math.max(...members.map(boxH)) + 12 };
       });
-  const shown = bands.filter((band) => model.nodes.some((node) => node.band === band.key)).map((band) => units(band.key));
-  const perRow = Math.max(1, Math.floor((width - 16 - 88 + 32) / (nodeW + 32)));
-  const rowsH = shown.reduce((sum, band) => sum + Math.ceil(band.reduce((total, unit) => total + unit.width, 0) / perRow) * (nodeH + 12) + (compact ? 8 : 16), 0);
-  const columnsH = Math.max(...shown.map((band) => band.reduce((total, unit) => total + unit.height, 0) * (nodeH + (compact ? 6 : 10)))) + (compact ? 8 : 40);
-  return columnsH < rowsH * 0.9;
+
+  // Top to bottom: each band fills lines across the width beside its label.
+  const lineWidth = width - frame - bandPad - (compact ? 0 : 80);
+  let rowsH = frame + head;
+  for (const band of shown) {
+    let lines = 0;
+    let lineH = 0;
+    let used = Infinity;
+    let total = 0;
+    for (const block of blocks(band.key, false)) {
+      if (used + block.w > lineWidth) {
+        total += lineH;
+        lines += 1;
+        used = 0;
+        lineH = 0;
+      }
+      used += block.w + (compact ? gap : 32);
+      lineH = Math.max(lineH, block.h);
+    }
+    total += lineH + Math.max(0, lines - 1) * gap;
+    rowsH += total + bandPad + bandGap;
+  }
+
+  // Left to right: a column per band, which must hold its widest box.
+  const columnW = (width - frame - (shown.length - 1) * bandGap) / shown.length - bandPad;
+  const columnBlocks = shown.map((band) => blocks(band.key, true));
+  if (columnBlocks.some((list) => list.some((block) => block.w > columnW))) return false;
+  const columnsH = frame + head + (compact ? 0 : 20) + bandPad + Math.max(...columnBlocks.map((list) => list.reduce((sum, block) => sum + block.h + gap, -gap)));
+
+  return current ? columnsH <= rowsH * 1.1 : columnsH < rowsH * 0.9;
 }
 
 // LinkLabel names a link of a plan from top to bottom; side by side, columns
