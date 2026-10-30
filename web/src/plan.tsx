@@ -20,6 +20,9 @@ export type PlanNode = {
   status?: "ok" | "warn" | "bad";
   // draft is an element not saved yet: dashed in its band.
   draft?: boolean;
+  // parent is the element that holds this one, such as the cluster that
+  // gathers its servers: it is drawn inside it.
+  parent?: string;
 };
 
 export type PlanLink = { from: string; to: string; kind: LinkKind; label?: string };
@@ -68,6 +71,10 @@ function related(model: PlanModel, key: string | null) {
     if (link.from === key) out.add(link.to);
     if (link.to === key) out.add(link.from);
   }
+  // A container and what it holds go together.
+  const node = model.nodes.find((item) => item.key === key);
+  if (node?.parent) out.add(node.parent);
+  for (const item of model.nodes) if (item.parent === key) out.add(item.key);
   return out;
 }
 
@@ -87,7 +94,7 @@ export function Plan({
   toolbar?: ReactNode;
 }) {
   const frame = useRef<HTMLDivElement>(null);
-  const refs = useRef(new Map<string, HTMLButtonElement>());
+  const refs = useRef(new Map<string, HTMLElement>());
   const [boxes, setBoxes] = useState<Map<string, Rect>>(new Map());
   const [size, setSize] = useState({ w: 0, h: 0 });
   const near = related(model, selected);
@@ -112,6 +119,41 @@ export function Plan({
     observer.observe(node);
     return () => observer.disconnect();
   }, [shape]);
+
+  // box draws one element of the plan.
+  const box = (node: PlanNode) => {
+    const Glyph = icons[node.kind];
+    const on = node.key === selected;
+    const dim = selected !== null && !near.has(node.key);
+    return (
+      <button
+        key={node.key}
+        ref={(element) => {
+          if (element) refs.current.set(node.key, element);
+          else refs.current.delete(node.key);
+        }}
+        type="button"
+        aria-current={on ? "true" : undefined}
+        aria-label={[text(`plan.kind.${node.kind}` as MsgKey), node.label, node.detail].filter(Boolean).join(" · ")}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelect(on ? null : node.key);
+        }}
+        className={`relative z-[2] flex min-w-0 max-w-[220px] items-center gap-2 bg-surface text-left transition-opacity ${node.kind === "internet" ? "rounded-full" : "rounded-md"} ${
+          on ? "border-2 border-ink" : node.draft ? "border border-dashed border-faint" : node.kind === "backup" ? "border border-dashed border-[#d6d3d1]" : "border border-[#d6d3d1] dark:border-line"
+        } ${node.band === "storage" || node.band === "machines" ? "bg-canvas" : ""} ${compact ? "px-2.5 py-1" : on ? "px-[11px] py-[7px]" : "px-3 py-2"} ${dim ? "opacity-40" : ""} ${focus}`}
+      >
+        <Glyph size={16} strokeWidth={1.5} aria-hidden className="shrink-0 text-muted" />
+        <span className="flex min-w-0 flex-col">
+          <span className="flex items-center gap-1.5 truncate">
+            {node.status ? <span aria-hidden className={`size-2 shrink-0 rounded-full ${node.status === "ok" ? "bg-ok" : node.status === "warn" ? "bg-warn" : "bg-bad"}`} /> : null}
+            <span className="truncate">{node.label}</span>
+          </span>
+          {node.detail && !compact ? <span className="truncate text-[12px] text-muted">{node.detail}</span> : null}
+        </span>
+      </button>
+    );
+  };
 
   const used = new Set(model.links.map((link) => link.kind));
 
@@ -178,38 +220,40 @@ export function Plan({
                   {text(band.label)}
                 </span>
               )}
-              <div data-band={band.key} className={`flex flex-wrap justify-center ${compact ? "gap-3" : "gap-x-10 gap-y-4"}`}>
-                {nodes.map((node) => {
-                  const Glyph = icons[node.kind];
+              <div data-band={band.key} className={`flex flex-wrap items-center justify-center ${compact ? "gap-3" : "gap-x-10 gap-y-4"}`}>
+                {nodes.filter((node) => !node.parent).map((node) => {
+                  const members = model.nodes.filter((item) => item.parent === node.key);
+                  if (members.length === 0) return box(node);
                   const on = node.key === selected;
                   const dim = selected !== null && !near.has(node.key);
+                  const Glyph = icons[node.kind];
                   return (
-                    <button
+                    // A container: its name heads a frame around what it holds.
+                    <div
                       key={node.key}
                       ref={(element) => {
                         if (element) refs.current.set(node.key, element);
                         else refs.current.delete(node.key);
                       }}
-                      type="button"
-                      aria-current={on ? "true" : undefined}
-                      aria-label={[text(`plan.kind.${node.kind}` as MsgKey), node.label, node.detail].filter(Boolean).join(" · ")}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onSelect(on ? null : node.key);
-                      }}
-                      className={`relative z-[2] flex min-w-0 max-w-[220px] items-center gap-2 bg-surface text-left transition-opacity ${node.kind === "internet" ? "rounded-full" : "rounded-md"} ${
-                        on ? "border-2 border-ink" : node.draft ? "border border-dashed border-faint" : node.kind === "backup" ? "border border-dashed border-[#d6d3d1]" : "border border-[#d6d3d1] dark:border-line"
-                      } ${node.band === "storage" || node.band === "machines" ? "bg-canvas" : ""} ${compact ? "px-2.5 py-1" : on ? "px-[11px] py-[7px]" : "px-3 py-2"} ${dim ? "opacity-40" : ""} ${focus}`}
+                      className={`relative z-[2] flex flex-col gap-2 rounded-md bg-surface/70 transition-opacity ${on ? "border-2 border-ink" : "border border-dashed border-muted"} ${compact ? "p-2" : on ? "px-[11px] pb-[11px] pt-[7px]" : "px-3 pb-3 pt-2"} ${dim ? "opacity-40" : ""}`}
                     >
-                      <Glyph size={16} strokeWidth={1.5} aria-hidden className="shrink-0 text-muted" />
-                      <span className="flex min-w-0 flex-col">
-                        <span className="flex items-center gap-1.5 truncate">
-                          {node.status ? <span aria-hidden className={`size-2 shrink-0 rounded-full ${node.status === "ok" ? "bg-ok" : node.status === "warn" ? "bg-warn" : "bg-bad"}`} /> : null}
-                          <span className="truncate">{node.label}</span>
-                        </span>
+                      <button
+                        type="button"
+                        aria-current={on ? "true" : undefined}
+                        aria-label={[text(`plan.kind.${node.kind}` as MsgKey), node.label, node.detail].filter(Boolean).join(" · ")}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onSelect(on ? null : node.key);
+                        }}
+                        className={`-mx-1 flex items-center gap-2 self-start rounded-md px-1 text-left ${focus}`}
+                      >
+                        <Glyph size={16} strokeWidth={1.5} aria-hidden className="shrink-0 text-muted" />
+                        {node.status ? <span aria-hidden className={`size-2 shrink-0 rounded-full ${node.status === "ok" ? "bg-ok" : node.status === "warn" ? "bg-warn" : "bg-bad"}`} /> : null}
+                        <span className="truncate">{node.label}</span>
                         {node.detail && !compact ? <span className="truncate text-[12px] text-muted">{node.detail}</span> : null}
-                      </span>
-                    </button>
+                      </button>
+                      <div className={`flex flex-wrap ${compact ? "gap-2" : "gap-3"}`}>{members.map((member) => box(member))}</div>
+                    </div>
                   );
                 })}
               </div>
@@ -226,7 +270,7 @@ export function Plan({
 function curve(a: Rect, b: Rect) {
   const ax = a.x + a.w / 2;
   const bx = b.x + b.w / 2;
-  if (Math.abs(a.y - b.y) < 8) {
+  if (Math.abs(a.y + a.h / 2 - (b.y + b.h / 2)) < 8) {
     const left = a.x < b.x ? a : b;
     const right = a.x < b.x ? b : a;
     const y1 = left.y + left.h / 2;
@@ -248,9 +292,9 @@ function curve(a: Rect, b: Rect) {
 }
 
 function LinkLabel({ a, b, label, warn }: { a: Rect; b: Rect; label: string; warn: boolean }) {
-  const row = Math.abs(a.y - b.y) < 8;
+  const row = Math.abs(a.y + a.h / 2 - (b.y + b.h / 2)) < 8;
   const x = row ? (Math.min(a.x + a.w, b.x + b.w) + Math.max(a.x, b.x)) / 2 : (a.x + a.w / 2 + b.x + b.w / 2) / 2;
-  const y = row ? a.y - 4 : (Math.min(a.y + a.h, b.y + b.h) + Math.max(a.y, b.y)) / 2;
+  const y = row ? Math.min(a.y, b.y) - 10 : (Math.min(a.y + a.h, b.y + b.h) + Math.max(a.y, b.y)) / 2;
   const width = Math.min(200, label.length * 6.4 + 12);
   return (
     <g>
@@ -380,8 +424,8 @@ export function templatePlan(
       label: server.name || "…",
       detail: [pilot ? text("server.pilot") : "", server.location ?? ""].filter(Boolean).join(" · "),
       status: options.serverReady(server) ? undefined : "warn",
+      parent: options.cluster || servers.length > 0 ? "cluster" : undefined,
     });
-    links.push({ from: "cluster", to: key, kind: "hosts" });
   });
   return { nodes, links };
 }
@@ -532,7 +576,11 @@ function PhoneList({ model, selected, onSelect, children }: { model: PlanModel; 
                       </span>
                       <span className="flex min-w-0 flex-1 flex-col">
                         <span className="truncate">{node.label}</span>
-                        {node.detail ? <span className="truncate text-[13px] text-muted">{node.detail}</span> : null}
+                        {node.detail || node.parent ? (
+                          <span className="truncate text-[13px] text-muted">
+                            {[node.parent ? model.nodes.find((item) => item.key === node.parent)?.label : "", node.detail].filter(Boolean).join(" · ")}
+                          </span>
+                        ) : null}
                       </span>
                       {direct ? <span className="text-[12px] text-warn">{text("plan.directShort")}</span> : null}
                       {node.status ? <span aria-hidden className={`size-2 shrink-0 rounded-full ${node.status === "ok" ? "bg-ok" : node.status === "warn" ? "bg-warn" : "bg-bad"}`} /> : null}
