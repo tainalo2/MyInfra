@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
-import { ConfirmDialog, CopyButton, Sheet, Spinner, StatusBadge, Steps, useToast } from "./kit";
+import { ConfirmDialog, CopyButton, Sheet, Spinner, StatusBadge, Steps, Tabs, useToast } from "./kit";
 import { usePoll } from "./poll";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Copy, KeyRound, Plus, RotateCcw, Server as ServerIcon, SquareTerminal, Trash2 } from "lucide-react";
@@ -21,10 +21,8 @@ import {
   Button,
   ErrorText,
   Field,
-  Fold,
   Group,
   MenuItem,
-  SectionTitle,
   focus,
   Icon,
   IconButton,
@@ -755,6 +753,7 @@ export function ServerPage() {
   const [retrying, setRetrying] = useState(false);
   const [copied, setCopied] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [part, setPart] = useState<"history" | "pods" | "advanced">("history");
   const serverPoll = usePoll<Server>(id ? `/api/servers/${id}` : null, 10000);
   const { updating, transferring } = useActivity();
   const server = serverPoll.data;
@@ -831,6 +830,8 @@ export function ServerPage() {
     [text("server.uptime"), exploitation(server.createdAt, now)],
   ];
 
+  // Pods exist once the server runs: until then, the history shows.
+  const shownPart = part === "pods" && !linked ? "history" : part;
   const terminal =
     linked && canDeploy ? (
       <Link to={`/serveurs/${server.id}/terminal`} className={`inline-flex min-h-11 items-center gap-2 rounded-md border border-line bg-surface px-4 py-2 sm:min-h-0 ${focus}`}>
@@ -961,49 +962,52 @@ export function ServerPage() {
       {linked ? (
         <div className="max-w-[720px] [&:not(:first-child)]:mt-8">
           <UsageMeters sample={runtime} />
-          <div className="mt-10">
-            <Fold title={text("apps.instances")} defaultOpen={Boolean(runtime?.pods.some((pod) => podFailed(pod)))}>
-              {runtime && runtime.pods.length > 0 ? (
-                <ul className="flex flex-col">
-                  {runtime.pods.map((pod) => {
-                    const health = podHealth(pod);
-                    return (
-                      <li key={pod.name} className="border-t border-line py-4">
-                        <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-                          <span className="break-all font-mono text-[13px]">{pod.name}</span>
-                          <span className={health.tone}>{health.text}</span>
-                        </div>
-                        <p className="mt-1 text-muted">
-                          <Link to={`/applications/${pod.appId}`} className="underline">{pod.application}</Link>
-                          {pod.service ? ` · ${pod.service}` : ""}
-                          {" · "}
-                          {podCpu(pod.cpu)} · {size(pod.memory)} · {size(pod.disk)}
-                        </p>
-                        <PodActions appId={pod.appId} name={pod.name} failed={podFailed(pod)} />
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : !runtime ? (
-                <LoadingLines lines={2} label={text("apps.instances")} />
-              ) : (
-                <p className="text-muted">{runtime.measured ? text("common.noPod") : text("common.noMeasure")}</p>
-              )}
-            </Fold>
-          </div>
         </div>
       ) : null}
-      <div className="mt-10 max-w-[720px]">
-        <Fold title={text("common.advanced")}>
-          <TofuFiles path={`/api/servers/${server.id}/tofu`} />
-        </Fold>
-      </div>
-      <div className="mt-10 max-w-[720px]">
-        <SectionTitle>{text("nav.history")}</SectionTitle>
-        <div className="mt-4">
-          <EventList server={server.id} />
+      <section className="mt-10 max-w-[720px]">
+        <Tabs
+          label={text("server.parts")}
+          active={shownPart}
+          onChange={setPart}
+          tabs={[
+            { key: "history", label: text("nav.history") },
+            ...(linked ? [{ key: "pods" as const, label: text("apps.instances") }] : []),
+            { key: "advanced", label: text("common.advanced") },
+          ]}
+        />
+        <div className="mt-4" role="tabpanel">
+          {shownPart === "history" ? <EventList server={server.id} /> : null}
+          {shownPart === "pods" ? (
+            runtime && runtime.pods.length > 0 ? (
+              <ul className="overflow-hidden rounded-md border border-line bg-surface">
+                {runtime.pods.map((pod) => {
+                  const health = podHealth(pod);
+                  return (
+                    <li key={pod.name} className="border-t border-line px-4 py-3 first:border-t-0">
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+                        <span className="break-all font-mono text-[13px]">{pod.name}</span>
+                        <span className={health.tone}>{health.text}</span>
+                      </div>
+                      <p className="mt-1 text-[13px] text-muted">
+                        <Link to={`/applications/${pod.appId}`} className={`text-link ${focus}`}>{pod.application}</Link>
+                        {pod.service ? ` · ${pod.service}` : ""}
+                        {" · "}
+                        {podCpu(pod.cpu)} · {size(pod.memory)} · {size(pod.disk)}
+                      </p>
+                      <PodActions appId={pod.appId} name={pod.name} failed={podFailed(pod)} />
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : !runtime ? (
+              <LoadingLines lines={2} label={text("apps.instances")} />
+            ) : (
+              <p className="text-muted">{runtime.measured ? text("common.noPod") : text("common.noMeasure")}</p>
+            )
+          ) : null}
+          {shownPart === "advanced" ? <TofuFiles path={`/api/servers/${server.id}/tofu`} /> : null}
         </div>
-      </div>
+      </section>
       </div>
       </div>
       {moving ? (

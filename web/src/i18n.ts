@@ -1735,6 +1735,7 @@ const fr = {
   "upd.auto.last": "Dernier passage : {when}.",
   "activity.night": "MyInfra · nuit",
   "server.essentials": "L'essentiel du serveur",
+  "server.parts": "Parties du serveur",
 } as const;
 
 export type MsgKey = keyof typeof fr;
@@ -3404,6 +3405,7 @@ const en: Record<MsgKey, string> = {
   "upd.auto.last": "Last run: {when}.",
   "activity.night": "MyInfra · night",
   "server.essentials": "Server essentials",
+  "server.parts": "Server sections",
 };
 
 const pt: Record<MsgKey, string> = {
@@ -5050,6 +5052,7 @@ const pt: Record<MsgKey, string> = {
   "upd.auto.last": "Última execução: {when}.",
   "activity.night": "MyInfra · noite",
   "server.essentials": "O essencial do servidor",
+  "server.parts": "Secções do servidor",
 };
 
 const it: Record<MsgKey, string> = {
@@ -6695,6 +6698,7 @@ const it: Record<MsgKey, string> = {
   "upd.auto.last": "Ultima esecuzione: {when}.",
   "activity.night": "MyInfra · notte",
   "server.essentials": "L'essenziale del server",
+  "server.parts": "Sezioni del server",
 };
 
 const de: Record<MsgKey, string> = {
@@ -8342,6 +8346,7 @@ const de: Record<MsgKey, string> = {
   "upd.auto.last": "Letzter Lauf: {when}.",
   "activity.night": "MyInfra · Nacht",
   "server.essentials": "Das Wichtigste zum Server",
+  "server.parts": "Bereiche des Servers",
 };
 
 const tables: Record<Lang, Record<MsgKey, string>> = { fr, en, pt, it, de };
