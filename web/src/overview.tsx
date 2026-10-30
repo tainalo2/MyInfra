@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { AlertTriangle, ChevronDown, ChevronUp, ExternalLink, Map as MapIcon, Search, X } from "lucide-react";
+import { AlertTriangle, ExternalLink, Map as MapIcon, Search, X } from "lucide-react";
 import { api, peek, type Application, type Overview as OverviewData, type OverviewPod, type OverviewServer, type UpdateItem } from "./api";
 import { AppLogo } from "./app-logo";
 import { text } from "./i18n";
@@ -21,8 +21,6 @@ type Mode = "serveurs" | "apps" | "pods";
 type Selection = { kind: "app" | "server" | "lieu" | "pod"; id: string } | null;
 
 const modes: Mode[] = ["serveurs", "apps", "pods"];
-const panelWidth = 340;
-const gap = 16;
 
 function readSelection(raw: string | null): Selection {
   if (!raw) return null;
@@ -63,25 +61,6 @@ function useWide() {
     return () => media.removeEventListener("change", onChange);
   }, []);
   return wide;
-}
-
-// useHeight follows the height of an element, so the map keeps its markers
-// clear of the card laid over it.
-function useHeight<T extends HTMLElement>() {
-  const ref = useRef<T>(null);
-  const [height, setHeight] = useState(0);
-  useEffect(() => {
-    const node = ref.current;
-    if (!node) {
-      setHeight(0);
-      return;
-    }
-    const observer = new ResizeObserver(() => setHeight(node.offsetHeight));
-    observer.observe(node);
-    setHeight(node.offsetHeight);
-    return () => observer.disconnect();
-  });
-  return [ref, height] as const;
 }
 
 function useOverview() {
@@ -127,7 +106,6 @@ export function Overview() {
   const selection = readSelection(params.get("sel"));
   const [query, setQuery] = useState("");
   const [actionError, setActionError] = useState("");
-  const [cardRef, cardHeight] = useHeight<HTMLDivElement>();
   const [mapOpen, setMapOpen] = useState(false);
 
   function change(next: { vue?: Mode; sel?: string | null }, push = false) {
@@ -223,11 +201,9 @@ export function Overview() {
   // The map frames the selected app, server or pod; a place picked on the map
   // keeps the current frame so the map does not jump under the pointer.
   const frame = selection && selection.kind !== "lieu" && lit.size > 0 ? [...lit] : sites.map((site) => site.key);
-  const cardSpace = selection && cardHeight ? Math.round(cardHeight / 40) * 40 + gap : 0;
-  const inset: Inset = wide
-    ? { top: gap + 72, right: gap, bottom: gap + cardSpace, left: panelWidth + gap * 2 }
-    : { top: 12, right: 12, bottom: 12, left: 12 };
-  const fitKey = [wide, wide ? cardSpace : 0, ...[...frame].sort()].join("|");
+  // The card of the selection sits over the top left of the map.
+  const inset: Inset = wide ? { top: 16, right: 56, bottom: 16, left: selection ? 452 : 16 } : { top: 12, right: 12, bottom: 12, left: 12 };
+  const fitKey = [wide, wide && selection ? 1 : 0, ...[...frame].sort()].join("|");
 
   async function togglePause(app: Application) {
     if (app.guarded) return;
@@ -251,6 +227,18 @@ export function Overview() {
   const attention = attentionOf(model, deployments, jobs, select, updatesView?.updates ?? []);
   const empty = data !== null && model.servers.length === 0 && model.apps.length === 0;
   const mapLabel = text("overview.map", { sites: sites.length, servers: model.servers.length });
+
+  const card = selection ? (
+    <Card
+      selection={selection}
+      model={model}
+      select={select}
+      onClose={() => select(null)}
+      onPause={canDeploy ? togglePause : undefined}
+      onOpen={(to) => navigate(to)}
+      error={actionError}
+    />
+  ) : null;
 
   const panel = (
     <Panel>
@@ -294,61 +282,89 @@ export function Overview() {
           <Rows mode={mode} model={model} query={query} place={selection?.kind === "lieu" ? selection.id : ""} selection={selection} select={select} />
         )}
       </div>
-      <Activity />
     </Panel>
   );
 
   return (
-    <div className={`flex flex-col md:relative md:h-full ${selection ? "pb-[50vh] md:pb-0" : ""}`}>
-      <h1 className="sr-only">{text("overview.title")}</h1>
-      {/* On a phone the list comes first and the map opens on demand, so that
-          scrolling the page never turns into moving the map. */}
-      <div className={`relative order-2 h-[45vh] shrink-0 overflow-hidden border-y border-line md:order-none md:absolute md:inset-0 md:block md:h-auto md:border-0 ${mapOpen ? "" : "hidden"}`}>
-        <WorldMap sites={sites} frame={frame} inset={inset} fitKey={fitKey} label={mapLabel} onSelect={(key) => select(key ? `lieu:${key}` : null)} />
+    <div className={`flex flex-col gap-4 px-4 pb-4 md:h-full md:gap-6 md:overflow-y-auto md:px-6 md:py-8 ${selection && !wide ? "pb-[50vh]" : ""}`}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+        <PageTitleOnly />
+        {data ? <span className="hidden text-[13px] text-muted md:inline">{text("overview.fresh")}</span> : null}
       </div>
-      <div className="order-1 flex flex-col gap-4 p-4 md:contents">
-        <div className="md:absolute md:right-4 md:top-4 md:max-w-[calc(100%-388px)]">
-          <Figures model={model} loading={data === null} />
-        </div>
-        <div className="md:hidden">
-          <TextButton type="button" aria-expanded={mapOpen} onClick={() => setMapOpen((open) => !open)}>
-            <Icon icon={MapIcon} />
-            {mapOpen ? text("overview.hideMap") : text("overview.showMap")}
-          </TextButton>
-        </div>
-        <div className="md:absolute md:bottom-4 md:left-4 md:top-4 md:flex md:w-[340px]">{panel}</div>
-        {selection ? (
-          <div
-            ref={cardRef}
-            className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] left-2 right-2 z-20 md:absolute md:bottom-4 md:left-[372px] md:right-16 md:z-auto md:max-w-[620px]"
-          >
-            <Card
-              selection={selection}
-              model={model}
-              select={select}
-              onClose={() => select(null)}
-              onPause={canDeploy ? togglePause : undefined}
-              onOpen={(to) => navigate(to)}
-              error={actionError}
-            />
+      <Figures model={model} loading={data === null} />
+      {empty ? (
+        <section className="flex max-w-[560px] flex-col gap-3 rounded-md border border-line bg-surface p-4">
+          <p>{text("overview.empty")}</p>
+          <Missing />
+          {canDeploy ? (
+            <div className="flex flex-wrap gap-3">
+              <Button type="button" onClick={() => navigate("/clusters")}>{text("overview.newServer")}</Button>
+              <TextButton type="button" onClick={() => navigate("/nouveau")}>{text("home.new")}</TextButton>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+      <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row md:items-stretch">
+        <div className="flex min-w-0 flex-col md:w-[360px] md:shrink-0 lg:w-[400px]">{panel}</div>
+        <section aria-label={mapLabel} className="flex min-w-0 flex-1 flex-col gap-4">
+          <div className="md:hidden">
+            <TextButton type="button" aria-expanded={mapOpen} onClick={() => setMapOpen((open) => !open)}>
+              <Icon icon={MapIcon} />
+              {mapOpen ? text("overview.hideMap") : text("overview.showMap")}
+            </TextButton>
           </div>
-        ) : null}
-        {empty ? (
-          <div className="md:absolute md:left-[372px] md:top-1/2 md:max-w-[420px] md:-translate-y-1/2">
-            <Panel>
-              <p>{text("overview.empty")}</p>
-              <Missing />
-              {canDeploy ? (
-                <div className="flex flex-wrap gap-3">
-                  <Button type="button" onClick={() => navigate("/clusters")}>{text("overview.newServer")}</Button>
-                  <TextButton type="button" onClick={() => navigate("/nouveau")}>{text("home.new")}</TextButton>
-                </div>
-              ) : null}
-            </Panel>
+          <div className={`relative h-[45vh] shrink-0 overflow-hidden rounded-md border border-line md:block md:h-auto md:min-h-[520px] md:flex-1 ${mapOpen ? "" : "hidden"}`}>
+            <WorldMap sites={sites} frame={frame} inset={inset} fitKey={fitKey} label={mapLabel} onSelect={(key) => select(key ? `lieu:${key}` : null)} />
+            <Legend mode={mode} />
+            {selection && wide ? <div className="absolute left-4 top-4 z-10 w-[420px] max-w-[calc(100%-5rem)]">{card}</div> : null}
           </div>
-        ) : null}
+          <RecentActivity />
+        </section>
       </div>
+      {selection && !wide ? <div className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] left-2 right-2 z-20">{card}</div> : null}
     </div>
+  );
+}
+
+// PageTitleOnly names the page and its tab.
+function PageTitleOnly() {
+  useEffect(() => {
+    document.title = `${text("overview.title")} · MyInfra`;
+    return () => {
+      document.title = "MyInfra";
+    };
+  }, []);
+  return <h1 className="text-[28px] font-medium leading-[1.2] md:text-2xl md:leading-8">{text("overview.title")}</h1>;
+}
+
+// Legend says what the rings and figures of the map mean.
+function Legend({ mode }: { mode: Mode }) {
+  return (
+    <div className="absolute bottom-4 left-4 hidden flex-wrap gap-x-4 gap-y-2 rounded-md border border-line bg-surface px-3 py-2 text-[13px] text-muted md:flex">
+      <span className="inline-flex items-center gap-1.5">
+        <span aria-hidden className="size-2.5 rounded-full border-2 border-ok" />
+        {text("overview.legendOk")}
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span aria-hidden className="size-2.5 rounded-full border-2 border-warn" />
+        {text("overview.legendWarn")}
+      </span>
+      <span>{text(mode === "apps" ? "overview.legendApps" : mode === "pods" ? "overview.legendPods" : "overview.legendServers")}</span>
+    </div>
+  );
+}
+
+function RecentActivity() {
+  return (
+    <section className="rounded-md border border-line bg-surface px-4 py-3">
+      <div className="mb-2 flex items-center justify-between gap-4">
+        <h2>{text("overview.activity")}</h2>
+        <Link to="/historique" className={`text-link ${focus}`}>
+          {text("overview.seeAll")}
+        </Link>
+      </div>
+      <EventList limit={3} />
+    </section>
   );
 }
 
@@ -398,7 +414,7 @@ type Model = {
 };
 
 function Panel({ children }: { children: ReactNode }) {
-  return <section className="flex w-full flex-col gap-3 rounded-md border border-line bg-surface p-4 shadow-sm">{children}</section>;
+  return <section className="flex w-full flex-1 flex-col gap-3 rounded-md border border-line bg-surface p-4 md:max-h-[calc(100dvh-14rem)] md:min-h-[520px]">{children}</section>;
 }
 
 type Item = { key: string; tone: Tone; label: string; to?: string; onClick?: () => void };
@@ -604,10 +620,15 @@ function rate(server: OverviewServer) {
 }
 
 function Figures({ model, loading }: { model: Model; loading: boolean }) {
-  if (loading) return null;
+  if (loading) return <LoadingLines lines={2} label={text("overview.figures")} />;
   const online = model.apps.filter((app) => !app.paused && app.runStatus === "running").length;
+  const paused = model.apps.filter((app) => app.paused).length;
+  const preparing = model.apps.length - online - paused - model.apps.filter((app) => !app.paused && app.runStatus === "failed").length;
+  const failed = model.apps.filter((app) => !app.paused && app.runStatus === "failed").length;
   const linked = model.servers.filter((server) => liveServer(server)).length;
   const ready = model.pods.filter((pod) => pod.ready).length;
+  const clusters = new Set(model.servers.map((server) => server.clusterId).filter(Boolean)).size;
+  const sites = new Set(model.servers.map(siteOf).filter(Boolean)).size;
   const totals = new Map<string, number>();
   const providers = new Map<string, number>();
   for (const server of model.servers) {
@@ -621,54 +642,63 @@ function Figures({ model, loading }: { model: Model; loading: boolean }) {
   const cost = [...totals.entries()];
   const detail = [text("overview.costHint"), ...[...providers.entries()].map(([name, hourly]) => `${name} : ${money(hourly)}/h`)].join("\n");
   return (
-    <section aria-label={text("overview.figures")} className="flex flex-wrap gap-x-6 gap-y-2 rounded-md border border-line bg-surface px-4 py-3 shadow-sm">
-      <Figure label={text("overview.apps")} value={text("overview.online", { count: online, total: model.apps.length })} />
-      <Figure label={text("overview.servers")} value={text("overview.linked", { count: linked, total: model.servers.length })} />
-      <Figure label={text("overview.pods")} value={text("overview.ready", { count: ready, total: model.pods.length })} />
+    <section aria-label={text("overview.figures")} className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+      <Kpi
+        to="/applications"
+        label={text("nav.apps")}
+        value={String(online)}
+        unit={text("overview.kpiOnline", { total: model.apps.length })}
+        note={failed ? text("overview.kpiFailed", { count: failed }) : preparing > 0 ? text("overview.kpiPreparing", { count: preparing }) : paused ? text("overview.kpiPaused", { count: paused }) : ""}
+        tone={failed ? "text-bad" : preparing > 0 ? "text-warn" : "text-muted"}
+      />
+      <Kpi
+        to="/clusters"
+        label={text("overview.servers")}
+        value={String(linked)}
+        unit={text("overview.kpiLinked", { total: model.servers.length })}
+        note={text("overview.kpiSites", { sites, clusters })}
+      />
+      <Kpi
+        to="/?vue=pods"
+        label={text("overview.pods")}
+        value={String(ready)}
+        unit={text("overview.kpiReady", { total: model.pods.length })}
+        note={model.pods.length > ready ? text("overview.kpiStarting", { count: model.pods.length - ready }) : ""}
+        tone="text-warn"
+      />
       {cost.length > 0 ? (
-        <details title={detail} className="group">
-          <summary className={`flex cursor-pointer list-none flex-col rounded-md ${focus}`}>
-            <span className="text-muted">{text("overview.cost")}</span>
-            {cost.map(([currency, hourly]) => (
-              <span key={currency} className="whitespace-nowrap">
-                {text("overview.perHour", { amount: `${money(hourly)} ${currency}` })}
-                <span className="text-muted"> · {text("overview.perMonth", { amount: `${money(hourly * 730)} ${currency}` })}</span>
-              </span>
-            ))}
-          </summary>
-          <p className="mt-2 whitespace-pre-line text-[13px] text-muted">{detail}</p>
-        </details>
+        <Kpi
+          label={text("overview.cost")}
+          title={detail}
+          value={cost.map(([currency, hourly]) => `≈ ${money(hourly * 730)} ${currency}`).join(" · ")}
+          unit={text("overview.kpiMonth")}
+          note={cost.map(([currency, hourly]) => text("overview.perHour", { amount: `${money(hourly)} ${currency}` })).join(" · ")}
+        />
       ) : null}
     </section>
   );
 }
 
-function Figure({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col">
-      <span className="text-muted">{label}</span>
-      <span className="whitespace-nowrap">{value}</span>
+function Kpi({ to, label, value, unit, note, tone = "text-muted", title }: { to?: string; label: string; value: string; unit: string; note?: string; tone?: string; title?: string }) {
+  const body = (
+    <>
+      <span className="text-[13px] text-muted">{label}</span>
+      <span className="text-[20px] font-medium leading-tight md:text-2xl">
+        {value}
+        <span className="text-[13px] font-normal text-muted md:text-[15px]">{unit}</span>
+      </span>
+      {note ? <span className={`truncate text-[13px] ${tone}`}>{note}</span> : <span className="text-[13px]">&nbsp;</span>}
+    </>
+  );
+  const cls = `flex min-w-0 flex-col gap-1 rounded-md border border-line bg-surface p-3 text-ink md:p-4 ${focus}`;
+  return to ? (
+    <Link to={to} className={`card-link ${cls}`} title={title}>
+      {body}
+    </Link>
+  ) : (
+    <div className={cls} title={title}>
+      {body}
     </div>
-  );
-}
-
-function Activity() {
-  const [open, setOpen] = useState(false);
-  return (
-    <section className="border-t border-line pt-3">
-      <h2>
-        <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} className="-mx-1.5 inline-flex items-center gap-2 rounded-md px-1.5 py-0.5">
-          <Icon icon={open ? ChevronUp : ChevronDown} />
-          {text("overview.activity")}
-        </button>
-      </h2>
-      {open ? (
-        <div className="mt-2 max-h-56 overflow-y-auto">
-          <EventList limit={5} />
-          <Link to="/historique" className="mt-2 inline-block text-link">{text("nav.history")}</Link>
-        </div>
-      ) : null}
-    </section>
   );
 }
 
