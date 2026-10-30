@@ -46,6 +46,7 @@ type scalewayProduct struct {
 	RAM                 int64                    `json:"ram"`
 	Arch                string                   `json:"arch"`
 	Baremetal           bool                     `json:"baremetal"`
+	GPU                 json.RawMessage          `json:"gpu"`
 	VolumesConstraint   scalewayBound            `json:"volumes_constraint"`
 	PerVolumeConstraint map[string]scalewayBound `json:"per_volume_constraint"`
 }
@@ -70,9 +71,11 @@ func parseScaleway(body []byte, zone string) (Catalog, error) {
 			monthly = monthlyFromHourly(hourly)
 		}
 		disk := gbFromBytes(item.VolumesConstraint.MinSize)
+		gpus := scalewayGPUs(item.GPU)
 		offer := Offer{
 			ID: name, Name: name, Location: zone,
 			VCPU: item.NCPUs, MemoryMB: int(item.RAM / (1024 * 1024)), DiskGB: disk,
+			GPUs: gpus, GPU: gpuModel(gpus, name),
 			Hourly: hourly, Monthly: monthly,
 		}
 		if item.VolumesConstraint.MaxSize > item.VolumesConstraint.MinSize && item.VolumesConstraint.MaxSize > 0 {
@@ -97,6 +100,23 @@ func parseScaleway(body []byte, zone string) (Catalog, error) {
 		Note:    "Scaleway facture à l'heure. Le mois affiché correspond à 730 heures.",
 		Offers:  offers,
 	}, nil
+}
+
+func scalewayGPUs(raw json.RawMessage) int {
+	if len(raw) == 0 || string(raw) == "null" {
+		return 0
+	}
+	var count int
+	if json.Unmarshal(raw, &count) == nil {
+		return count
+	}
+	var object struct {
+		Count int `json:"count"`
+	}
+	if json.Unmarshal(raw, &object) == nil {
+		return object.Count
+	}
+	return 0
 }
 
 func gbFromBytes(size int64) int {

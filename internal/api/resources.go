@@ -443,7 +443,7 @@ func (a *API) purchase(ctx context.Context, owner, providerID, id, name, token s
 		Token: tok.Token, ProjectID: tok.ProjectID,
 		ApplicationKey: tok.ApplicationKey, ApplicationSecret: tok.ApplicationSecret, ConsumerKey: tok.ConsumerKey,
 	}, provision.Spec{
-		Name: name, Location: plan.Location, OfferID: plan.OfferID, OfferName: plan.Name,
+		Name: name, Location: plan.Location, OfferID: plan.OfferID, OfferName: plan.Name, GPUs: plan.GPUs,
 		UserData: script, RootGB: rootGB(plan), ProjectID: plan.ProjectID, SSHKeys: keys, Key: id,
 	})
 	if err != nil {
@@ -591,21 +591,6 @@ func (a *API) deleteServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.respondDestruction(w, r, owner, "server", row.ID, row.Name, serverSteps(row, names))
-}
-
-func (a *API) attachCluster(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		ClusterID string `json:"clusterId"`
-	}
-	if err := readJSON(w, r, &body); err != nil {
-		writeError(w, http.StatusBadRequest, "Requête illisible.")
-		return
-	}
-	if err := a.Store.AttachCluster(r.Context(), ownerID(r.Context()), r.PathValue("id"), strings.TrimSpace(body.ClusterID)); err != nil {
-		a.mapErr(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (a *API) listClusters(w http.ResponseWriter, r *http.Request) {
@@ -1021,6 +1006,10 @@ func (a *API) createApplication(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		in.ClusterID = body.ClusterID
+	}
+	if err := a.reserveGPU(r.Context(), in.OwnerID, in.DestinationKind, in.ServerID, in.ClusterID, "", in.Services); err != nil {
+		writeError(w, http.StatusConflict, err.Error())
+		return
 	}
 	names, err := a.parseNames(r.Context(), in.OwnerID, body.Names)
 	if err != nil {

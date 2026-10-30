@@ -155,6 +155,7 @@ func parseGcore(raw []byte, locations []Location, chosen string) (Catalog, error
 			CurrencyCode string  `json:"currency_code"`
 			PerHour      float64 `json:"price_per_hour"`
 			PerMonth     float64 `json:"price_per_month"`
+			GPUs         int     `json:"gpu_count"`
 		} `json:"results"`
 	}
 	if err := json.Unmarshal(raw, &payload); err != nil {
@@ -190,9 +191,14 @@ func parseGcore(raw []byte, locations []Location, chosen string) (Catalog, error
 		if memory > 1<<20 {
 			memory /= 1024 * 1024
 		}
+		count := item.GPUs
+		if count <= 0 && strings.Contains(id, "gpu") {
+			count = 1
+		}
 		offers = append(offers, Offer{
 			ID: item.ID, Name: name, Location: chosen,
 			VCPU: item.VCPUs, MemoryMB: int(memory),
+			GPUs: count, GPU: gpuModel(count, item.ID, item.Name),
 			Hourly: hourly, Monthly: monthly, Storage: storage,
 		})
 	}
@@ -220,6 +226,6 @@ func parseGcore(raw []byte, locations []Location, chosen string) (Catalog, error
 }
 
 func gcoreUnsupported(id string) bool {
-	return strings.HasPrefix(id, "bm") || strings.Contains(id, "shared") || strings.Contains(id, "gpu") ||
+	return strings.HasPrefix(id, "bm") || strings.Contains(id, "shared") ||
 		strings.Contains(id, "-ai-") || strings.HasPrefix(id, "g1s") || strings.HasPrefix(id, "g2s")
 }

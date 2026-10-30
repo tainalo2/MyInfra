@@ -53,16 +53,20 @@ type Storage struct {
 }
 
 type Offer struct {
-	ID        string    `json:"id"`
-	MonthlyID string    `json:"monthlyId,omitempty"`
-	Name      string    `json:"name"`
-	Location  string    `json:"location"`
-	VCPU      int       `json:"vcpu"`
-	MemoryMB  int       `json:"memoryMb"`
-	DiskGB    int       `json:"diskGb"`
-	Hourly    string    `json:"hourly,omitempty"`
-	Monthly   string    `json:"monthly,omitempty"`
-	Storage   []Storage `json:"storage,omitempty"`
+	ID        string `json:"id"`
+	MonthlyID string `json:"monthlyId,omitempty"`
+	Name      string `json:"name"`
+	Location  string `json:"location"`
+	VCPU      int    `json:"vcpu"`
+	MemoryMB  int    `json:"memoryMb"`
+	DiskGB    int    `json:"diskGb"`
+	// GPUs is how many graphics cards the offer includes. GPU names the
+	// model, for example L4, when the provider says which one.
+	GPUs    int       `json:"gpus,omitempty"`
+	GPU     string    `json:"gpu,omitempty"`
+	Hourly  string    `json:"hourly,omitempty"`
+	Monthly string    `json:"monthly,omitempty"`
+	Storage []Storage `json:"storage,omitempty"`
 }
 
 type Catalog struct {
@@ -85,6 +89,8 @@ type Plan struct {
 	VCPU         int    `json:"vcpu"`
 	MemoryMB     int    `json:"memoryMb"`
 	DiskGB       int    `json:"diskGb"`
+	GPUs         int    `json:"gpus,omitempty"`
+	GPU          string `json:"gpu,omitempty"`
 	StorageID    string `json:"storageId,omitempty"`
 	StorageGB    int    `json:"storageGb,omitempty"`
 	StorageLabel string `json:"storageLabel,omitempty"`
@@ -210,7 +216,7 @@ func (cat Catalog) Plan(offerID, period, storageID string, storageGB int) (Plan,
 		OfferID: id, Name: offer.Name, Location: cat.Location, Period: period,
 		Hourly: offer.Hourly, Monthly: offer.Monthly,
 		VCPU: offer.VCPU, MemoryMB: offer.MemoryMB, DiskGB: offer.DiskGB,
-		Currency: cat.Currency,
+		GPUs: offer.GPUs, GPU: offer.GPU, Currency: cat.Currency,
 	}
 	if storageID == "" {
 		for _, item := range offer.Storage {

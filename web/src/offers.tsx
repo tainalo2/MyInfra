@@ -20,10 +20,20 @@ export function memory(mb: number) {
   return `${mb} ${say("unit.mb")}`;
 }
 
+export function gpuText(gpus?: number, gpu?: string) {
+  if (!gpus) return "";
+  return `${gpus} ${gpu || "GPU"}`;
+}
+
+export function machineLine(name: string, vcpu: number, memoryMb: number, gpus?: number, gpu?: string, diskGb = 0) {
+  const card = gpus ? ` · ${gpuText(gpus, gpu)}` : "";
+  const disk = diskGb > 0 ? ` · ${diskGb} ${say("unit.gb")}` : "";
+  return `${name} · ${vcpu} vCPU · ${memory(memoryMb)}${card}${disk}`;
+}
+
 export function offerOptionLabel(offer: Offer, currency: string) {
-  const disk = offer.diskGb > 0 ? ` · ${offer.diskGb} ${say("unit.gb")}` : "";
   const hourly = offer.hourly ? ` · ${formatPrice(offer.hourly, true, currency)}` : "";
-  return `${offer.name} · ${offer.vcpu} vCPU · ${memory(offer.memoryMb)}${disk}${hourly}`;
+  return `${machineLine(offer.name, offer.vcpu, offer.memoryMb, offer.gpus, offer.gpu, offer.diskGb)}${hourly}`;
 }
 
 export function sortOffers(offers: Offer[], sort: OfferSort) {

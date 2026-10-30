@@ -952,6 +952,9 @@ func (a *API) createRunApp(ctx context.Context, owner string, run *blueprint.Run
 		return err
 	}
 	in.Variables = sealed
+	if err := a.reserveGPU(ctx, owner, in.DestinationKind, in.ServerID, in.ClusterID, "", in.Services); err != nil {
+		return err
+	}
 	if err := a.Store.CreateApplication(ctx, in); err != nil {
 		return err
 	}
@@ -988,6 +991,9 @@ func (a *API) restartDeploy(ctx context.Context, owner, id string, replay bool) 
 	steps := stepsOf(row.Deploy)
 	if len(steps) == 0 {
 		steps = stepsFor(row.ProviderID != "", row.ClusterID)
+	}
+	if deploy.Has(steps, "leave") {
+		return a.restartMove(ctx, owner, row, deploy.Resume(steps))
 	}
 	if row.Address != "" {
 		if !deploy.Done(steps, "machine") {

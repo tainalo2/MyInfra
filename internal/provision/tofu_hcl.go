@@ -73,7 +73,7 @@ func hcl(provider string, creds catalog.Creds, spec Spec, importID string, c Cli
 	case "digitalocean":
 		body, err := stackJSON("digitalocean", "digitalocean/digitalocean", "~> 2.50", []string{"token"}, map[string]any{"token": "${var.token}"}, map[string]any{
 			"digitalocean_droplet": map[string]any{"machine": map[string]any{
-				"name": spec.Name, "size": spec.OfferID, "image": "debian-13-x64", "region": spec.Location, "user_data": spec.UserData,
+				"name": spec.Name, "size": spec.OfferID, "image": digitalOceanImage(spec.GPUs), "region": spec.Location, "user_data": spec.UserData,
 			}},
 		}, map[string]string{"id": "${digitalocean_droplet.machine.id}", "ip": "${digitalocean_droplet.machine.ipv4_address}"})
 		return body, []string{"TF_VAR_token=" + creds.Token}, "digitalocean_droplet.machine", err

@@ -415,7 +415,7 @@ func Render(app App) string {
 	disks, sizes := sharedDisks(app)
 	redirect, paused := false, false
 	for _, name := range disks {
-		fmt.Fprintf(&b, "---\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: %s\n  namespace: %s\n  labels:\n    myinfra.io/shared-disk: %q\nspec:\n  accessModes: [ReadWriteOnce]\n  resources:\n    requests:\n      storage: %dGi\n", SharedClaim(name), ns, name, sizes[name])
+		fmt.Fprintf(&b, "---\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: %s\n  namespace: %s\n  labels:\n    myinfra.io/shared-disk: %q\nspec:\n  accessModes: [ReadWriteOnce]\n  storageClassName: local-path\n  resources:\n    requests:\n      storage: %dGi\n", SharedClaim(name), ns, name, sizes[name])
 	}
 	for _, svc := range app.Services {
 		svc.configSum = withFiles(sum, svc)
@@ -447,7 +447,7 @@ func Render(app App) string {
 				strategy = "Recreate"
 			}
 			if svc.Disk {
-				fmt.Fprintf(&b, "---\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: %s\n  namespace: %s\nspec:\n  accessModes: [ReadWriteOnce]\n  resources:\n    requests:\n      storage: %dGi\n", svc.Name, ns, diskGiOf(svc))
+				fmt.Fprintf(&b, "---\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: %s\n  namespace: %s\nspec:\n  accessModes: [ReadWriteOnce]\n  storageClassName: local-path\n  resources:\n    requests:\n      storage: %dGi\n", svc.Name, ns, diskGiOf(svc))
 			}
 			writeClaims(&b, ns, svc)
 			fmt.Fprintf(&b, `---
@@ -479,10 +479,11 @@ spec:
 			if svc.Node != "" && nodeName.MatchString(svc.Node) {
 				fmt.Fprintf(&b, "      nodeSelector:\n        kubernetes.io/hostname: %q\n", svc.Node)
 			}
+			b.WriteString(runtimeClass(svc))
 			b.WriteString(moveAway())
 			b.WriteString(waitFor(svc, ports))
 			b.WriteString("      containers:\n")
-			b.WriteString(containerHead(svc, true))
+			b.WriteString(containerHead(svc, true, true))
 			writeContainerTail(&b, refs, svc, false)
 		}
 		// After the workload's last line: the budget is a document of its own.
@@ -676,14 +677,15 @@ spec:
       labels:
         myinfra.io/service: %s
 %s    spec:
-%s%s%s      containers:
-%s`, svc.Name, ns, svc.Name, listenOf(svc), listenOf(svc), svc.Name, ns, appID, svc.Name, replicas, svc.Name, svc.Name, configAnnotation(svc, true), spread(svc.Name), moveAway(), waitFor(svc, ports), containerHead(svc, true))
+%s%s%s%s      containers:
+%s`, svc.Name, ns, svc.Name, listenOf(svc), listenOf(svc), svc.Name, ns, appID, svc.Name, replicas, svc.Name, svc.Name, configAnnotation(svc, true), spread(svc.Name), runtimeClass(svc), moveAway(), waitFor(svc, ports), containerHead(svc, true, true))
 	writeContainerTail(b, refs, svc, true)
 	fmt.Fprintf(b, `  volumeClaimTemplates:
     - metadata:
         name: data
       spec:
         accessModes: [ReadWriteOnce]
+        storageClassName: local-path
         resources:
           requests:
             storage: %dGi
@@ -693,6 +695,7 @@ spec:
         name: %s
       spec:
         accessModes: [ReadWriteOnce]
+        storageClassName: local-path
         resources:
           requests:
             storage: %dGi

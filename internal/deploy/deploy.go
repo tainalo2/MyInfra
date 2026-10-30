@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +33,12 @@ type Step struct {
 	Label  string `json:"label"`
 	Status string `json:"status"`
 	Detail string `json:"detail,omitempty"`
+	// Source is the cluster a move leaves. Empty means the machine ran alone.
+	Source string `json:"source,omitempty"`
+	// Target is the cluster a move joins. Empty means it will run alone.
+	Target string `json:"target,omitempty"`
+	// ControlPlane is the role asked for Target. Only the leave step carries it.
+	ControlPlane bool `json:"controlPlane,omitempty"`
 }
 
 func Steps(cloud bool) []Step {
@@ -57,6 +64,45 @@ func Steps(cloud bool) []Step {
 func AloneSteps(cloud bool) []Step {
 	steps := Steps(cloud)
 	return []Step{steps[0], steps[1], steps[2], {ID: "docker", Label: "Docker et proxy", Status: "pending"}}
+}
+
+// MoveSteps are the steps of a machine that changes role. source is the
+// cluster it leaves, target the one it joins; empty means it runs alone.
+func MoveSteps(source, target string, controlPlane bool) []Step {
+	leave := Step{
+		ID: "leave", Label: "Sortie du rôle actuel", Status: "pending",
+		Source: source, Target: target, ControlPlane: controlPlane && target != "",
+	}
+	if target != "" {
+		return []Step{
+			leave,
+			{ID: "wireguard", Label: "WireGuard du cluster", Status: "pending"},
+			{ID: "kubernetes", Label: "Kubernetes", Status: "pending"},
+			{ID: "cluster", Label: "Configuration du cluster", Status: "pending"},
+		}
+	}
+	return []Step{leave, {ID: "docker", Label: "Docker et proxy", Status: "pending"}}
+}
+
+// MoveOf reads where a move goes. ok is false when these steps are not a move.
+func MoveOf(steps []Step) (source, target string, controlPlane, ok bool) {
+	for _, step := range steps {
+		if step.ID != "leave" {
+			continue
+		}
+		return step.Source, step.Target, step.ControlPlane, true
+	}
+	return "", "", false, false
+}
+
+// Has reports whether the steps include this one.
+func Has(steps []Step, id string) bool {
+	for _, step := range steps {
+		if step.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // WireGuardIP is the address of a cluster node inside the WireGuard network.
@@ -173,6 +219,8 @@ type Host struct {
 	// K3sVersion is installed on the node: the one of the cluster it joins,
 	// K3sVersion for a new cluster.
 	K3sVersion string
+	// GPUs is how many cards this machine was bought with.
+	GPUs int
 }
 
 func (h Host) user() string {
@@ -281,6 +329,9 @@ func Play(ctx context.Context, host Host, tag string) error {
 	if err := os.WriteFile(filepath.Join(dir, "firewall.sh"), []byte(script), 0o755); err != nil {
 		return fmt.Errorf("Ansible n'a pas pu préparer la machine.")
 	}
+	if err := os.WriteFile(filepath.Join(dir, "gpu.sh"), []byte(GPUScript()), 0o755); err != nil {
+		return fmt.Errorf("Ansible n'a pas pu préparer la machine.")
+	}
 	knownHostsPath := filepath.Join(dir, "known_hosts")
 	inventory := inventoryFor(host.Address, keyPath, knownHostsPath)
 	if err := os.WriteFile(filepath.Join(dir, "inventory"), []byte(inventory), 0o644); err != nil {
@@ -318,6 +369,12 @@ func playVars(host Host, engine string) map[string]any {
 			extra += " --tls-san " + host.Address
 		}
 	}
+	if host.GPUs > 0 && engine == "k3s" {
+		if extra != "" {
+			extra += " "
+		}
+		extra += "--node-label myinfra.io/gpu=" + strconv.Itoa(host.GPUs)
+	}
 	version := host.K3sVersion
 	if !ValidK3sVersion(version) {
 		version = K3sVersion
@@ -334,6 +391,7 @@ func playVars(host Host, engine string) map[string]any {
 		"k3s_token":         host.Token,
 		"wireguard_address": host.WGAddress,
 		"wireguard_peers":   peers,
+		"gpu_count":         host.GPUs,
 	}
 }
 

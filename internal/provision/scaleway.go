@@ -17,7 +17,7 @@ func (c Client) createScaleway(ctx context.Context, token, projectID string, spe
 	if err := c.ensureScalewaySSHKeys(ctx, base, projectID, header, spec.SSHKeys); err != nil {
 		return Machine{}, err
 	}
-	image, err := c.scalewayImage(ctx, base, zone, header)
+	image, err := c.scalewayImage(ctx, base, zone, header, spec)
 	if err != nil {
 		return Machine{}, err
 	}
@@ -181,7 +181,12 @@ func sshBlob(key string) string {
 	return key
 }
 
-func (c Client) scalewayImage(ctx context.Context, base, zone string, header map[string]string) (string, error) {
+func (c Client) scalewayImage(ctx context.Context, base, zone string, header map[string]string, spec Spec) (string, error) {
+	if spec.GPUs > 0 {
+		if id := c.scalewayGPUImage(ctx, base, zone, header, spec.OfferID); id != "" {
+			return id, nil
+		}
+	}
 	status, body, err := c.call(ctx, http.MethodGet, base+"/instance/v1/zones/"+zone+"/images?per_page=100", header, nil)
 	if err != nil {
 		return "", err
@@ -221,6 +226,53 @@ func (c Client) scalewayImage(ctx context.Context, base, zone string, header map
 		return "", refused(http.StatusBadGateway, body)
 	}
 	return chosen, nil
+}
+
+// scalewayGPUImage picks a Debian image the GPU commercial type accepts.
+// Empty means the usual Debian image is used instead.
+func (c Client) scalewayGPUImage(ctx context.Context, base, zone string, header map[string]string, commercial string) string {
+	if commercial == "" {
+		return ""
+	}
+	status, body, err := c.call(ctx, http.MethodGet, base+"/marketplace/v2/local-images?zone="+zone, header, nil)
+	if err != nil || status >= 300 {
+		return ""
+	}
+	return scalewayCompatible(body, commercial)
+}
+
+func scalewayCompatible(body []byte, commercial string) string {
+	var payload struct {
+		Images []struct {
+			ID         string   `json:"id"`
+			Label      string   `json:"label"`
+			Compatible []string `json:"compatible_commercial_types"`
+		} `json:"local_images"`
+	}
+	if json.Unmarshal(body, &payload) != nil {
+		return ""
+	}
+	chosen := ""
+	for _, image := range payload.Images {
+		if image.ID == "" || !strings.Contains(strings.ToLower(image.Label), "debian") {
+			continue
+		}
+		fits := false
+		for _, kind := range image.Compatible {
+			if kind == commercial {
+				fits = true
+				break
+			}
+		}
+		if !fits {
+			continue
+		}
+		chosen = image.ID
+		if strings.Contains(image.Label, "13") || strings.Contains(image.Label, "trixie") {
+			return image.ID
+		}
+	}
+	return chosen
 }
 
 func parseScalewayServer(body []byte) (droplet, error) {

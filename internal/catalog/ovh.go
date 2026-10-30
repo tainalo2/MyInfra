@@ -50,6 +50,10 @@ type ovhAddon struct {
 			Memory struct {
 				Size float64 `json:"size"`
 			} `json:"memory"`
+			GPU struct {
+				Number int    `json:"number"`
+				Model  string `json:"model"`
+			} `json:"gpu"`
 			Storage struct {
 				Disks []struct {
 					Capacity float64 `json:"capacity"`
@@ -98,10 +102,12 @@ func parseOVH(body []byte, location string) (Catalog, error) {
 		} else {
 			month = monthlyFromHourly(hourly)
 		}
+		gpus, model := ovhGPU(addon)
 		offers = append(offers, Offer{
 			ID: addon.PlanCode, MonthlyID: monthlyID, Name: addon.InvoiceName, Location: chosen,
 			VCPU: cores, MemoryMB: int(addon.Blobs.Technical.Memory.Size * 1024),
-			DiskGB: ovhDisk(addon), Hourly: hourly, Monthly: month, Storage: storage,
+			DiskGB: ovhDisk(addon), GPUs: gpus, GPU: model,
+			Hourly: hourly, Monthly: month, Storage: storage,
 		})
 	}
 	sort.Slice(offers, func(i, j int) bool { return offers[i].Name < offers[j].Name })
@@ -130,6 +136,18 @@ func ovhPrice(addon ovhAddon, unit string) string {
 		}
 	}
 	return ""
+}
+
+func ovhGPU(addon ovhAddon) (int, string) {
+	card := addon.Blobs.Technical.GPU
+	if card.Number <= 0 {
+		return 0, ""
+	}
+	model := card.Model
+	if model == "" {
+		model = gpuModel(card.Number, addon.InvoiceName, addon.PlanCode)
+	}
+	return card.Number, model
 }
 
 func ovhDisk(addon ovhAddon) int {

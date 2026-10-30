@@ -67,6 +67,23 @@ func TestEachConstraint(t *testing.T) {
 	}
 }
 
+func TestGPUConstraint(t *testing.T) {
+	card := offer("pro", "scaleway", "EUR", "fr-par-1", "L4-1", 8, 32, 100, "0.5", "300")
+	card.Offer.GPUs, card.Offer.GPU = 1, "L4"
+	got := Find(append(append([]Candidate{}, market...), card), Want{MinGPUs: 1, GPU: "L4"})
+	if len(got.Matches) != 1 || got.Matches[0].Offer.Name != "L4-1" {
+		t.Fatal(got.Matches)
+	}
+	miss := Find(market, Want{GPU: "L4"})
+	if len(miss.Matches) != 0 || len(miss.Alternatives) == 0 || !strings.Contains(miss.Alternatives[0].Gaps[0], "GPU") {
+		t.Fatal(miss)
+	}
+	wrong := Find([]Candidate{card}, Want{GPU: "A40"})
+	if len(wrong.Matches) != 0 || len(wrong.Alternatives) != 1 || !strings.Contains(wrong.Alternatives[0].Gaps[0], "L4 au lieu de A40") {
+		t.Fatal(wrong.Alternatives)
+	}
+}
+
 func TestNearestWhenNothingFits(t *testing.T) {
 	got := Find(market, Want{Countries: []string{"FR"}, MinMemoryGB: 8, MaxMonthly: 10})
 	if len(got.Matches) != 0 || len(got.Alternatives) == 0 {

@@ -122,6 +122,8 @@ export type Offer = {
   vcpu: number;
   memoryMb: number;
   diskGb: number;
+  gpus?: number;
+  gpu?: string;
   hourly?: string;
   monthly?: string;
   storage?: StorageOption[];
@@ -149,6 +151,8 @@ export type Plan = {
   vcpu: number;
   memoryMb: number;
   diskGb: number;
+  gpus?: number;
+  gpu?: string;
   storageId?: string;
   storageGb?: number;
   storageLabel?: string;

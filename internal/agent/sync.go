@@ -751,6 +751,9 @@ func specFlags(app Workload, copy, replicas int) string {
 			// Docker reads m and g where Kubernetes reads Mi and Gi.
 			fmt.Fprintf(&b, " --memory '%s'", strings.ToLower(strings.TrimSuffix(r.Memory, "i")))
 		}
+		if r.GPU > 0 {
+			fmt.Fprintf(&b, " --gpus %d", r.GPU)
+		}
 	}
 	return b.String()
 }

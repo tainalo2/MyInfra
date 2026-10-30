@@ -499,18 +499,49 @@ func mcpAppTools() []mcpTool {
 		},
 		{
 			Name: "get_update_impact", Title: "Impact d'une mise à jour", Role: store.RoleRead,
-			Description: "Les mises à jour disponibles, et pour une application ce que sa mise à jour changerait (coupure, versions).",
-			Schema:      object(nil, map[string]any{"application": text("Application ; sans elle, toutes les mises à jour disponibles.")}),
-			Routes:      []string{"GET /api/updates", "GET /api/applications", "GET /api/applications/{id}/update/impact"},
+			Description: "Les mises à jour disponibles (applications, machines, clusters, MyInfra, bibliothèque). Avec une cible, ce que sa mise à jour changerait : coupure, versions, paquets, redémarrage, k3s.",
+			Schema: object(nil, map[string]any{
+				"kind":        choice("Cible. Sans kind ni nom, toutes les mises à jour.", "application", "server", "cluster"),
+				"name":        text("Nom de la cible, selon kind."),
+				"application": text("Application, comme name avec kind=application."),
+			}),
+			Routes: []string{
+				"GET /api/updates", "GET /api/applications", "GET /api/servers", "GET /api/clusters",
+				"GET /api/applications/{id}/update/impact", "GET /api/servers/{id}/update/impact", "GET /api/clusters/{id}/update/impact",
+			},
 			Run: func(c *mcpCall, raw json.RawMessage) (string, error) {
-				args, err := decodeArgs[struct{ Application string }](raw)
+				args, err := decodeArgs[struct{ Kind, Name, Application string }](raw)
 				if err != nil {
 					return "", err
 				}
-				if args.Application == "" {
+				name := args.Name
+				if name == "" {
+					name = args.Application
+				}
+				switch args.Kind {
+				case "server":
+					if name == "" {
+						return "", failf("Précisez le nom de la machine.")
+					}
+					row, err := c.server(name)
+					if err != nil {
+						return "", err
+					}
+					return passThrough("/api/servers/"+url.PathEscape(row.ID)+"/update/impact")(c, raw)
+				case "cluster":
+					if name == "" {
+						return "", failf("Précisez le nom du cluster.")
+					}
+					row, err := c.cluster(name)
+					if err != nil {
+						return "", err
+					}
+					return passThrough("/api/clusters/"+url.PathEscape(row.ID)+"/update/impact")(c, raw)
+				}
+				if name == "" {
 					return passThrough("/api/updates")(c, raw)
 				}
-				app, err := c.application(args.Application)
+				app, err := c.application(name)
 				if err != nil {
 					return "", err
 				}

@@ -321,6 +321,22 @@ func userDataOf(body string) string {
 	return rest[:end]
 }
 
+func TestDigitalOceanGPUUsesUbuntu(t *testing.T) {
+	if digitalOceanImage(0) != "debian-13-x64" || digitalOceanImage(1) != "ubuntu-24-04-x64" {
+		t.Fatal(digitalOceanImage(0), digitalOceanImage(1))
+	}
+}
+
+func TestScalewayPicksADebianImageForTheGPUType(t *testing.T) {
+	body := []byte(`{"local_images":[{"id":"old","label":"debian_bookworm","compatible_commercial_types":["L4-1-24G"]},{"id":"new","label":"debian_trixie","compatible_commercial_types":["L4-1-24G"]},{"id":"ubuntu","label":"ubuntu_noble","compatible_commercial_types":["L4-1-24G"]}]}`)
+	if scalewayCompatible(body, "L4-1-24G") != "new" {
+		t.Fatal(scalewayCompatible(body, "L4-1-24G"))
+	}
+	if scalewayCompatible(body, "DEV1-S") != "" {
+		t.Fatal("un type CPU ne prend pas l'image GPU")
+	}
+}
+
 func TestRefusedNamesUnauthorizedIP(t *testing.T) {
 	err := refused(401, []byte(`{"error":"Unauthorized IP address: 2001:db8::1","status":401}`))
 	if err == nil || !strings.Contains(err.Error(), "2001:db8::1") {

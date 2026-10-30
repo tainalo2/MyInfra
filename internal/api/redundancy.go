@@ -134,15 +134,32 @@ func (a *API) setRedundancy(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, errStorageNodes.Error())
 		return
 	}
+	scaled := map[string]int{}
+	for _, name := range plan.Scaled {
+		scaled[name] = body.Copies
+	}
+	database := map[string]bool{}
+	for _, name := range plan.Database {
+		database[name] = true
+	}
+	projected := append([]store.Service(nil), app.Services...)
+	for i := range projected {
+		if copies, ok := scaled[projected[i].Name]; ok {
+			projected[i].Replicas = copies
+		}
+		if database[projected[i].Name] {
+			projected[i].Replicas = body.Copies
+		}
+	}
+	if err := a.reserveGPU(r.Context(), owner, "cluster", "", app.ClusterID, app.ID, projected); err != nil {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
 	if body.Copies >= 2 && body.Copies <= nodes {
 		if err := a.Store.SetApplicationReplicas(r.Context(), app.ID, body.Copies); err != nil {
 			a.mapErr(w, err)
 			return
 		}
-	}
-	scaled := map[string]int{}
-	for _, name := range plan.Scaled {
-		scaled[name] = body.Copies
 	}
 	before := map[string]int{}
 	for _, svc := range app.Services {

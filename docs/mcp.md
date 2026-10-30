@@ -48,9 +48,10 @@ C'est l'assistant qui relaie la question : ses instructions l'y obligent. Pour u
 
 Refusés par l'assistant, à faire depuis l'interface :
 - détruire ce qui héberge MyInfra ;
-- révéler un secret déjà enregistré ;
+- révéler un secret déjà enregistré, y compris télécharger une clé privée SSH ;
 - gérer les utilisateurs ou les jetons ;
-- ouvrir un terminal, transférer MyInfra.
+- ouvrir un terminal, transférer MyInfra ;
+- déposer le fichier d'une sauvegarde ou d'une archive d'image (les lister, et récupérer une image par adresse, se fait par l'assistant).
 
 ## Historique
 
@@ -71,9 +72,10 @@ Chaque action faite par un assistant est dans **Activité**, marquée **MCP** av
 - « Je veux exactement un CCX23 à Helsinki. » S'il n'existe pas, l'assistant propose le modèle le plus proche ou un autre lieu.
 - « Ajoute deux nœuds au cluster SW. »
 - « Ajoute mon serveur 203.0.113.10 au cluster SW. » MyInfra s'y connecte lui-même en root par SSH, avec une clé dont il garde la clé privée et que la machine accepte déjà. Si la machine refuse root, comme les images Debian (« Please login as the user debian »), précisez l'utilisateur : MyInfra prépare l'accès root par sudo, sans mot de passe. Rien n'est à coller sur la machine. La commande à coller, l'autre façon de relier une machine, ne se donne que dans l'interface, parce qu'elle contient un jeton.
+- « Sors maison du cluster SW. » · « Passe le serveur seul atelier dans le cluster SW. » Une machine déjà dans MyInfra se déplace avec `attach_server` : elle quitte Kubernetes ou Docker, puis rejoint l'autre rôle.
 - « Un serveur seul pour un petit site, budget 5 €. » S'il n'y en a pas : « rien sous 5 € avec 2 Go ; le plus proche est … à 5,49 € ».
 
-La recherche respecte le provider, le pays, le continent, le lieu, le processeur, la mémoire, le disque (un volume est ajouté si l'offre le permet), le prix maximum et le modèle exact. Quand rien ne convient, elle rend les offres les plus proches, chacune avec ce qui lui manque, et dit pourquoi :
+La recherche respecte le provider, le pays, le continent, le lieu, le processeur, la mémoire, le disque (un volume est ajouté si l'offre le permet), le nombre et le modèle de cartes graphiques, le prix maximum et le modèle exact. Quand rien ne convient, elle rend les offres les plus proches, chacune avec ce qui lui manque, et dit pourquoi :
 - aucun compte pour ce provider ;
 - modèle inconnu ;
 - devise différente : les prix ne sont jamais convertis.
@@ -139,6 +141,24 @@ Une modification demande votre accord dans ces cas :
 - elle touche la racine du domaine, le courrier (MX, SPF, DKIM, DMARC) ou les certificats (`_acme-challenge`).
 
 Les noms que MyInfra écrit pour les applications, et les NS et SOA, sont refusés.
+
+### Machines, modèles, mises à jour
+
+- « Quelle est la charge de web-1 ? » · « Sonde le serveur ajouté à la main. » · « Ce serveur est à Paris, loué 5 € par mois chez un particulier. »
+- « Importe ce kubeconfig comme cluster legacy. » · « Quelles applications Argo y tournent ? »
+- « Montre-moi les fichiers OpenTofu de web-1. » Les appliquer demande l'accord, comme un achat.
+- « Enregistre un modèle avec une machine et Nextcloud, puis lance-le. » Le lancement achète : récapitulatif, puis accord. « Reprends le lancement qui a échoué. »
+- « Quelles mises à jour attendent les machines du cluster SW ? Fais-les, y compris k3s. » · « Mets MyInfra à jour. » Cette dernière demande l'accord et peut redémarrer la copie.
+- « Annule le déploiement de l'application qui tourne encore. »
+
+### Paquets, images, secrets, copies
+
+- « Exporte le paquet Pile média. » · « Copie l'article Nextcloud du catalogue pour que je le modifie. » · « Quelles versions de Gitea existent ? »
+- « Change l'image du service web de Ghost. » Si changer les services efface des données, l'assistant montre lesquelles et attend l'accord.
+- « Quelles sauvegardes a Nextcloud ? » Le fichier se télécharge dans l'interface.
+- « Crée une clé SSH pour les prochains serveurs. » · « Vérifie que le compte Hetzner répond encore. »
+- « Cette copie pilote-t-elle ? Prends la main. » La prise de main et la passation redémarrent la copie, après accord.
+- « Installe OpenTofu sur la machine qui porte MyInfra. »
 
 ## Détails techniques
 

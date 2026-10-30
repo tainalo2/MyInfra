@@ -100,7 +100,7 @@ func parseAkamai(regionPages, typePages [][]byte, location string) (Catalog, err
 		}
 		for _, item := range payload.Data {
 			class := strings.ToLower(item.Class)
-			if item.ID == "" || item.VCPUs <= 0 || item.GPUs > 0 || class == "gpu" || class == "metal" {
+			if item.ID == "" || item.VCPUs <= 0 || class == "metal" {
 				continue
 			}
 			hourly := item.Price.Hourly
@@ -130,6 +130,7 @@ func parseAkamai(regionPages, typePages [][]byte, location string) (Catalog, err
 			offers = append(offers, Offer{
 				ID: item.ID, Name: name, Location: chosen,
 				VCPU: item.VCPUs, MemoryMB: item.Memory, DiskGB: disk,
+				GPUs: item.GPUs, GPU: gpuModel(item.GPUs, item.Label, item.ID),
 				Hourly: hourlyText, Monthly: monthlyText,
 			})
 		}

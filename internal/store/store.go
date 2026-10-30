@@ -1224,17 +1224,12 @@ func (s *Store) MarkLinked(ctx context.Context, token string) error {
 	return nil
 }
 
-func (s *Store) AttachCluster(ctx context.Context, ownerID, serverID, clusterID string) error {
+// PlaceServer records where a machine runs after it has left its previous
+// role. An empty cluster means it runs alone, and then it is not a control
+// plane. Its WireGuard number is cleared: the next cluster gives a new one.
+func (s *Store) PlaceServer(ctx context.Context, ownerID, serverID, clusterID string, controlPlane bool) error {
+	var cluster *string
 	if clusterID != "" {
-		var n int
-		if err := s.pool.QueryRow(ctx, `
-			SELECT count(*) FROM applications
-			WHERE owner_id = $1 AND server_id = $2 AND destination_kind = 'server'`, ownerID, serverID).Scan(&n); err != nil {
-			return err
-		}
-		if n > 0 {
-			return ErrHasApps
-		}
 		var one int
 		err := s.pool.QueryRow(ctx, `SELECT 1 FROM clusters WHERE id = $1 AND owner_id = $2`, clusterID, ownerID).Scan(&one)
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -1243,10 +1238,13 @@ func (s *Store) AttachCluster(ctx context.Context, ownerID, serverID, clusterID 
 		if err != nil {
 			return err
 		}
+		cluster = &clusterID
+	} else {
+		controlPlane = false
 	}
 	tag, err := s.pool.Exec(ctx, `
-		UPDATE servers SET cluster_id = NULLIF($1, '')
-		WHERE id = $2 AND owner_id = $3`, clusterID, serverID, ownerID)
+		UPDATE servers SET cluster_id = $1, control_plane = $2, wg_index = 0
+		WHERE id = $3 AND owner_id = $4`, cluster, controlPlane, serverID, ownerID)
 	if err != nil {
 		return err
 	}
@@ -1254,6 +1252,42 @@ func (s *Store) AttachCluster(ctx context.Context, ownerID, serverID, clusterID 
 		return ErrNotFound
 	}
 	return nil
+}
+
+// CountDestinationApps counts the applications installed on a server or a cluster.
+func (s *Store) CountDestinationApps(ctx context.Context, ownerID, kind, id string) (int, error) {
+	var n int
+	var err error
+	switch kind {
+	case "server":
+		err = s.pool.QueryRow(ctx, `
+			SELECT count(*) FROM applications
+			WHERE owner_id = $1 AND server_id = $2 AND destination_kind = 'server'`, ownerID, id).Scan(&n)
+	case "cluster":
+		err = s.pool.QueryRow(ctx, `
+			SELECT count(*) FROM applications
+			WHERE owner_id = $1 AND cluster_id = $2 AND destination_kind = 'cluster'`, ownerID, id).Scan(&n)
+	default:
+		return 0, fmt.Errorf("destination inconnue")
+	}
+	return n, err
+}
+
+// ServerHoldsDisk reports whether a shared disk of the cluster is stored on this server.
+func (s *Store) ServerHoldsDisk(ctx context.Context, ownerID, clusterID, serverID string) (bool, error) {
+	var n int
+	err := s.pool.QueryRow(ctx, `
+		SELECT count(*) FROM application_services svc
+		JOIN applications a ON a.id = svc.application_id
+		WHERE a.owner_id = $1 AND a.cluster_id = $2 AND a.destination_kind = 'cluster'
+		  AND EXISTS (
+		    SELECT 1
+		    FROM jsonb_array_elements(
+		      CASE WHEN jsonb_typeof(svc.spec->'volumes') = 'array' THEN svc.spec->'volumes' ELSE '[]'::jsonb END
+		    ) AS volume
+		    WHERE COALESCE(volume->>'disk', '') <> '' AND volume->>'node' = $3
+		  )`, ownerID, clusterID, serverID).Scan(&n)
+	return n > 0, err
 }
 
 type Cluster struct {

@@ -99,10 +99,11 @@ type File struct {
 }
 
 // Resources reserves CPU and memory; memory is also the most the service
-// may use.
+// may use. GPU is how many cards the service takes, whole cards only.
 type Resources struct {
 	CPU    string `json:"cpu,omitempty"`
 	Memory string `json:"memory,omitempty"`
+	GPU    int    `json:"gpu,omitempty"`
 }
 
 // Health tells when a copy answers: an HTTP path, or a TCP connection when
@@ -259,6 +260,9 @@ func Check(s Service) []Problem {
 		}
 		if r.Memory != "" && !memory.MatchString(r.Memory) {
 			add("resources.memory", "Indiquez la mémoire en Mi ou Gi, par exemple 512Mi.")
+		}
+		if r.GPU < 0 || r.GPU > 8 {
+			add("resources.gpu", "Indiquez un nombre de GPU de 0 à 8.")
 		}
 	}
 	if h := s.Health; h != nil {

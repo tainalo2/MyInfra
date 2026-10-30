@@ -108,11 +108,11 @@ func parseExoscale(typesRaw, pricesRaw []byte, locations []Location, chosen stri
 	}
 	offers := make([]Offer, 0)
 	for _, item := range types.Items {
-		if item.ID == "" || item.CPUs <= 0 || item.GPUs > 0 || (item.Authorized != nil && !*item.Authorized) {
+		if item.ID == "" || item.CPUs <= 0 || (item.Authorized != nil && !*item.Authorized) {
 			continue
 		}
 		family := strings.ToLower(item.Family)
-		if family != "standard" && family != "cpu" && family != "memory" {
+		if item.GPUs <= 0 && family != "standard" && family != "cpu" && family != "memory" {
 			continue
 		}
 		key := "running_" + strings.ReplaceAll(strings.ToLower(item.Size), "-", "_")
@@ -129,7 +129,7 @@ func parseExoscale(typesRaw, pricesRaw []byte, locations []Location, chosen stri
 		}
 		offers = append(offers, Offer{
 			ID: item.ID, Name: exoscaleName(family, item.Size), Location: chosen,
-			VCPU: item.CPUs, MemoryMB: int(memory),
+			VCPU: item.CPUs, MemoryMB: int(memory), GPUs: item.GPUs, GPU: exoscaleGPU(family, item.GPUs),
 			Hourly: hourly, Monthly: monthlyFromHourly(hourly), Storage: storage,
 		})
 	}
@@ -163,6 +163,23 @@ func exoscaleName(family, size string) string {
 	case "memory":
 		return "Mémoire " + label
 	default:
+		if strings.Contains(family, "gpu") {
+			return exoscaleGPU(family, 1) + " " + label
+		}
 		return "Standard " + label
+	}
+}
+
+func exoscaleGPU(family string, count int) string {
+	if count <= 0 {
+		return ""
+	}
+	switch strings.ToLower(family) {
+	case "gpu3":
+		return "A40"
+	case "gpua30":
+		return "A30"
+	default:
+		return gpuModel(count, family)
 	}
 }

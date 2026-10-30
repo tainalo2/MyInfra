@@ -35,6 +35,8 @@ type Want struct {
 	MinVCPU     int      `json:"minVcpu,omitempty"`
 	MinMemoryGB float64  `json:"minMemoryGb,omitempty"`
 	MinDiskGB   int      `json:"minDiskGb,omitempty"`
+	MinGPUs     int      `json:"minGpus,omitempty"`
+	GPU         string   `json:"gpu,omitempty"`
 	MaxMonthly  float64  `json:"maxMonthly,omitempty"`
 	Currency    string   `json:"currency,omitempty"`
 	Model       string   `json:"model,omitempty"`
@@ -175,6 +177,7 @@ func normal(w Want) Want {
 		w.Currency = "EUR"
 	}
 	w.Model = strings.TrimSpace(w.Model)
+	w.GPU = strings.TrimSpace(w.GPU)
 	var countries []string
 	for _, c := range w.Countries {
 		if found, ok := place.CountryOf(c); ok {
@@ -202,6 +205,18 @@ func geoAsked(w Want) bool {
 
 func sameProvider(c Candidate, wanted string) bool {
 	return strings.EqualFold(c.Provider, wanted) || strings.EqualFold(c.Account, wanted) || c.AccountID == wanted
+}
+
+func gpuLabel(o catalog.Offer) string {
+	if o.GPU != "" {
+		return o.GPU
+	}
+	return "GPU"
+}
+
+func gpuNamed(o catalog.Offer, wanted string) bool {
+	wanted = strings.ToLower(wanted)
+	return strings.Contains(strings.ToLower(o.GPU), wanted) || strings.Contains(strings.ToLower(o.Name), wanted) || strings.Contains(strings.ToLower(o.ID), wanted)
 }
 
 func sameModel(o catalog.Offer, wanted string) bool {
@@ -337,6 +352,24 @@ func gaps(m Match, w Want, model *catalog.Offer) ([]string, float64) {
 	if w.MinMemoryGB > 0 && memGB(o)+1e-9 < w.MinMemoryGB {
 		out = append(out, fmt.Sprintf("%s Go de mémoire au lieu de %s", trim(memGB(o)), trim(w.MinMemoryGB)))
 		score += 4 * (w.MinMemoryGB - memGB(o)) / w.MinMemoryGB
+	}
+	if w.MinGPUs > 0 || w.GPU != "" {
+		need := w.MinGPUs
+		if need < 1 {
+			need = 1
+		}
+		switch {
+		case o.GPUs < need:
+			got := "pas de GPU"
+			if o.GPUs > 0 {
+				got = fmt.Sprintf("%d %s", o.GPUs, gpuLabel(o))
+			}
+			out = append(out, fmt.Sprintf("%s au lieu de %d GPU", got, need))
+			score += 4 * float64(need-o.GPUs) / float64(need)
+		case w.GPU != "" && !gpuNamed(o, w.GPU):
+			out = append(out, fmt.Sprintf("GPU %s au lieu de %s", gpuLabel(o), w.GPU))
+			score += 3
+		}
 	}
 	if w.MinDiskGB > 0 && m.DiskGB < w.MinDiskGB {
 		out = append(out, fmt.Sprintf("%d Go de disque au lieu de %d (pas de volume possible)", m.DiskGB, w.MinDiskGB))

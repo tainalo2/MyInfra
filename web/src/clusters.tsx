@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useState, type DragEvent } from "react";
 import { Network, Plus, Server as ServerIcon } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, peek, type Application, type ArgoApp, type Cluster, type ClusterUsage, type Destruction, type Server, type Template } from "./api";
@@ -8,11 +8,12 @@ import { ConfirmDialog, Spinner, useToast } from "./kit";
 import { usePoll } from "./poll";
 import { usageText } from "./measure";
 import { RemovalNotice } from "./destructions";
-import { ServerCard, ServerForm, billText } from "./servers";
+import { MoveServerDialog, ServerCard, ServerForm, billText } from "./servers";
 import { UpdateBadge, UpdateDialog, urgent, useUpdates } from "./updates";
 import { hourlyRate } from "./measure";
 import { useSession } from "./session";
-import { ActionsMenu, Button, EmptyList, ErrorText, Field, Icon, Input, ItemList, ListActions, ListModeButton, LoadingCards, LoadingLines, MenuItem, PageTitle, Skeleton, TextButton, entryClass, removalOf, useDestructions, useListMode, type ListMode } from "./ui";
+import { useActivity } from "./activity";
+import { ActionsMenu, Button, EmptyList, ErrorText, Field, Icon, Input, ItemList, ListActions, ListModeButton, LoadingCards, LoadingLines, MenuItem, PageTitle, Skeleton, TextButton, entryClass, liveServer, removalOf, useDestructions, useListMode, type ListMode } from "./ui";
 
 export function Clusters() {
   const { canDeploy } = useSession();
@@ -28,6 +29,10 @@ export function Clusters() {
   const [mode, toggleMode] = useListMode();
   const [busy, setBusy] = useState(false);
   const [fresh, setFresh] = useState("");
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
+  const [pending, setPending] = useState<{ server: Server; clusterId: string; name: string } | null>(null);
+  const { updating, transferring } = useActivity();
   const toast = useToast();
 
   async function reload() {
@@ -93,6 +98,54 @@ export function Clusters() {
   const creating = creatingCluster || importing || creatingServer !== "";
   const target = clusters.find((cluster) => cluster.id === creatingServer);
   const lone = servers.filter((server) => !server.clusterId);
+  const dragged = servers.find((server) => server.id === dragId);
+
+  function canDrag(server: Server) {
+    return canDeploy && liveServer(server) && !transferring && !updating(server.id, server.clusterId);
+  }
+
+  function accepts(targetId: string) {
+    if (!dragged || !canDrag(dragged)) return false;
+    if ((dragged.clusterId ?? "") === targetId) return false;
+    if (targetId !== "" && clusters.find((cluster) => cluster.id === targetId)?.origin === "imported") return false;
+    return true;
+  }
+
+  function hover(event: DragEvent, targetId: string) {
+    if (!accepts(targetId)) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+    setOver(targetId);
+  }
+
+  function leave(event: DragEvent, targetId: string) {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    setOver((current) => (current === targetId ? null : current));
+  }
+
+  function drop(event: DragEvent, targetId: string) {
+    event.preventDefault();
+    const id = event.dataTransfer.getData(serverDrag) || dragId;
+    setDragId(null);
+    setOver(null);
+    const server = servers.find((row) => row.id === id);
+    if (!server || !canDrag(server) || (server.clusterId ?? "") === targetId) return;
+    if (targetId !== "" && clusters.find((cluster) => cluster.id === targetId)?.origin === "imported") return;
+    const name = targetId === "" ? text("server.moveAlone") : clusters.find((cluster) => cluster.id === targetId)?.name ?? "";
+    setPending({ server, clusterId: targetId, name });
+  }
+
+  function startDrag(event: DragEvent, server: Server) {
+    event.dataTransfer.setData("text/plain", server.id);
+    event.dataTransfer.setData(serverDrag, server.id);
+    event.dataTransfer.effectAllowed = "move";
+    setDragId(server.id);
+  }
+
+  function endDrag() {
+    setDragId(null);
+    setOver(null);
+  }
 
   return (
     <>
@@ -178,7 +231,9 @@ export function Clusters() {
           <p className="text-muted">{text("cluster.empty")}</p>
         )
       ) : (
-        <ItemList mode={mode} columns={1}>
+        <>
+          {canDeploy ? <p className="mb-6 text-muted">{text("server.moveDrag")}</p> : null}
+          <ItemList mode={mode} columns={1}>
           {clusters.map((cluster) => (
             <ClusterCard
               key={cluster.id}
@@ -186,12 +241,28 @@ export function Clusters() {
               servers={membersOf(servers, cluster.id)}
               mode={mode}
               onAdd={() => setCreatingServer(cluster.id)}
+              drag={cluster.origin === "imported" ? undefined : {
+                id: dragId,
+                hot: over === cluster.id,
+                canDrag,
+                onDragStart: startDrag,
+                onDragEnd: endDrag,
+                onDragOver: (event) => hover(event, cluster.id),
+                onDragLeave: (event) => leave(event, cluster.id),
+                onDrop: (event) => drop(event, cluster.id),
+              }}
             />
           ))}
-        </ItemList>
+          </ItemList>
+        </>
       )}
       {ready && !creating ? (
-        <section className="mt-12">
+        <section
+          className={`mt-12 rounded-md ${over === "" ? "bg-status" : ""}`}
+          onDragOver={(event) => hover(event, "")}
+          onDragLeave={(event) => leave(event, "")}
+          onDrop={(event) => drop(event, "")}
+        >
           <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <h2 className="flex items-center gap-3 text-lg">
               <Icon icon={ServerIcon} className="text-muted" />
@@ -208,12 +279,31 @@ export function Clusters() {
             <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {lone.map((server) => (
                 <li key={server.id} className="min-w-0">
-                  <ServerCard compact server={server} />
+                  <ServerCard
+                    compact
+                    server={server}
+                    draggable={canDrag(server)}
+                    lifted={dragId === server.id}
+                    onDragStart={(event) => startDrag(event, server)}
+                    onDragEnd={endDrag}
+                  />
                 </li>
               ))}
             </ul>
           )}
         </section>
+      ) : null}
+      {pending ? (
+        <MoveServerDialog
+          server={pending.server}
+          fixedDestination={{ id: pending.clusterId, name: pending.name }}
+          onClose={() => setPending(null)}
+          onMoved={(next) => {
+            setServers((rows) => rows.map((row) => (row.id === next.id ? next : row)));
+            setPending(null);
+            if (next.status === "deploying") toast(text("server.moveStarted", { name: next.name }));
+          }}
+        />
       ) : null}
     </>
   );
@@ -221,17 +311,29 @@ export function Clusters() {
 
 // alone stands for a machine without a cluster in the creation state.
 const alone = "alone";
+const serverDrag = "application/x-myinfra-server";
 
 function ClusterCard({
   cluster,
   servers,
   mode,
   onAdd,
+  drag,
 }: {
   cluster: Cluster;
   servers: Server[];
   mode: ListMode;
   onAdd: () => void;
+  drag?: {
+    id: string | null;
+    hot: boolean;
+    canDrag: (server: Server) => boolean;
+    onDragStart: (event: DragEvent, server: Server) => void;
+    onDragEnd: () => void;
+    onDragOver: (event: DragEvent) => void;
+    onDragLeave: (event: DragEvent) => void;
+    onDrop: (event: DragEvent) => void;
+  };
 }) {
   const navigate = useNavigate();
   const removal = removalOf(useDestructions(), "cluster", cluster.id);
@@ -271,7 +373,12 @@ function ClusterCard({
   }
 
   return (
-    <li className={entryClass(mode, "stack")}>
+    <li
+      className={`${entryClass(mode, "stack")} ${drag?.hot ? "bg-status" : ""}`}
+      onDragOver={drag?.onDragOver}
+      onDragLeave={drag?.onDragLeave}
+      onDrop={drag?.onDrop}
+    >
       <div className="flex flex-wrap items-center justify-between gap-4">
         <span className="flex items-center gap-3">
           <Icon icon={Network} className="text-muted" />
@@ -377,6 +484,10 @@ function ClusterCard({
                 controlPlane={server.controlPlane}
                 usageLoading={usage === undefined}
                 usage={usage?.servers.find((row) => row.id === server.id)}
+                draggable={drag?.canDrag(server)}
+                lifted={drag?.id === server.id}
+                onDragStart={drag ? (event) => drag.onDragStart(event, server) : undefined}
+                onDragEnd={drag?.onDragEnd}
               />
             </li>
           ))}
