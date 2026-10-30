@@ -136,12 +136,13 @@ export function Plan({
         ref={frame}
         role="group"
         aria-label={label}
-        className="relative flex flex-col gap-2 rounded-md border border-line bg-surface p-2"
+        className="relative flex flex-col gap-4 rounded-md border border-line bg-surface p-2"
         onClick={(event) => {
           if (event.target === event.currentTarget || (event.target as HTMLElement).dataset.band) onSelect(null);
         }}
       >
-        <svg className="pointer-events-none absolute inset-0" width={size.w} height={size.h} aria-hidden>
+        {/* The links run above the bands' backgrounds and under the boxes. */}
+        <svg className="pointer-events-none absolute inset-0 z-[1]" width={size.w} height={size.h} aria-hidden>
           {model.links.map((link, index) => {
             const a = boxes.get(link.from);
             const b = boxes.get(link.to);
@@ -171,7 +172,7 @@ export function Plan({
           const nodes = model.nodes.filter((node) => node.band === band.key);
           if (nodes.length === 0) return null;
           return (
-            <div key={band.key} data-band={band.key} className={`relative flex flex-col gap-2 rounded-md px-3 ${compact ? "py-2" : "pb-4 pt-2"} ${band.key === "storage" || band.key === "machines" ? "bg-canvas" : "bg-status/40"}`}>
+            <div key={band.key} data-band={band.key} className={`relative flex flex-col gap-2 rounded-md px-3 ${compact ? "py-2" : "pb-4 pt-2"} ${band.key === "storage" || band.key === "machines" ? "bg-line/25" : "bg-status/40"}`}>
               {compact ? null : (
                 <span data-band={band.key} className="text-[12px] text-faint">
                   {text(band.label)}
@@ -196,7 +197,7 @@ export function Plan({
                         event.stopPropagation();
                         onSelect(on ? null : node.key);
                       }}
-                      className={`relative z-[1] flex min-w-0 max-w-[220px] items-center gap-2 bg-surface text-left transition-opacity ${node.kind === "internet" ? "rounded-full" : "rounded-md"} ${
+                      className={`relative z-[2] flex min-w-0 max-w-[220px] items-center gap-2 bg-surface text-left transition-opacity ${node.kind === "internet" ? "rounded-full" : "rounded-md"} ${
                         on ? "border-2 border-ink" : node.draft ? "border border-dashed border-faint" : node.kind === "backup" ? "border border-dashed border-[#d6d3d1]" : "border border-[#d6d3d1] dark:border-line"
                       } ${node.band === "storage" || node.band === "machines" ? "bg-canvas" : ""} ${compact ? "px-2.5 py-1" : on ? "px-[11px] py-[7px]" : "px-3 py-2"} ${dim ? "opacity-40" : ""} ${focus}`}
                     >
