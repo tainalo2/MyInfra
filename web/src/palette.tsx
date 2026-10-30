@@ -21,7 +21,7 @@ const pages: { label: MsgKey; to: string; deployOnly?: boolean; adminOnly?: bool
   { label: "nav.packages", to: "/applications/paquets" },
   { label: "nav.providers", to: "/providers", deployOnly: true },
   { label: "nav.dns", to: "/dns", deployOnly: true },
-  { label: "nav.registries", to: "/registres", deployOnly: true },
+  { label: "registry.sectionTitle", to: "/images", deployOnly: true },
   { label: "nav.images", to: "/images", deployOnly: true },
   { label: "nav.ssh", to: "/cles", deployOnly: true },
   { label: "nav.mcp", to: "/assistants" },

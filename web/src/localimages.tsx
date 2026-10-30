@@ -1,11 +1,13 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { HardDrive, Link2, Trash2, Upload } from "lucide-react";
+import { Link2, Trash2, Upload } from "lucide-react";
 import { api, type LocalImage } from "./api";
 import { currentLocale, text, textError } from "./i18n";
 import { ConfirmDialog, Spinner, useToast } from "./kit";
 import { usePoll } from "./poll";
+import { Registries } from "./accounts";
+import { useI18n } from "./lang";
 import { useSession } from "./session";
-import { Button, ErrorText, Field, Group, Icon, Input, LoadingCards, PageTitle, SectionTitle, Select, TextButton, focus } from "./ui";
+import { Button, ErrorText, Field, Group, Icon, Input, LoadingCards, PageTitle, Select, TextButton, focus } from "./ui";
 
 // An image a person built is brought to MyInfra as the archive docker save
 // writes, sent from this page or fetched from a raw URL. MyInfra loads it on
@@ -45,7 +47,25 @@ function send(file: File, name: string, tag: string, onProgress: (share: number)
   });
 }
 
+// Images gathers where the images of the applications come from: private
+// registries and the images sent to MyInfra.
 export function Images() {
+  useI18n();
+  return (
+    <div className="flex max-w-[860px] flex-col gap-12">
+      <div>
+        <PageTitle title={text("nav.images")} />
+        <p className="-mt-6 text-muted md:-mt-8">{text("images.pageIntro")}</p>
+      </div>
+      <section>
+        <Registries section={{ hint: text("registry.sectionHint") }} />
+      </section>
+      <ImportedImages />
+    </div>
+  );
+}
+
+function ImportedImages() {
   const { data: images, setData: setImages, error, reload } = usePoll<LocalImage[]>("/api/images", 0);
   const [removing, setRemoving] = useState<LocalImage | null>(null);
   const toast = useToast();
@@ -65,13 +85,12 @@ export function Images() {
   }
 
   return (
-    <div className="max-w-[860px]">
-      <PageTitle title={text("images.title")} icon={HardDrive} />
-      <p className="mb-8 text-muted">{text("images.intro")}</p>
+    <section>
+      <h2>{images ? `${text("images.title")} · ${images.length}` : text("images.title")}</h2>
+      <p className="mb-4 text-[13px] text-muted">{text("images.intro")}</p>
       {canAdmin ? <AddImage onAdded={added} /> : null}
-      <section className="mt-12">
-        <SectionTitle>{text("images.list")}</SectionTitle>
-        <div className="mt-4">
+      <div>
+        <div className="mt-6">
           {error && !images ? <ErrorText>{error}</ErrorText> : null}
           {images === null && !error ? <LoadingCards /> : null}
           {images && images.length === 0 ? <p className="text-muted">{text("images.empty")}</p> : null}
@@ -109,7 +128,7 @@ export function Images() {
             </ul>
           ) : null}
         </div>
-      </section>
+      </div>
       {canAdmin && removing ? (
         <ConfirmDialog
           title={text("server.removeNamed", { name: removing.ref })}
@@ -121,7 +140,7 @@ export function Images() {
           {text("images.deleteHint")}
         </ConfirmDialog>
       ) : null}
-    </div>
+    </section>
   );
 }
 

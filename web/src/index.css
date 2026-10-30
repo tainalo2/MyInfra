@@ -161,6 +161,12 @@ body {
     background-color: transparent;
   }
 
+  a.row:hover,
+  button.row:hover {
+    text-decoration: none;
+    background-color: var(--color-status);
+  }
+
   .card-link:hover {
     border-color: var(--color-ink);
     background-color: var(--color-status);
@@ -178,4 +184,28 @@ label:has(input[type="radio"]) {
   border-radius: 6px;
   padding: 2px 6px;
   margin-left: -6px;
+}
+
+/* Rows of a list are split by a rule that starts after their tile. */
+.row-group > * + * {
+  background-image: linear-gradient(var(--color-line), var(--color-line));
+  background-size: 100% 1px;
+  background-repeat: no-repeat;
+}
+
+.row-group > * + .row-tiled {
+  background-size: calc(100% - 68px) 1px;
+  background-position: 68px 0;
+}
+
+@media (min-width: 768px) {
+  .row-group > * + .row-tiled {
+    background-size: calc(100% - 72px) 1px;
+    background-position: 72px 0;
+  }
+
+  .row-group > * + .row-phone-tile {
+    background-size: 100% 1px;
+    background-position: 0 0;
+  }
 }

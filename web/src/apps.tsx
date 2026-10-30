@@ -408,7 +408,7 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
                           <LocalImagePicker value={source} onPick={setSource} />
                           <p className="text-faint">
                             {text("images.sourceHint")}{" "}
-                            <Link to="/registres" className="text-ink underline">
+                            <Link to="/images" className="text-ink underline">
                               {text("nav.registries")}
                             </Link>
                             {" · "}

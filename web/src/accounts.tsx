@@ -1,4 +1,5 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState, type ReactNode } from "react";
+import { DnsRecords } from "./dnsrecords";
 import { Cloud, Container, GitBranch, Globe, Plus, Trash2, type LucideIcon } from "lucide-react";
 import { api, type Secret } from "./api";
 import { text } from "./i18n";
@@ -83,6 +84,9 @@ function TokenPage({
   createLabel,
   selectLabel = text("ui.provider"),
   chooseFirst = false,
+  intro,
+  section,
+  after,
 }: {
   title: string;
   icon: LucideIcon;
@@ -92,6 +96,12 @@ function TokenPage({
   createLabel: string;
   selectLabel?: string;
   chooseFirst?: boolean;
+  // intro says what the page holds, under its title.
+  intro?: string;
+  // section shows the list as a part of a larger page, under a heading.
+  section?: { hint: string };
+  // after is shown under the list, once no form is open.
+  after?: ReactNode;
 }) {
   const [secrets, setSecrets] = useState<Secret[]>([]);
   const [name, setName] = useState("");
@@ -185,11 +195,35 @@ function TokenPage({
     toast(text("account.removed", { name: secret.name }));
   }
 
+  const heading = section ? (
+    <div className="mb-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
+      <div>
+        <h2>{loaded ? `${title} · ${secrets.length}` : title}</h2>
+        <p className="text-[13px] text-muted">{section.hint}</p>
+      </div>
+      {creating || editing ? (
+        <TextButton type="button" onClick={close}>
+          {text("common.cancel")}
+        </TextButton>
+      ) : canAdmin && loaded && secrets.length > 0 ? (
+        <TextButton
+          type="button"
+          onClick={() => {
+            setEditing(null);
+            setCreating(true);
+          }}
+        >
+          <Icon icon={Plus} />
+          {createLabel}
+        </TextButton>
+      ) : null}
+    </div>
+  ) : null;
+
   return (
     <>
-      <PageTitle
+      {section ? heading : <PageTitle
         title={title}
-        icon={icon}
         action={
           creating || editing ? (
             <TextButton type="button" onClick={close}>
@@ -211,7 +245,8 @@ function TokenPage({
             </span>
           ) : null
         }
-      />
+      />}
+      {intro && !section ? <p className="-mt-6 mb-8 max-w-[720px] text-muted md:-mt-8">{intro}</p> : null}
       {error ? (
         <div className="mb-8">
           <ErrorText>{error}</ErrorText>
@@ -265,7 +300,15 @@ function TokenPage({
       ) : !loaded ? (
         <LoadingCards />
       ) : secrets.length === 0 ? (
-        canAdmin ? (
+        canAdmin && section ? (
+          <div className="flex flex-col items-start gap-2 rounded-md border border-line bg-surface px-4 py-3">
+            <p className="text-muted">{empty}</p>
+            <TextButton type="button" onClick={() => setCreating(true)}>
+              <Icon icon={Plus} />
+              {createLabel}
+            </TextButton>
+          </div>
+        ) : canAdmin ? (
           <EmptyList message={empty} label={createLabel} onCreate={() => setCreating(true)} />
         ) : (
           <p className="text-muted">{empty}</p>
@@ -320,6 +363,7 @@ function TokenPage({
         ))}
       </ItemList>
       )}
+      {after && !creating && !editing && loaded && secrets.length > 0 ? <div className="mt-12">{after}</div> : null}
       {guideOpen && chosen ? <ProviderGuide kind={kind} provider={provider} onClose={() => setGuideOpen(false)} /> : null}
       {canAdmin && removing ? (
         <ConfirmDialog
@@ -340,6 +384,7 @@ export function Providers() {
   return (
     <TokenPage
       title={text("provider.title")}
+      intro={text("settings.providersHint")}
       icon={Cloud}
       kind="provider_token"
       options={providerOptions}
@@ -376,7 +421,9 @@ function ZoneList({ id }: { id: string }) {
 export function Dns() {
   return (
     <TokenPage
-      title={text("dns.title")}
+      title={text("nav.dns")}
+      intro={text("dns.intro")}
+      after={<DnsRecords />}
       icon={Globe}
       kind="dns_token"
       options={dnsOptions}
@@ -408,10 +455,11 @@ export function Git() {
   );
 }
 
-export function Registries() {
+export function Registries({ section }: { section?: { hint: string } } = {}) {
   return (
     <TokenPage
-      title={text("registry.title")}
+      section={section}
+      title={section ? text("registry.sectionTitle") : text("registry.title")}
       icon={Container}
       kind="registry_token"
       options={registryOptions}

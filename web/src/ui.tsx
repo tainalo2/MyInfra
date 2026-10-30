@@ -663,13 +663,11 @@ function crumbsFor(pathname: string, names: Record<string, string>): Crumb[] {
     "/secrets": "nav.secrets",
     "/providers": "nav.providers",
     "/dns": "nav.dns",
-    "/registres": "nav.registries",
     "/images": "nav.images",
     "/compte": "nav.account",
     "/utilisateurs": "nav.users",
     "/transfert": "nav.transfer",
     "/copies": "nav.copies",
-    "/dns/enregistrements": "nav.dnsRecords",
   };
   const settings: Crumb = { label: text("nav.settings"), to: "/reglages" };
   if (path === "/transfert/suivi") return [settings, { label: text("nav.transfer"), to: "/transfert" }, { label: text("crumb.transferFollow") }];
@@ -716,13 +714,29 @@ export type ListMode = "cards" | "rows";
 
 const listKey = "myinfra-list";
 
+export function readListMode(): ListMode {
+  try {
+    return localStorage.getItem(listKey) === "rows" ? "rows" : "cards";
+  } catch {
+    return "cards";
+  }
+}
+
+export function saveListMode(mode: ListMode) {
+  try {
+    localStorage.setItem(listKey, mode);
+  } catch {
+    /* the choice stays on this page */
+  }
+}
+
 export function useListMode(): [ListMode, () => void] {
-  const [mode, setMode] = useState<ListMode>(() => (localStorage.getItem(listKey) === "rows" ? "rows" : "cards"));
+  const [mode, setMode] = useState<ListMode>(readListMode);
 
   function toggle() {
     setMode((current) => {
       const next = current === "cards" ? "rows" : "cards";
-      localStorage.setItem(listKey, next);
+      saveListMode(next);
       return next;
     });
   }
