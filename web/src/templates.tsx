@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { LayoutTemplate, Plus } from "lucide-react";
+import { LayoutTemplate, Plus, Rocket } from "lucide-react";
 import {
   api,
   peek,
@@ -45,6 +45,7 @@ import {
   SectionTitle,
   Select,
   TextButton,
+  focus,
 } from "./ui";
 
 const emptyServer = (): TemplateServer => ({ name: "", period: "hour", keyIds: [] });
@@ -89,7 +90,7 @@ export function Templates() {
     <>
       <PageTitle
         title={text("nav.templates")}
-        icon={LayoutTemplate}
+        phoneAction={rows && rows.length > 0 && canDeploy ? { icon: Plus, label: text("crumb.newTemplate"), onClick: () => navigate("/templates/nouveau") } : undefined}
         action={
           rows && rows.length > 0 && canDeploy ? (
             <span className="flex items-center gap-4">
@@ -104,6 +105,7 @@ export function Templates() {
           ) : null
         }
       />
+      <p className="-mt-2 mb-8 max-w-[720px] text-muted md:-mt-8">{text("template.intro")}</p>
       <input
         id="template-file"
         type="file"
@@ -134,30 +136,54 @@ export function Templates() {
           <p className="text-muted">{text("template.empty")}</p>
         )
       ) : (
-        <ul className="flex flex-col gap-4">
-          {rows.map((row) => (
-            <li key={row.id} className="relative rounded-md border border-line hover:bg-status">
-              <Link to={`/templates/${row.id}`} className="block p-4 pr-14 text-ink">
-                <span>{row.name}</span>
-                <LibraryTag mark={row.library} />
-                <p className="mt-2 text-muted">{summary(row.body)}</p>
-              </Link>
-              <div className="absolute right-3 top-3">
-                <ActionsMenu label={text("apps.more")}>
-                  {canDeploy ? <MenuItem onClick={() => navigate(`/templates/${row.id}/deploy`)}>{text("template.deploy")}</MenuItem> : null}
-                  <MenuItem onClick={() => void download(row).catch((err) => toast(err instanceof Error ? err.message : text("common.error"), "bad"))}>
-                    {text("template.export")}
-                  </MenuItem>
-                  {canDeploy ? (
-                    <MenuItem tone="danger" onClick={() => setRemoving(row)}>
-                      {text("common.delete")}
+        <section>
+          <h2 className="mb-3">
+            {text("template.mine")} · {rows.length}
+          </h2>
+          <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {rows.map((row) => (
+              <li key={row.id} className="flex h-full flex-col gap-3 rounded-md border border-line bg-surface p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link to={`/templates/${row.id}`} className={`font-medium text-ink ${focus}`}>
+                      {row.name}
+                    </Link>
+                    <LibraryTag mark={row.library} />
+                    <p className="text-[13px] text-muted">{summary(row.body)}</p>
+                  </div>
+                  <ActionsMenu label={text("apps.actionsOf", { name: row.name })}>
+                    <MenuItem onClick={() => navigate(`/templates/${row.id}`)}>{text("template.edit")}</MenuItem>
+                    <MenuItem onClick={() => void download(row).catch((err) => toast(err instanceof Error ? err.message : text("common.error"), "bad"))}>
+                      {text("template.export")}
                     </MenuItem>
-                  ) : null}
-                </ActionsMenu>
-              </div>
-            </li>
-          ))}
-        </ul>
+                    {canDeploy ? (
+                      <MenuItem tone="danger" onClick={() => setRemoving(row)}>
+                        {text("common.delete")}
+                      </MenuItem>
+                    ) : null}
+                  </ActionsMenu>
+                </div>
+                {(row.body.applications ?? []).length > 0 ? (
+                  <ul className="flex flex-wrap gap-1.5" aria-label={text("starter.apps")}>
+                    {(row.body.applications ?? []).map((app, index) => (
+                      <li key={`${app.name}-${index}`} title={app.name}>
+                        <AppLogo slug={app.package?.about?.logo ?? ""} name={app.name} size={24} />
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {canDeploy ? (
+                  <div className="mt-auto border-t border-line pt-3">
+                    <TextButton type="button" onClick={() => navigate(`/templates/${row.id}/deploy`)}>
+                      <Icon icon={Rocket} />
+                      {text("template.deploy")}
+                    </TextButton>
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
       <Starters />
       {removing ? (
@@ -1200,8 +1226,8 @@ function Starters() {
   if (error && !data) return null;
   return (
     <section className="mt-12">
-      <h2 className="mb-2 text-lg">{text("starter.title")}</h2>
-      <p className="mb-6 max-w-[720px] text-muted">{text("starter.intro")}</p>
+      <h2 className="mb-1">{text("starter.title")}</h2>
+      <p className="mb-4 max-w-[720px] text-[13px] text-muted">{text("starter.intro")}</p>
       {shared ? (
         <div className="mb-6 flex flex-wrap gap-2">
           <button
@@ -1224,7 +1250,7 @@ function Starters() {
       ) : (
         <ul className="grid gap-4 md:grid-cols-2">
           {shown.map((starter) => (
-            <li key={starter.id} className="flex flex-col gap-3 rounded-md border border-line p-4">
+            <li key={starter.id} className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4">
               <div>
                 <p className="flex flex-wrap items-baseline gap-2">
                   <span className="font-medium">{starterWords(starter).name}</span>
@@ -1246,11 +1272,11 @@ function Starters() {
                 {" · "}
                 {starterWords(starter).sizing}
               </p>
-              <div className="mt-auto">
-                <Button type="button" variant="secondary" onClick={() => void use(starter)} disabled={busy !== ""}>
+              <div className="mt-auto border-t border-line pt-3">
+                <TextButton type="button" onClick={() => void use(starter)} disabled={busy !== ""}>
                   {busy === starter.id ? <Spinner /> : null}
                   {text("starter.use")}
-                </Button>
+                </TextButton>
               </div>
             </li>
           ))}

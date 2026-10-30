@@ -5,7 +5,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { ChevronDown, ChevronUp, Copy, ExternalLink, Plus, Trash2 } from "lucide-react";
 import { api, type AppRuntime, type AppService, type Application, type CatalogueCard, type CatalogueVersions, type Cluster, type Destruction, type DnsZone, type PackageRow, type Server, fillAddress, followsAddress } from "./api";
 import { localizeCard } from "./catalogue-copy";
-import { knownMessage, text } from "./i18n";
+import { knownMessage, text, type MsgKey } from "./i18n";
 import { Code } from "./code-lazy";
 import { AppLogo } from "./app-logo";
 import { CatalogueBrowser } from "./catalogue";
@@ -29,6 +29,51 @@ type RedundancyPreview = {
   nodes: number;
   storageNodes: number;
 };
+
+const sources: { key: string; label: MsgKey; hint: MsgKey }[] = [
+  { key: "catalogue", label: "common.catalogue", hint: "source.catalogueHint" },
+  { key: "image", label: "source.myImage", hint: "source.imageHint" },
+  { key: "package", label: "package.source", hint: "source.packageHint" },
+];
+
+// SourceChoice picks where a new application comes from: three cards for the
+// usual ways, and the rarer ones below.
+function SourceChoice({ value, onChange }: { value: string; onChange: (next: string) => void }) {
+  const other = !sources.some((item) => item.key === value);
+  return (
+    <div className="flex flex-col gap-2">
+      <div role="radiogroup" aria-label={text("field.source")} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {sources.map((item) => {
+          const on = item.key === value;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => onChange(item.key)}
+              className={`flex flex-col gap-1 rounded-md border bg-surface p-4 text-left ${on ? "border-ink shadow-[inset_0_0_0_1px_var(--color-ink)]" : "border-line"} ${focus}`}
+            >
+              <span className="flex items-center justify-between gap-2">
+                {text(item.label)}
+                <span aria-hidden className={`size-4 rounded-full border ${on ? "border-ink bg-[radial-gradient(circle,var(--color-ink)_0_3px,var(--color-surface)_3.5px)]" : "border-line"}`} />
+              </span>
+              <span className="text-[13px] text-muted">{text(item.hint)}</span>
+            </button>
+          );
+        })}
+      </div>
+      <label className="flex items-center gap-2 self-start text-[13px] text-muted">
+        {text("source.other")}
+        <select value={other ? value : ""} onChange={(event) => event.target.value && onChange(event.target.value)} className={`rounded-md border border-line bg-surface px-2 py-1 ${focus}`}>
+          <option value="">—</option>
+          <option value="git">{text("common.git")}</option>
+          <option value="template">{text("common.template")}</option>
+        </select>
+      </label>
+    </div>
+  );
+}
 
 export function NewApp({ onCancel }: { onCancel?: () => void }) {
   const navigate = useNavigate();
@@ -260,7 +305,6 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
     <>
       <PageTitle
         title={text("crumb.newApp")}
-        icon={Plus}
         action={
           onCancel ? (
             <TextButton type="button" onClick={onCancel}>
@@ -277,22 +321,14 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
               ready: picked,
               content: (
                 <>
-                  <Field label={text("field.source")}>
-                    <Select
-                      value={sourceKind}
-                      onChange={(e) => {
-                        setSourceKind(e.target.value);
-                        setArticle(null);
-                        setChosenPackage(null);
-                      }}
-                    >
-                      <option value="catalogue">{text("common.catalogue")}</option>
-                      <option value="package">{text("package.source")}</option>
-                      <option value="image">{text("common.image")}</option>
-                      <option value="git">{text("common.git")}</option>
-                      <option value="template">{text("common.template")}</option>
-                    </Select>
-                  </Field>
+                  <SourceChoice
+                    value={sourceKind}
+                    onChange={(next) => {
+                      setSourceKind(next);
+                      setArticle(null);
+                      setChosenPackage(null);
+                    }}
+                  />
                   {sourceKind === "catalogue" ? (
                     article ? (
                       <>

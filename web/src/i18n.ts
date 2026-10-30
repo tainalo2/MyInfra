@@ -1275,7 +1275,7 @@ const fr = {
   "err.srvLeCompteDuProviderNEstPlus": "Le compte du provider n'est plus lisible.",
   "err.srvCeProviderNePermetPasDe": "Ce provider ne permet pas de vérifier la machine.",
   "reach.clusterSome": "{count} serveur(s) sur {total} ne répondent plus ou n'existent plus : le cluster peut avoir perdu son plan de contrôle. Retirez ceux qui ont disparu.",
-  "starter.title": "Templates de la bibliothèque",
+  "starter.title": "Bibliothèque",
   "starter.intro": "Des ensembles d'applications qui vont bien ensemble, avec leur cluster. Choisissez-en un, puis indiquez le provider, l'offre, les clés et le domaine : les mots de passe des applications sont créés au déploiement.",
   "starter.apps": "Applications",
   "starter.server": "1 serveur",
@@ -1630,6 +1630,14 @@ const fr = {
   "upd.nothingAlone": "Rien n'est appliqué sans vous.",
   "upd.checkedAt": "Vérifié le {when}",
   "upd.checkShort": "Vérifier",
+  "template.intro": "Des serveurs et leurs applications, déployés ensemble.",
+  "template.mine": "Mes templates",
+  "template.edit": "Modifier",
+  "source.catalogueHint": "Des applications prêtes à installer.",
+  "source.myImage": "Mon image",
+  "source.imageHint": "Une image de vos registres ou importée.",
+  "source.packageHint": "Plusieurs services déployés ensemble.",
+  "source.other": "Autre source",
 } as const;
 
 export type MsgKey = keyof typeof fr;
@@ -2836,7 +2844,7 @@ const en: Record<MsgKey, string> = {
   "err.srvLeCompteDuProviderNEstPlus": "The provider account can no longer be read.",
   "err.srvCeProviderNePermetPasDe": "This provider offers no way to check the machine.",
   "reach.clusterSome": "{count} of {total} server(s) no longer answer or no longer exist: the cluster may have lost its control plane. Remove the ones that are gone.",
-  "starter.title": "Library templates",
+  "starter.title": "Library",
   "starter.intro": "Sets of applications that go well together, with their cluster. Pick one, then choose the provider, the offer, the keys and the domain: the applications' passwords are created at deployment.",
   "starter.apps": "Applications",
   "starter.server": "1 server",
@@ -3194,6 +3202,14 @@ const en: Record<MsgKey, string> = {
   "upd.nothingAlone": "Nothing is applied without you.",
   "upd.checkedAt": "Checked on {when}",
   "upd.checkShort": "Check",
+  "template.intro": "Servers and their applications, deployed together.",
+  "template.mine": "My templates",
+  "template.edit": "Edit",
+  "source.catalogueHint": "Applications ready to install.",
+  "source.myImage": "My image",
+  "source.imageHint": "An image from your registries or imported.",
+  "source.packageHint": "Several services deployed together.",
+  "source.other": "Other source",
 };
 
 const pt: Record<MsgKey, string> = {
@@ -4377,7 +4393,7 @@ const pt: Record<MsgKey, string> = {
   "err.srvLeCompteDuProviderNEstPlus": "A conta do fornecedor já não é legível.",
   "err.srvCeProviderNePermetPasDe": "Este fornecedor não permite verificar a máquina.",
   "reach.clusterSome": "{count} de {total} servidor(es) já não respondem ou já não existem: o cluster pode ter perdido o seu plano de controlo. Remova os que desapareceram.",
-  "starter.title": "Templates da biblioteca",
+  "starter.title": "Biblioteca",
   "starter.intro": "Conjuntos de aplicações que combinam bem, com o seu cluster. Escolha um e indique o fornecedor, a oferta, as chaves e o domínio: as palavras-passe das aplicações são criadas na implementação.",
   "starter.apps": "Aplicações",
   "starter.server": "1 servidor",
@@ -4735,6 +4751,14 @@ const pt: Record<MsgKey, string> = {
   "upd.nothingAlone": "Nada é aplicado sem si.",
   "upd.checkedAt": "Verificado em {when}",
   "upd.checkShort": "Verificar",
+  "template.intro": "Servidores e as suas aplicações, implementados em conjunto.",
+  "template.mine": "Os meus templates",
+  "template.edit": "Editar",
+  "source.catalogueHint": "Aplicações prontas a instalar.",
+  "source.myImage": "A minha imagem",
+  "source.imageHint": "Uma imagem dos seus registos ou importada.",
+  "source.packageHint": "Vários serviços implementados em conjunto.",
+  "source.other": "Outra origem",
 };
 
 const it: Record<MsgKey, string> = {
@@ -5917,7 +5941,7 @@ const it: Record<MsgKey, string> = {
   "err.srvLeCompteDuProviderNEstPlus": "L'account del provider non è più leggibile.",
   "err.srvCeProviderNePermetPasDe": "Questo provider non permette di verificare la macchina.",
   "reach.clusterSome": "{count} server su {total} non rispondono più o non esistono più: il cluster potrebbe aver perso il piano di controllo. Rimuovi quelli scomparsi.",
-  "starter.title": "Template della biblioteca",
+  "starter.title": "Libreria",
   "starter.intro": "Insiemi di applicazioni che stanno bene insieme, con il loro cluster. Scegline uno, poi indica provider, offerta, chiavi e dominio: le password delle applicazioni vengono create al deploy.",
   "starter.apps": "Applicazioni",
   "starter.server": "1 server",
@@ -6275,6 +6299,14 @@ const it: Record<MsgKey, string> = {
   "upd.nothingAlone": "Nulla viene applicato senza di te.",
   "upd.checkedAt": "Verificato il {when}",
   "upd.checkShort": "Verifica",
+  "template.intro": "Server e le loro applicazioni, distribuiti insieme.",
+  "template.mine": "I miei template",
+  "template.edit": "Modifica",
+  "source.catalogueHint": "Applicazioni pronte da installare.",
+  "source.myImage": "La mia immagine",
+  "source.imageHint": "Un'immagine dai tuoi registri o importata.",
+  "source.packageHint": "Più servizi distribuiti insieme.",
+  "source.other": "Altra origine",
 };
 
 const de: Record<MsgKey, string> = {
@@ -7459,7 +7491,7 @@ const de: Record<MsgKey, string> = {
   "err.srvLeCompteDuProviderNEstPlus": "Das Anbieterkonto ist nicht mehr lesbar.",
   "err.srvCeProviderNePermetPasDe": "Dieser Anbieter erlaubt keine Prüfung der Maschine.",
   "reach.clusterSome": "{count} von {total} Server(n) antworten nicht mehr oder existieren nicht mehr: Der Cluster hat vielleicht seine Steuerungsebene verloren. Entfernen Sie die verschwundenen.",
-  "starter.title": "Vorlagen der Bibliothek",
+  "starter.title": "Bibliothek",
   "starter.intro": "Anwendungen, die gut zusammenpassen, mit ihrem Cluster. Wählen Sie eine Vorlage und geben Sie Anbieter, Angebot, Schlüssel und Domain an: Die Passwörter der Anwendungen entstehen beim Deployment.",
   "starter.apps": "Anwendungen",
   "starter.server": "1 Server",
@@ -7817,6 +7849,14 @@ const de: Record<MsgKey, string> = {
   "upd.nothingAlone": "Nichts wird ohne Sie angewendet.",
   "upd.checkedAt": "Geprüft am {when}",
   "upd.checkShort": "Prüfen",
+  "template.intro": "Server und ihre Anwendungen, gemeinsam bereitgestellt.",
+  "template.mine": "Meine Templates",
+  "template.edit": "Bearbeiten",
+  "source.catalogueHint": "Anwendungen, bereit zur Installation.",
+  "source.myImage": "Mein Image",
+  "source.imageHint": "Ein Image aus Ihren Registries oder importiert.",
+  "source.packageHint": "Mehrere Dienste, gemeinsam bereitgestellt.",
+  "source.other": "Andere Quelle",
 };
 
 const tables: Record<Lang, Record<MsgKey, string>> = { fr, en, pt, it, de };

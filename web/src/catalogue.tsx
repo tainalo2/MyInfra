@@ -7,7 +7,7 @@ import { knownMessage, text } from "./i18n";
 import { AppLogo } from "./app-logo";
 import { CommunityTag } from "./library-tag";
 import { ImageOrigin, imageSource } from "./registries";
-import { Button, ErrorText, Fold, Icon, Input, LoadingCards, LoadingLines, PageTitle, TextButton, useTrail } from "./ui";
+import { Button, ErrorText, Fold, Icon, Input, LoadingCards, LoadingLines, PageTitle, TextButton, useTrail, focus } from "./ui";
 
 export function CatalogueBrowser({ selected, onSelect }: { selected: string; onSelect: (article: CatalogueCard) => void }) {
   const [groups, setGroups] = useState<CatalogueGroup[] | null>(null);
@@ -106,7 +106,8 @@ function Filter({ label, active, onClick }: { label: string; active: boolean; on
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-md border px-3 py-1 ${active ? "border-ink bg-status text-ink" : "border-line bg-surface text-muted"}`}
+      aria-pressed={active}
+      className={`shrink-0 rounded-md border px-3 py-1 ${active ? "border-ink bg-ink text-canvas" : "border-line bg-surface text-muted"} ${focus}`}
     >
       {label}
     </button>
