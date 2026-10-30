@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"myinfra/internal/store"
 )
@@ -114,6 +115,73 @@ func mcpUpdateTools() []mcpTool {
 				}, func() (string, error) {
 					return c.callJSON(http.MethodPost, "/api/updates/myinfra", map[string]any{})
 				})
+			},
+		},
+		{
+			Name: "list_quiet_updates", Title: "Mises à jour sans interruption", Role: store.RoleRead,
+			Description: "Les mises à jour qui passent sans interrompre aucune application (jamais une version majeure), et le réglage des correctifs de nuit.",
+			Schema:      object(nil, map[string]any{}),
+			Routes:      []string{"GET /api/updates/quiet", "GET /api/updates/auto"},
+			Run: func(c *mcpCall, _ json.RawMessage) (string, error) {
+				var quiet, auto any
+				if err := c.get("/api/updates/quiet", &quiet); err != nil {
+					return "", err
+				}
+				if err := c.get("/api/updates/auto", &auto); err != nil {
+					return "", err
+				}
+				return asJSON(map[string]any{"quiet": quiet, "nightly": auto}), nil
+			},
+		},
+		{
+			Name: "apply_quiet_updates", Title: "Appliquer les mises à jour sans interruption", Role: store.RoleDeploy, Write: true, Destructive: true,
+			Description: "Lance ensemble les mises à jour qui passent sans interruption : copies de la bibliothèque, applications, serveurs, et MyInfra en dernier quand il tourne en deux copies. Deux appels : le premier liste ce qui sera lancé et rend un code ; le second, après l'accord explicite de l'utilisateur, lance tout.",
+			Schema:      object(nil, map[string]any{"confirmation": confirmationArg}),
+			Routes:      []string{"GET /api/updates/quiet", "POST /api/updates/quiet"},
+			Run: func(c *mcpCall, raw json.RawMessage) (string, error) {
+				args, err := decodeArgs[struct{ Confirmation string }](raw)
+				if err != nil {
+					return "", err
+				}
+				return c.confirmed(raw, args.Confirmation, func() (string, string, error) {
+					var view struct {
+						Updates []quietItem `json:"updates"`
+					}
+					if err := c.get("/api/updates/quiet", &view); err != nil {
+						return "", "", err
+					}
+					if len(view.Updates) == 0 {
+						return "", "", failf("Aucune mise à jour ne passe sans interruption pour le moment.")
+					}
+					names := make([]string, 0, len(view.Updates))
+					for _, item := range view.Updates {
+						names = append(names, item.Name)
+					}
+					text := "Mises à jour lancées sans interruption : " + strings.Join(names, ", ") + ".\n"
+					return text, strings.Join(names, "|"), nil
+				}, func() (string, error) {
+					return c.callJSON(http.MethodPost, "/api/updates/quiet", map[string]any{})
+				})
+			},
+		},
+		{
+			Name: "set_nightly_updates", Title: "Correctifs de nuit", Role: store.RoleDeploy, Write: true,
+			Description: "Active ou coupe l'application chaque nuit des mises à jour qui passent sans interruption, à partir d'une heure (0 à 23). Les versions majeures et ce qui interrompt une application attendent toujours l'accord de l'utilisateur.",
+			Schema:      object([]string{"enabled"}, map[string]any{"enabled": flag("true pour activer, false pour couper."), "hour": map[string]any{"type": "integer", "minimum": 0, "maximum": 23, "description": "Heure de départ, de 0 à 23."}}),
+			Routes:      []string{"PUT /api/updates/auto"},
+			Run: func(c *mcpCall, raw json.RawMessage) (string, error) {
+				args, err := decodeArgs[struct {
+					Enabled bool
+					Hour    *int
+				}](raw)
+				if err != nil {
+					return "", err
+				}
+				body := map[string]any{"enabled": args.Enabled}
+				if args.Hour != nil {
+					body["hour"] = *args.Hour
+				}
+				return c.callJSON(http.MethodPut, "/api/updates/auto", body)
 			},
 		},
 		{

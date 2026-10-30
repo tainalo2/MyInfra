@@ -37,6 +37,7 @@ Règles :
 - Les services qui montent un disque partagé tournent en une copie, sur un même nœud : à l'installation sur un cluster, choisissez ce nœud avec disk_node d'après la place libre (get_cluster_usage).
 - Les identifiants de provider, de DNS, de Git et de registre d'images s'ajoutent, se remplacent ou se retirent par les outils dédiés. Le secret s'écrit une fois et ne se relit jamais : ne le redemandez pas à MyInfra, ne le répétez pas dans ce que vous montrez, et un champ absent ne veut pas dire qu'il est vide. Un provider qui a encore des serveurs ne se retire pas.
 - Une machine avec carte graphique se cherche avec find_server_offers (min_gpus, gpu) : le résultat indique le nombre et le modèle.
+- Appliquer ensemble les mises à jour sans interruption (apply_quiet_updates) se fait en deux temps : la liste de ce qui sera lancé, puis le code après accord. Une version majeure n'en fait jamais partie.
 - Lancer un modèle (run_template) peut acheter ses machines : deux temps, comme un achat. Le dépôt d'un fichier (sauvegarde, archive d'image) et le téléchargement d'une clé privée se font dans l'interface.`
 
 type rpcMessage struct {

@@ -29,13 +29,14 @@ Ouvrir `/mcp` dans un navigateur mène à la page des réglages.
 
 ## Confirmations
 
-Acheter des machines, relier une machine existante par SSH, supprimer une machine, un cluster, une application, un paquet, un compte (provider, DNS, Git) ou un registre privé, et toute modification DNS qui touche l'existant se font **en deux temps** :
+Acheter des machines, relier une machine existante par SSH, supprimer une machine, un cluster, une application, un paquet, un compte (provider, DNS, Git) ou un registre privé, appliquer ensemble les mises à jour sans interruption, et toute modification DNS qui touche l'existant se font **en deux temps** :
 
 1. Le premier appel ne fait rien. Il rend un récapitulatif et un code (`ABC-DEF`) :
    - pour un achat : les machines, le provider, le lieu, le prix, le coût théorique actuel et après achat, le budget ;
    - pour une machine existante : son adresse, les clés SSH utilisées, le cluster et ce qui y sera installé ;
    - pour une suppression : ce qui sera détruit et l'économie ;
-   - pour le DNS : les enregistrements avant et après.
+   - pour le DNS : les enregistrements avant et après ;
+   - pour les mises à jour sans interruption : ce qui sera lancé.
 2. L'assistant montre le récapitulatif et attend votre accord.
 3. Le second appel, avec le code, agit. Le code n'est valable :
    - que pour le même jeton, le même outil et les mêmes arguments ;
@@ -108,9 +109,10 @@ Exemples :
 
 ### Exploiter
 
-- « Pourquoi Immich ne démarre pas ? » · « Redémarre le pod web de Nextcloud. » · « Mets Ghost en pause. »
+- « Pourquoi Immich ne démarre pas ? » · « Redémarre le pod web de Nextcloud. » · « Redémarre Vikunja. » · « Mets Ghost en pause. »
 - « Ajoute files.mondomaine.fr à Nextcloud. » · « Change SMTP_HOST de Ghost. » · « Passe Vikunja à trois copies. »
 - « Quelles mises à jour sont disponibles, et quel est leur impact ? Fais celle de Gitea. »
+- « Applique tout ce qui passe sans interruption. » L'assistant liste ce qui sera lancé et attend l'accord. « Active les correctifs de nuit à partir de 4 h. »
 
 ### Identifiants
 

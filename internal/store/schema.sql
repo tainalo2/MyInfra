@@ -489,3 +489,13 @@ CREATE TABLE IF NOT EXISTS mcp_confirmations (
 UPDATE applications a SET replicas = s.most
 FROM (SELECT application_id, max(replicas) AS most FROM application_services GROUP BY application_id) s
 WHERE s.application_id = a.id AND a.replicas < s.most;
+
+-- Nightly patches: the updates that pass without interruption are applied
+-- each night from the hour chosen. It stays with the copy that drives the
+-- machines, as the updates found do.
+CREATE TABLE IF NOT EXISTS auto_updates (
+    owner_id text PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
+    enabled boolean NOT NULL DEFAULT false,
+    hour integer NOT NULL DEFAULT 3 CHECK (hour >= 0 AND hour < 24),
+    last_run timestamptz
+);

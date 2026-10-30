@@ -498,6 +498,26 @@ func mcpAppTools() []mcpTool {
 			},
 		},
 		{
+			Name: "restart_application", Title: "Redémarrer une application", Role: store.RoleDeploy, Write: true,
+			Description: "Redémarre toutes les copies d'une application sans rien changer. Dans un cluster, les copies sont remplacées l'une après l'autre : une application à plusieurs copies continue de répondre. Sur une machine seule, elle s'arrête quelques secondes.",
+			Schema:      object([]string{"application"}, map[string]any{"application": appArg}),
+			Routes:      []string{"GET /api/applications", "POST /api/applications/{id}/restart"},
+			Run: func(c *mcpCall, raw json.RawMessage) (string, error) {
+				args, err := decodeArgs[struct{ Application string }](raw)
+				if err != nil {
+					return "", err
+				}
+				app, err := c.application(args.Application)
+				if err != nil {
+					return "", err
+				}
+				if err := c.send(http.MethodPost, "/api/applications/"+url.PathEscape(app.ID)+"/restart", map[string]any{}, nil); err != nil {
+					return "", err
+				}
+				return app.Name + " redémarre.", nil
+			},
+		},
+		{
 			Name: "get_update_impact", Title: "Impact d'une mise à jour", Role: store.RoleRead,
 			Description: "Les mises à jour disponibles (applications, machines, clusters, MyInfra, bibliothèque). Avec une cible, ce que sa mise à jour changerait : coupure, versions, paquets, redémarrage, k3s.",
 			Schema: object(nil, map[string]any{

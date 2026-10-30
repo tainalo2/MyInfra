@@ -24,6 +24,9 @@ type overviewPod struct {
 	Phase    string `json:"phase"`
 	Reason   string `json:"reason,omitempty"`
 	Ready    bool   `json:"ready"`
+	// CPU in millicores and Memory in bytes, as the last sample read them.
+	CPU    uint64 `json:"cpu,omitempty"`
+	Memory uint64 `json:"memory,omitempty"`
 }
 
 type overviewView struct {
@@ -104,6 +107,7 @@ func overviewPods(servers []store.Server, apps []appView, samples map[string]usa
 			pods = append(pods, overviewPod{
 				Name: pod.Name, AppID: app.ID, ServerID: nodeServer(servers, app.ClusterID, pod.Node),
 				Service: pod.Service, Phase: pod.Phase, Reason: pod.Reason, Ready: pod.Ready,
+				CPU: pod.CPU, Memory: pod.Memory,
 			})
 		}
 	}
