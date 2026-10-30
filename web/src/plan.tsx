@@ -488,7 +488,7 @@ export function PlanPanel({
       {children}
     </PhoneList>
     <div className="hidden md:block">
-      <div ref={box} className="sticky top-0 z-10 -mx-2 flex flex-col gap-3 bg-canvas px-2 pb-3 pt-2">
+      <div ref={box} className="sticky top-0 z-10 -mx-2 md:top-[49px] flex flex-col gap-3 bg-canvas px-2 pb-3 pt-2">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <h2 className="flex items-baseline gap-2">
             {text("plan.title")}

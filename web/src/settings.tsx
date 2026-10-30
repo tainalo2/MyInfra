@@ -108,7 +108,7 @@ export function SettingsPage() {
             </a>
           ))}
         </nav>
-        <div className="flex min-w-0 flex-[999_1_480px] flex-col gap-10">
+        <div className="flex min-w-0 flex-[999_1_480px] flex-col gap-8">
           {shown.map((group) => (
             <RowGroup key={group.id} id={group.id} title={text(group.title)}>
               {group.entries.map((entry) => (

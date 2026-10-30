@@ -469,8 +469,14 @@ export function Shell() {
   const deploys = useOpenDeployments();
   const [override, setOverride] = useState<Crumb[] | null>(null);
   const counts = useCounts(location.pathname);
+  const names = useCrumbNames(location.pathname);
+  // The trail is read once here: the bar of a phone, the sticky trail of a
+  // wide screen and the page titles all follow it.
+  const crumbs = override ?? crumbsFor(location.pathname, names);
+  const trail = crumbs.length >= 2;
   return (
     <ToastHost>
+    <CrumbsContext.Provider value={crumbs}>
     <UpdatesHost>
     <ActivityHost>
     <TrailContext.Provider value={{ override, setOverride }}>
@@ -508,9 +514,9 @@ export function Shell() {
             </Suspense>
           </main>
         ) : (
-          <main className="min-w-0 flex-1 overflow-y-auto px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)] md:px-6 md:py-12">
+          <main className="min-w-0 flex-1 overflow-y-auto px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)] md:px-6 md:pb-12 md:pt-0">
             <MobileBar />
-            <div className="mx-auto w-full max-w-[960px]">
+            <div className={`mx-auto w-full max-w-[960px] ${trail ? "" : "md:pt-8"}`}>
               <ReadOnlyBanner />
               <TransferBanner />
               <ReplicaBanner />
@@ -530,15 +536,15 @@ export function Shell() {
     </TrailContext.Provider>
     </ActivityHost>
     </UpdatesHost>
+    </CrumbsContext.Provider>
     </ToastHost>
   );
 }
 
+const CrumbsContext = createContext<Crumb[]>([]);
+
 function useCrumbs() {
-  const { pathname } = useLocation();
-  const { override } = useContext(TrailContext);
-  const names = useCrumbNames(pathname);
-  return override ?? crumbsFor(pathname, names);
+  return useContext(CrumbsContext);
 }
 
 function Breadcrumb() {
@@ -547,7 +553,8 @@ function Breadcrumb() {
   // A trail of one step says nothing the title does not.
   if (crumbs.length < 2) return null;
   return (
-    <nav aria-label={text("crumb.trail")} className="breadcrumb mb-8 hidden md:block">
+    // The trail stays at the top while the page scrolls: it says where one is.
+    <nav aria-label={text("crumb.trail")} className="breadcrumb sticky top-0 z-20 -mx-6 mb-4 hidden border-b border-line bg-canvas px-6 py-3 md:block">
       <ol className="flex flex-wrap items-center gap-x-2 gap-y-1">
         {crumbs.map((crumb, index) => {
           const last = index === crumbs.length - 1;
@@ -774,9 +781,12 @@ export function PageTitle({
       document.title = "MyInfra";
     };
   }, [title]);
+  // Under a trail, a wide screen reads the page's name in the trail: the
+  // title stays for readers and for the phone, which has no trail.
+  const trail = useContext(CrumbsContext).length >= 2;
   return (
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 md:mb-12">
-      <h1 className="flex min-w-0 items-center gap-3 text-[28px] font-medium leading-[1.2] md:text-2xl md:leading-8">
+    <div className={`mb-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 ${trail ? (action ? "md:mb-6 md:justify-end" : "md:mb-0") : "md:mb-6"}`}>
+      <h1 className={`flex min-w-0 items-center gap-3 text-[28px] font-medium leading-[1.2] md:text-2xl md:leading-8 ${trail ? "md:sr-only" : ""}`}>
         {mark ? mark : icon ? <Icon icon={icon} /> : null}
         {title}
         {note ? <span className="hidden self-end pb-1 text-[15px] font-normal leading-normal text-muted sm:inline">{note}</span> : null}

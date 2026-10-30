@@ -400,8 +400,8 @@ function PackageStart() {
           </TextButton>
         }
       />
-      <div className="flex max-w-[860px] flex-col gap-10">
-        <p className="-mt-2 text-muted md:-mt-8">{text("package.whatHint")}</p>
+      <div className="flex max-w-[860px] flex-col gap-8">
+        <p className="text-muted">{text("package.whatHint")}</p>
         {about ? <PackagesIntro open /> : null}
         <section className="flex flex-col gap-3">
           <div>
@@ -896,7 +896,7 @@ export function PackageEditor() {
           </span>
         </section>
       ) : null}
-      {!id ? <p className="-mt-4 mb-8 max-w-[720px] text-muted md:-mt-8">{text("package.newHint")}</p> : null}
+      {!id ? <p className="mb-6 max-w-[720px] text-muted">{text("package.newHint")}</p> : null}
       {guide ? <PackageGuide onClose={() => setGuide(false)} /> : null}
       <form onSubmit={save} className="flex flex-col gap-8">
         {warnings.length > 0 ? <WarningList warnings={warnings} /> : null}
@@ -952,7 +952,7 @@ function VisualEditor({
   const known = !only || pkg.services.some((service) => service.name === only);
 
   return (
-    <div className="flex flex-col gap-10">
+    <div className="flex flex-col gap-8">
       {pkg.services.length > 0 ? (
         <PlanPanel model={packagePlan(pkg)} label={text("plan.labelPackage")} whole={text("plan.wholePackage")} selected={known ? chosen : null} onSelect={setChosen} />
       ) : null}

@@ -592,8 +592,8 @@ export function UpdatesPage() {
       {!view ? (
         <LoadingLines lines={4} label={text("nav.updates")} />
       ) : (
-        <div className="flex flex-col gap-10">
-          <div className="-mt-2 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 md:-mt-8">
+        <div className="flex flex-col gap-8">
+          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
             <p className="text-muted">
               {items.length === 0 ? text("upd.none") : securityCount > 0 ? text("upd.countSecurity", { count: items.length, security: securityCount }) : text("upd.count", { count: items.length })}{" "}
               {text("upd.nothingAlone")}

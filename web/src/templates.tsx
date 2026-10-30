@@ -107,7 +107,7 @@ export function Templates() {
           ) : null
         }
       />
-      <p className="-mt-2 mb-8 max-w-[720px] text-muted md:-mt-8">{text("template.intro")}</p>
+      <p className="mb-6 max-w-[720px] text-muted">{text("template.intro")}</p>
       <input
         id="template-file"
         type="file"
@@ -273,7 +273,7 @@ export function TemplateEditor() {
   return (
     <>
       <PageTitle title={id ? name || "Template" : text("crumb.newTemplate")} icon={LayoutTemplate} />
-      <form onSubmit={save} className="flex max-w-[720px] flex-col gap-10">
+      <form onSubmit={save} className="flex max-w-[720px] flex-col gap-8">
         <Steps
           steps={[
             {
@@ -831,7 +831,7 @@ export function TemplateRunPage() {
           <ErrorText>{error}</ErrorText>
         </div>
       ) : null}
-      <p className={`-mt-2 mb-8 md:-mt-8 ${run.status === "failed" ? "text-bad" : "text-muted"}`}>
+      <p className={`mb-6 ${run.status === "failed" ? "text-bad" : "text-muted"}`}>
         {label}
         {run.status === "running" ? ` · ${text("progress.leave")}` : ""}
       </p>
@@ -1451,7 +1451,7 @@ function Starters() {
 
   if (error && !data) return null;
   return (
-    <section className="mt-12">
+    <section className="mt-8">
       <h2 className="mb-1">{text("starter.title")}</h2>
       <p className="mb-4 max-w-[720px] text-[13px] text-muted">{text("starter.intro")}</p>
       {shared ? (

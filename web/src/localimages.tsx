@@ -52,10 +52,10 @@ function send(file: File, name: string, tag: string, onProgress: (share: number)
 export function Images() {
   useI18n();
   return (
-    <div className="flex max-w-[860px] flex-col gap-12">
+    <div className="flex max-w-[860px] flex-col gap-8">
       <div>
         <PageTitle title={text("nav.images")} />
-        <p className="-mt-6 text-muted md:-mt-8">{text("images.pageIntro")}</p>
+        <p className="text-muted">{text("images.pageIntro")}</p>
       </div>
       <section>
         <Registries section={{ hint: text("registry.sectionHint") }} />

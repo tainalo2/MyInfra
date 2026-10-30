@@ -98,8 +98,8 @@ export function McpPage() {
           ) : null
         }
       />
-      <div className="flex max-w-[860px] flex-col gap-10">
-        <p className="-mt-2 text-muted md:-mt-8">{text("mcp.introApi")}</p>
+      <div className="flex max-w-[860px] flex-col gap-8">
+        <p className="text-muted">{text("mcp.introApi")}</p>
         {error ? <ErrorText>{error}</ErrorText> : null}
 
         <section className="flex flex-col gap-2">

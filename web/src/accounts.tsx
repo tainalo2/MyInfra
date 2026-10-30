@@ -253,7 +253,7 @@ function TokenPage({
           ) : null
         }
       />}
-      {intro && !section ? <p className="-mt-6 mb-8 max-w-[720px] text-muted md:-mt-8">{intro}</p> : null}
+      {intro && !section ? <p className="mb-6 max-w-[720px] text-muted">{intro}</p> : null}
       {error ? (
         <div className="mb-8">
           <ErrorText>{error}</ErrorText>
@@ -393,9 +393,9 @@ function TokenPage({
         ))}
       </ItemList>
       )}
-      {after && !creating && !editing && loaded && secrets.length > 0 ? <div className="mt-12">{after}</div> : null}
+      {after && !creating && !editing && loaded && secrets.length > 0 ? <div className="mt-8">{after}</div> : null}
       {kind === "provider_token" && canAdmin && !creating && !editing && loaded && secrets.length > 0 ? (
-        <section className="mt-12">
+        <section className="mt-8">
           <h2 className="mb-3">{text("provider.others")}</h2>
           <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
             {options

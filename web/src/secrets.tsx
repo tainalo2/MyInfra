@@ -328,7 +328,7 @@ export function AppSecretLinks({ appId }: { appId: string }) {
   const granted = (rows ?? []).filter((row) => row.apps.some((app) => app.id === appId));
 
   return (
-    <section className="mt-10">
+    <section className="mt-8">
       <SectionTitle>{text("nav.secrets")}</SectionTitle>
       {rows === null ? (
         <p className="mt-4 text-muted">{text("secret.loading")}</p>

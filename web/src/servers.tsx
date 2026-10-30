@@ -858,7 +858,7 @@ export function ServerPage() {
       <div className={linked ? "flex flex-col gap-8 lg:flex-row lg:items-start" : ""}>
       {linked ? (
         // A running server keeps what matters in sight while the page scrolls.
-        <aside aria-label={text("server.essentials")} className="flex flex-col gap-4 rounded-md border border-line bg-surface p-4 lg:sticky lg:top-4 lg:order-last lg:w-[320px] lg:shrink-0">
+        <aside aria-label={text("server.essentials")} className="flex flex-col gap-4 rounded-md border border-line bg-surface p-4 lg:sticky lg:top-[65px] lg:order-last lg:w-[320px] lg:shrink-0">
           <p aria-hidden className="flex items-center gap-2 text-[18px] font-medium">
             <Icon icon={ServerIcon} className="text-muted" />
             <span className="truncate">{server.name}</span>
@@ -964,7 +964,7 @@ export function ServerPage() {
           <UsageMeters sample={runtime} />
         </div>
       ) : null}
-      <section className="mt-10 max-w-[720px]">
+      <section className="mt-8 max-w-[720px]">
         <Tabs
           label={text("server.parts")}
           active={shownPart}

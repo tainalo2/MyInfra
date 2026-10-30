@@ -665,7 +665,7 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
         />
       </form>
       {picked ? (
-        <aside aria-label={text("newApp.recap")} className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4 lg:sticky lg:top-4 lg:w-[300px] lg:shrink-0">
+        <aside aria-label={text("newApp.recap")} className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4 lg:sticky lg:top-[65px] lg:w-[300px] lg:shrink-0">
           <h2>{text("newApp.recap")}</h2>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[13px]">
             {(
@@ -858,7 +858,7 @@ export function ApplicationPage() {
   return (
     <div className="max-w-[720px]">
       <PageTitle title={app.name} mark={<AppLogo slug={app.logo ?? ""} name={app.name} size={40} />} />
-      <div className="-mt-3 flex flex-col gap-2 md:-mt-8">
+      <div className="flex flex-col gap-2">
         <StatusBadge status={health} />
         {health !== "running" && health !== "paused" && app.runDetail ? <p className="text-muted">{app.runDetail}</p> : null}
         {address ? (
@@ -899,13 +899,13 @@ export function ApplicationPage() {
         <UsageMeters sample={runtime} />
       </div>
       {(app.services ?? []).length > 0 && !app.guarded ? (
-        <div className="mt-10">
+        <div className="mt-8">
           <PlanPanel model={appPlan(app, runtime)} label={text("plan.label")} whole={text("plan.whole")} selected={planned} onSelect={setPlanned}>
             <PlanDetail app={app} pods={pods} selected={planned} />
           </PlanPanel>
         </div>
       ) : null}
-      <section className="mt-10">
+      <section className="mt-8">
         <SectionTitle>{text("field.services")}</SectionTitle>
         {app.guarded ? (
           <div className="mt-4 flex flex-col gap-3">
@@ -930,7 +930,7 @@ export function ApplicationPage() {
           <p className="mt-4 text-muted">{text("apps.noService")}</p>
         )}
       </section>
-      <div className="mt-10">
+      <div className="mt-8">
         <Fold title={text("apps.instances")} defaultOpen={failing}>
           <ul className="flex flex-col">
             {pods.map((pod) => {
@@ -953,7 +953,7 @@ export function ApplicationPage() {
         </Fold>
       </div>
       {(app.domains && app.domains.length > 0) || mutable ? (
-        <section className="mt-10">
+        <section className="mt-8">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <SectionTitle>{text("apps.addresses")}</SectionTitle>
             {mutable ? (
@@ -998,7 +998,7 @@ export function ApplicationPage() {
         </section>
       ) : null}
       {exposed.length > 0 ? (
-        <section className="mt-10">
+        <section className="mt-8">
           <SectionTitle>{text("apps.exposed")}</SectionTitle>
           <p className="mt-2 text-muted">{text("apps.exposedHint")}</p>
           <ul className="mt-2 flex flex-col">
@@ -1015,7 +1015,7 @@ export function ApplicationPage() {
       {mutable ? <AppVariables app={app} onSaved={() => void appPoll.reload()} /> : null}
       {mutable ? <AppSecretLinks appId={app.id} /> : null}
       {app.guarded && canDeploy ? (
-        <div className="mt-10">
+        <div className="mt-8">
           <TextButton type="button" tone="danger" onClick={() => setConfirm("delete")}>
             <Icon icon={Trash2} />
             {text("common.delete")}
@@ -1094,7 +1094,7 @@ function AppVariables({ app, onSaved }: { app: Application; onSaved: () => void 
   }
 
   return (
-    <div className="mt-10">
+    <div className="mt-8">
       <Fold title={text("app.variables")}>
         <ul className="flex flex-col">
           {entries.map(([name, value]) => (

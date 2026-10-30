@@ -356,7 +356,7 @@ export function Tabs<K extends string>({
 // keeps its own address, to share or come back to.
 export function SectionTabs({ items, label }: { items: { to: string; label: string; active: boolean }[]; label: string }) {
   return (
-    <nav aria-label={label} className="-mx-1 mb-8 flex gap-1 overflow-x-auto border-b border-line md:-mt-6">
+    <nav aria-label={label} className="-mx-1 mb-6 flex gap-1 overflow-x-auto border-b border-line">
       {items.map((item) => (
         <Link
           key={item.to}
