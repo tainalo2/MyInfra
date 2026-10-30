@@ -314,7 +314,8 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
           ) : null
         }
       />
-      <form onSubmit={onSubmit} className="flex max-w-[720px] flex-col gap-6">
+      <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
+      <form onSubmit={onSubmit} className="flex min-w-0 max-w-[720px] flex-1 flex-col gap-6">
         <Steps
           steps={[
             {
@@ -663,6 +664,29 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
           }
         />
       </form>
+      {picked ? (
+        <aside aria-label={text("newApp.recap")} className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4 lg:sticky lg:top-4 lg:w-[300px] lg:shrink-0">
+          <h2>{text("newApp.recap")}</h2>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[13px]">
+            {(
+              [
+                [text("dnsrec.col.app"), sourceKind === "catalogue" && article ? `${article.name} ${tag}` : sourceKind === "package" && chosenPackage ? chosenPackage.name : source || "—"],
+                [text("field.name"), name || "—"],
+                [text("dnsrec.col.name"), names.filter((item) => item.subdomain.trim()).map((item) => `${item.subdomain}.${item.zone}`).join(", ") || "—"],
+                [text("newApp.where"), destination === "server" ? servers.find((server) => server.id === serverId)?.name ?? "—" : clusters.find((cluster) => cluster.id === clusterId)?.name ?? "—"],
+                [text("redundancy.copies"), String(destination === "cluster" ? copies : 1)],
+              ] as [string, string][]
+            ).map(([label, value]) => (
+              <div key={label} className="contents">
+                <dt className="text-muted">{label}</dt>
+                <dd className="min-w-0 break-words">{value}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="text-[12px] text-muted">{text("newApp.noPurchase")}</p>
+        </aside>
+      ) : null}
+      </div>
     </>
   );
 }

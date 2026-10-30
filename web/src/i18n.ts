@@ -1712,6 +1712,9 @@ const fr = {
   "catalogue.sheet": "Fiche",
   "catalogue.site": "Site officiel",
   "catalogue.same": "Dans la même catégorie",
+  "newApp.recap": "Ce qui va être créé",
+  "newApp.where": "Où",
+  "newApp.noPurchase": "L'app tourne sur vos serveurs : aucun serveur n'est commandé en plus.",
 } as const;
 
 export type MsgKey = keyof typeof fr;
@@ -3358,6 +3361,9 @@ const en: Record<MsgKey, string> = {
   "catalogue.sheet": "Sheet",
   "catalogue.site": "Official site",
   "catalogue.same": "In the same category",
+  "newApp.recap": "What will be created",
+  "newApp.where": "Where",
+  "newApp.noPurchase": "The app runs on your servers: no extra server is ordered.",
 };
 
 const pt: Record<MsgKey, string> = {
@@ -4981,6 +4987,9 @@ const pt: Record<MsgKey, string> = {
   "catalogue.sheet": "Ficha",
   "catalogue.site": "Site oficial",
   "catalogue.same": "Na mesma categoria",
+  "newApp.recap": "O que vai ser criado",
+  "newApp.where": "Onde",
+  "newApp.noPurchase": "A app corre nos seus servidores: nenhum servidor extra é encomendado.",
 };
 
 const it: Record<MsgKey, string> = {
@@ -6603,6 +6612,9 @@ const it: Record<MsgKey, string> = {
   "catalogue.sheet": "Scheda",
   "catalogue.site": "Sito ufficiale",
   "catalogue.same": "Nella stessa categoria",
+  "newApp.recap": "Cosa verrà creato",
+  "newApp.where": "Dove",
+  "newApp.noPurchase": "L'app gira sui tuoi server: nessun server aggiuntivo viene ordinato.",
 };
 
 const de: Record<MsgKey, string> = {
@@ -8227,6 +8239,9 @@ const de: Record<MsgKey, string> = {
   "catalogue.sheet": "Eintrag",
   "catalogue.site": "Offizielle Website",
   "catalogue.same": "In derselben Kategorie",
+  "newApp.recap": "Was erstellt wird",
+  "newApp.where": "Wo",
+  "newApp.noPurchase": "Die App läuft auf Ihren Servern: Es wird kein zusätzlicher Server bestellt.",
 };
 
 const tables: Record<Lang, Record<MsgKey, string>> = { fr, en, pt, it, de };
