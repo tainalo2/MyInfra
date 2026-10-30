@@ -209,3 +209,15 @@ label:has(input[type="radio"]) {
     background-position: 0 0;
   }
 }
+
+/* The links of the chosen element of a plan flow: it says what is being
+   worked on, so it stays even when less motion is asked for. */
+@keyframes plan-flow {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+
+.plan-flow {
+  animation: plan-flow 1.1s linear infinite;
+}

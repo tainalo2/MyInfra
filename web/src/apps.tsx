@@ -3,7 +3,8 @@ import { ConfirmDialog, Sheet, Spinner, StatusBadge, Steps, appHealth, useToast 
 import { usePoll } from "./poll";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ChevronDown, ChevronUp, Copy, ExternalLink, Plus, Trash2 } from "lucide-react";
-import { api, type AppRuntime, type AppService, type Application, type CatalogueCard, type CatalogueVersions, type Cluster, type Destruction, type DnsZone, type PackageRow, type Server, fillAddress, followsAddress } from "./api";
+import { api, type AppRuntime, type AppService, type Application, type CatalogueCard, type CatalogueVersions, type Cluster, type Destruction, type DnsZone, type PackageRow, type PodRuntime, type Server, fillAddress, followsAddress } from "./api";
+import { PlanPanel, appPlan, serviceOfPod } from "./plan";
 import { localizeCard } from "./catalogue-copy";
 import { knownMessage, text, type MsgKey } from "./i18n";
 import { Code } from "./code-lazy";
@@ -702,6 +703,53 @@ function PackageChoice({ onSelect }: { onSelect: (row: PackageRow) => void }) {
   );
 }
 
+// PlanDetail says what the chosen element of the plan is, under the plan:
+// a service's pods, the addresses behind the proxy, a disk's service.
+function PlanDetail({ app, pods, selected }: { app: Application; pods: PodRuntime[]; selected: string | null }) {
+  if (!selected) return null;
+  const services = app.services ?? [];
+  if (selected.startsWith("svc:")) {
+    const name = selected.slice(4);
+    const service = services.find((svc) => svc.name === name);
+    const mine = pods.filter((pod) => serviceOfPod(services, pod.name) === name);
+    return (
+      <div className="mb-8 flex flex-col gap-3 rounded-md border border-line bg-surface p-4">
+        {service ? <p className="break-all font-mono text-[13px] text-muted">{service.image.replace(/@sha256:[a-f0-9]+$/, "")}</p> : null}
+        {(service?.exposed ?? []).length > 0 ? <p className="text-[13px] text-warn">{text("plan.link.direct")} · {(service?.exposed ?? []).join(", ")}</p> : null}
+        <ul className="flex flex-col">
+          {mine.map((pod) => {
+            const state = podHealth(pod);
+            return (
+              <li key={pod.name} className="flex flex-wrap items-baseline justify-between gap-x-4 border-t border-line py-2 first:border-t-0">
+                <span className="break-all font-mono text-[13px]">{pod.name}</span>
+                <span className="text-[13px] text-muted">
+                  {pod.server} · <span className={state.tone}>{state.text}</span>
+                </span>
+              </li>
+            );
+          })}
+          {mine.length === 0 ? <li className="text-muted">{text("common.noPod")}</li> : null}
+        </ul>
+      </div>
+    );
+  }
+  if (selected === "proxy" || selected === "internet") {
+    const hosts = (app.domains ?? []).filter((domain) => domain.kind === "custom" || domain.kind === "default");
+    return (
+      <ul className="mb-8 flex flex-col rounded-md border border-line bg-surface p-4">
+        {hosts.map((domain) => (
+          <li key={domain.hostname} className="flex flex-wrap items-baseline justify-between gap-x-4 border-t border-line py-2 first:border-t-0">
+            <span className="break-all font-mono text-[13px]">{domain.hostname}</span>
+            <StatusBadge status={domain.status} />
+          </li>
+        ))}
+        {hosts.length === 0 ? <li className="text-muted">{text("names.none")}</li> : null}
+      </ul>
+    );
+  }
+  return null;
+}
+
 export function ApplicationPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -715,6 +763,7 @@ export function ApplicationPage() {
   const [confirm, setConfirm] = useState<"" | "delete" | "pause">("");
   const [pausing, setPausing] = useState(false);
   const [editingNames, setEditingNames] = useState(false);
+  const [planned, setPlanned] = useState<string | null>(null);
   const { updating, transferring } = useActivity();
   const { canDeploy, canAdmin } = useSession();
 
@@ -824,6 +873,13 @@ export function ApplicationPage() {
       <div className="mt-8">
         <UsageMeters sample={runtime} />
       </div>
+      {(app.services ?? []).length > 0 && !app.guarded ? (
+        <div className="mt-10">
+          <PlanPanel model={appPlan(app, runtime)} label={text("plan.label")} whole={text("plan.whole")} selected={planned} onSelect={setPlanned}>
+            <PlanDetail app={app} pods={pods} selected={planned} />
+          </PlanPanel>
+        </div>
+      ) : null}
       <section className="mt-10">
         <SectionTitle>{text("field.services")}</SectionTitle>
         {app.guarded ? (

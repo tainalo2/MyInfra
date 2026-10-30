@@ -5,6 +5,7 @@ import { ApiError, api, peek, type Package, type PackageAbout, type PackageDisk,
 import { Code, languageOf } from "./code-lazy";
 import { knownMessage, text, type MsgKey } from "./i18n";
 import { useI18n } from "./lang";
+import { PlanPanel, packagePlan } from "./plan";
 import { AppsTabs, ConfirmDialog, Sheet, Tabs, useToast } from "./kit";
 import { useSession } from "./session";
 import { ToolInstall } from "./tools";
@@ -804,10 +805,17 @@ function VisualEditor({
   function set<K extends keyof Package>(key: K, value: Package[K]) {
     onChange({ ...pkg, [key]: value });
   }
+  // Choosing an element of the plan opens its settings just below it.
+  const [chosen, setChosen] = useState<string | null>(null);
+  const only = chosen?.startsWith("svc:") ? chosen.slice(4) : "";
+  const known = !only || pkg.services.some((service) => service.name === only);
 
   return (
     <div className="flex flex-col gap-10">
-      <section className="flex max-w-[720px] flex-col gap-4">
+      {pkg.services.length > 0 ? (
+        <PlanPanel model={packagePlan(pkg)} label={text("plan.labelPackage")} whole={text("plan.wholePackage")} selected={known ? chosen : null} onSelect={setChosen} />
+      ) : null}
+      <section className={`flex max-w-[720px] flex-col gap-4 ${only && known ? "md:hidden" : ""}`}>
         <Field label={text("package.name")}>
           <Input value={pkg.name} onChange={(e) => set("name", e.target.value)} required />
         </Field>
@@ -825,7 +833,7 @@ function VisualEditor({
         <SharedDisks disks={pkg.disks ?? []} onChange={(disks) => set("disks", disks.length > 0 ? disks : undefined)} />
         {general.length > 0 ? <ProblemList problems={general} /> : null}
       </section>
-      <ServicesEditor services={pkg.services} onChange={(services) => set("services", services)} problems={problems} disks={(pkg.disks ?? []).map((disk) => disk.name).filter(Boolean)} />
+      <ServicesEditor services={pkg.services} onChange={(services) => set("services", services)} problems={problems} disks={(pkg.disks ?? []).map((disk) => disk.name).filter(Boolean)} only={known ? only : ""} />
     </div>
   );
 }
@@ -876,7 +884,9 @@ function ServicesEditor({
   onChange,
   problems,
   disks,
+  only = "",
 }: {
+  only?: string;
   services: PackageService[];
   onChange: (services: PackageService[]) => void;
   problems: PackageProblem[];
@@ -913,10 +923,12 @@ function ServicesEditor({
           {text("package.addService")}
         </TextButton>
       </div>
-      <Dependencies services={services} />
+      <div className={only ? "md:hidden" : ""}>
+        <Dependencies services={services} />
+      </div>
       {services.map((service, index) => (
+        <div key={index} className={only && service.name !== only ? "md:hidden" : ""}>
         <ServiceCard
-          key={index}
           service={service}
           others={services.filter((_, at) => at !== index).map((other) => other.name)}
           disks={shared}
@@ -924,6 +936,7 @@ function ServicesEditor({
           onChange={(next) => setService(index, next)}
           onRemove={services.length > 1 ? () => removeService(index) : undefined}
         />
+        </div>
       ))}
     </section>
   );
