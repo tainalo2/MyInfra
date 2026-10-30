@@ -10,6 +10,7 @@ import { hourlyRate, money, podCpu, size, usageText } from "./measure";
 import { HostingFields, HostingMark, ServerHosting, ServerSSHUser, emptyHosting, hostingLabel } from "./hosting";
 import { OfferFields, OfferStorage, cheapestOffer, chosenStorage, formatPrice, machineLine } from "./offers";
 import { knownPlaces, placeLabel, placeOf } from "./places";
+import { ProgressSteps } from "./progress";
 import { ProviderSelect } from "./provider-select";
 import { TofuFiles } from "./tofu";
 import { EventList } from "./world";
@@ -988,33 +989,11 @@ const emptyServerRuntime: ServerRuntime = { measured: false, cpu: { used: 0, tot
 
 function DeployTimeline({ steps, live }: { steps: DeployStep[]; live: boolean }) {
   return (
-    <ol className="mt-8 max-w-[720px]" aria-live={live ? "polite" : "off"}>
-      {steps.map((step, index) => (
-        <li key={step.id} className="flex gap-4">
-          <span className="flex flex-col items-center">
-            <span className={stepDot(step.status)} />
-            {index < steps.length - 1 ? <span className="min-h-8 w-px flex-1 bg-line" /> : null}
-          </span>
-          <span className="pb-6">
-            <span className={step.status === "pending" ? "text-faint" : step.status === "failed" ? "text-bad" : step.status === "done" ? "text-ok" : ""}>
-              {knownMessage(step.label)}
-            </span>
-            {step.detail ? <span className="mt-1 block text-faint">{knownMessage(step.detail)}</span> : null}
-          </span>
-        </li>
-      ))}
-    </ol>
+    <div className="mt-8 max-w-[720px] rounded-md border border-line bg-surface p-4 md:p-6" aria-live={live ? "polite" : "off"}>
+      <ProgressSteps steps={steps.map((step) => ({ key: step.id, status: step.status, title: knownMessage(step.label), detail: step.detail ? knownMessage(step.detail) : undefined }))} />
+    </div>
   );
 }
-
-function stepDot(status: string) {
-  if (status === "running") return "mt-1.5 size-2.5 animate-pulse rounded-full bg-warn";
-  if (status === "done") return "mt-1.5 size-2.5 rounded-full bg-ok";
-  if (status === "failed") return "mt-1.5 size-2.5 rounded-full bg-bad";
-  return "mt-1.5 size-2.5 rounded-full border border-line";
-}
-
-
 
 function exploitation(iso: string | undefined, now: number) {
   if (!iso) return text("ui.dureeDExploitationInconnue");

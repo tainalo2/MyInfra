@@ -21,7 +21,8 @@ import { CancelDeployment } from "./deployments";
 import { currentLang, text, knownMessage } from "./i18n";
 import { Code } from "./code-lazy";
 import { OfferFields, OfferStorage, formatPrice } from "./offers";
-import { ConfirmDialog, Sheet, Spinner, Steps, useToast } from "./kit";
+import { ConfirmDialog, Sheet, Spinner, StatusBadge, Steps, useToast } from "./kit";
+import { ProgressSteps } from "./progress";
 import { usePoll } from "./poll";
 import { AppLogo } from "./app-logo";
 import { CommunityTag, LibraryTag } from "./library-tag";
@@ -625,46 +626,52 @@ export function TemplateRunPage() {
 
   return (
     <>
-      <PageTitle title={text("template.follow")} icon={LayoutTemplate} />
+      <PageTitle
+        title={text("template.follow")}
+        mark={null}
+        note={<StatusBadge status={run.status === "done" ? "running" : run.status === "running" ? "deploying" : run.status} />}
+      />
       {error ? (
         <div className="mb-8">
           <ErrorText>{error}</ErrorText>
         </div>
       ) : null}
-      <p className={`mb-8 ${run.status === "failed" ? "text-bad" : run.status === "done" ? "text-ok" : "text-muted"}`}>{label}</p>
-      <ol className="max-w-[720px]">
-        {run.steps.map((step, index) => (
-          <li key={index} className="border-t border-line py-4">
-            <div className="flex items-baseline justify-between gap-4">
-              <span>
-                {step.kind === "server" && step.resourceId ? (
-                  <Link to={`/serveurs/${step.resourceId}`} className="underline">
-                    {step.name}
-                  </Link>
-                ) : step.kind === "application" && step.resourceId ? (
-                  <Link to={`/applications/${step.resourceId}`} className="underline">
-                    {step.name}
-                  </Link>
-                ) : (
-                  step.name
-                )}
-              </span>
-              <span className={step.status === "failed" ? "text-bad" : step.status === "done" ? "text-ok" : "text-muted"}>{stepText(step.status)}</span>
-            </div>
-            {step.detail ? <p className="mt-1 text-faint">{knownMessage(step.detail)}</p> : null}
-            {step.deploy && step.deploy.length > 0 ? (
-              <ul className="mt-3 flex flex-col gap-1">
-                {step.deploy.map((item) => (
-                  <li key={item.id} className={item.status === "failed" ? "text-bad" : item.status === "done" ? "text-ok" : "text-muted"}>
-                    {item.label}
-                    {item.detail ? ` · ${knownMessage(item.detail)}` : ""}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </li>
-        ))}
-      </ol>
+      <p className={`-mt-2 mb-8 md:-mt-8 ${run.status === "failed" ? "text-bad" : "text-muted"}`}>
+        {label}
+        {run.status === "running" ? ` · ${text("progress.leave")}` : ""}
+      </p>
+      <div className="max-w-[720px] rounded-md border border-line bg-surface p-4 md:p-6">
+        <ProgressSteps
+          steps={run.steps.map((step, index) => ({
+            key: String(index),
+            status: step.status,
+            title:
+              step.kind === "server" && step.resourceId ? (
+                <Link to={`/serveurs/${step.resourceId}`} className={`text-ink ${focus}`}>
+                  {step.name}
+                </Link>
+              ) : step.kind === "application" && step.resourceId ? (
+                <Link to={`/applications/${step.resourceId}`} className={`text-ink ${focus}`}>
+                  {step.name}
+                </Link>
+              ) : (
+                step.name
+              ),
+            detail: step.detail ? knownMessage(step.detail) : undefined,
+            children:
+              step.deploy && step.deploy.length > 0 ? (
+                <ul className="mt-1 flex flex-col gap-0.5 text-[13px]">
+                  {step.deploy.map((item) => (
+                    <li key={item.id} className={item.status === "failed" ? "text-bad" : item.status === "done" ? "text-ok" : "text-muted"}>
+                      {item.label}
+                      {item.detail ? ` · ${knownMessage(item.detail)}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              ) : null,
+          }))}
+        />
+      </div>
       {run.status === "failed" ? (
         <div className="mt-8">
           <Button type="button" onClick={() => void resume()}>
@@ -1136,14 +1143,6 @@ function summary(body: TemplateBody) {
   const apps = body.applications?.length ?? 0;
   const cluster = body.clusterName ? `${text("field.cluster")} ${body.clusterName}` : text("ui.clusterAuLancement");
   return `${cluster} · ${text(servers === 1 ? "template.serversOne" : "template.serversMany", { count: servers })} · ${text(apps === 1 ? "template.appsOne" : "template.appsMany", { count: apps })}`;
-}
-
-function stepText(status: string) {
-  if (status === "cancelled") return text("deploy.cancelled");
-  if (status === "done") return text("status.done");
-  if (status === "failed") return text("status.failed");
-  if (status === "running") return text("ui.enCours");
-  return text("status.pending");
 }
 
 function parseVariables(value: string) {
