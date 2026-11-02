@@ -105,6 +105,7 @@ export function Keys() {
   return (
     <>
       <PageTitle
+        inTree
         title={text("key.title")}
         icon={KeyRound}
         action={

@@ -78,9 +78,9 @@ test.describe.serial("MyInfra", () => {
   test("the screens follow the chosen language", async ({ page }) => {
     await signIn(page);
     await page.goto("/clusters");
-    await page.locator("header select").first().selectOption("en");
+    await page.locator("aside select").first().selectOption("en");
     await expect(page.getByRole("heading", { name: "Standalone machines" })).toBeVisible();
-    await page.locator("header select").first().selectOption("fr");
+    await page.locator("aside select").first().selectOption("fr");
   });
 
   test("the overview shows the map, switches views and keeps them in the address", async ({ page }) => {

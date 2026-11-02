@@ -47,6 +47,7 @@ import {
   SectionTitle,
   Select,
   TextButton,
+  cardGrid,
   focus,
 } from "./ui";
 
@@ -142,7 +143,7 @@ export function Templates() {
           <h2 className="mb-3">
             {text("template.mine")} · {rows.length}
           </h2>
-          <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <ul className={cardGrid}>
             {rows.map((row) => (
               <li key={row.id} className="flex h-full flex-col gap-3 rounded-md border border-line bg-surface p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -272,7 +273,7 @@ export function TemplateEditor() {
 
   return (
     <>
-      <PageTitle title={id ? name || "Template" : text("crumb.newTemplate")} icon={LayoutTemplate} />
+      <PageTitle inTree title={id ? name || "Template" : text("crumb.newTemplate")} icon={LayoutTemplate} />
       <form onSubmit={save} className="flex max-w-[720px] flex-col gap-8">
         <Steps
           steps={[
@@ -475,7 +476,7 @@ export function TemplateLaunch() {
 
   return (
     <>
-      <PageTitle title={template.name} icon={LayoutTemplate} />
+      <PageTitle inTree title={template.name} icon={LayoutTemplate} />
       {error ? (
         <div className="mb-8">
           <ErrorText>{error}</ErrorText>
@@ -823,6 +824,7 @@ export function TemplateRunPage() {
   return (
     <>
       <PageTitle
+        inTree
         title={text("template.follow")}
         mark={null}
         note={<StatusBadge status={run.status === "done" ? "running" : run.status === "running" ? "deploying" : run.status} />}
@@ -1475,7 +1477,7 @@ function Starters() {
       {!data ? (
         <LoadingLines lines={3} />
       ) : (
-        <ul className="grid gap-4 md:grid-cols-2">
+        <ul className={cardGrid}>
           {shown.map((starter) => (
             <li key={starter.id} className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4">
               <div>

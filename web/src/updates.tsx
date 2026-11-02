@@ -409,9 +409,9 @@ export function VersionNote() {
   if (!version) return null;
   const next = version.latest && version.latest !== version.current && view?.updates.some((item) => item.kind === "myinfra");
   return (
-    <Link to="/mises-a-jour" className={`flex items-center gap-2 rounded-md text-[12px] text-faint ${focus}`}>
-      <span>MyInfra {version.current}</span>
-      {next ? <span className="rounded-full border border-line px-1.5 text-link">{text("upd.version.new", { version: version.latest ?? "" })}</span> : null}
+    <Link to="/mises-a-jour" className={`flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md text-[12px] text-faint ${focus}`}>
+      <span className="whitespace-nowrap">MyInfra {version.current}</span>
+      {next ? <span className="whitespace-nowrap rounded-full border border-line px-1.5 text-link">{text("upd.version.new", { version: version.latest ?? "" })}</span> : null}
     </Link>
   );
 }

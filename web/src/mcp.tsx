@@ -87,6 +87,7 @@ export function McpPage() {
   return (
     <>
       <PageTitle
+        inTree
         title={text("nav.mcp")}
         phoneAction={!creating ? { icon: Plus, label: text("mcp.tokenNew"), onClick: () => setCreating(true) } : undefined}
         action={

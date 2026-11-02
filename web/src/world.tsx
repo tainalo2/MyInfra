@@ -52,19 +52,24 @@ export function HistoryPage() {
   const list = base.filter(test);
   return (
     <>
-      <PageTitle title={text("nav.activity")} />
-      <div className="mb-8 flex flex-wrap gap-3">
-        <div className="min-w-0 flex-[1_1_260px]">
-          <Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={text("activity.search")} aria-label={text("activity.search")} />
-        </div>
-        <div className="w-full sm:w-[200px]">
-          <Select aria-label={text("activity.period")} value={period} onChange={(event) => setPeriod(event.target.value as keyof typeof periods)}>
-            <option value="week">{text("activity.period.week")}</option>
-            <option value="month">{text("activity.period.month")}</option>
-            <option value="all">{text("activity.period.all")}</option>
-          </Select>
-        </div>
-      </div>
+      {/* The search and the period head the page, beside its name. */}
+      <PageTitle
+        title={text("nav.activity")}
+        action={
+          <div className="flex w-full flex-wrap gap-3 sm:w-auto">
+            <div className="min-w-0 flex-[1_1_260px] sm:w-[280px] sm:flex-none">
+              <Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={text("activity.search")} aria-label={text("activity.search")} />
+            </div>
+            <div className="w-full sm:w-[200px]">
+              <Select aria-label={text("activity.period")} value={period} onChange={(event) => setPeriod(event.target.value as keyof typeof periods)}>
+                <option value="week">{text("activity.period.week")}</option>
+                <option value="month">{text("activity.period.month")}</option>
+                <option value="all">{text("activity.period.all")}</option>
+              </Select>
+            </div>
+          </div>
+        }
+      />
       <RunningList />
       <div role="group" aria-label={text("activity.type")} className="-mx-4 mb-6 flex gap-2 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:px-0">
         {kinds.map((item) => (
@@ -99,7 +104,7 @@ function dayOf(iso: string) {
 function EventRow({ event }: { event: InfraEvent }) {
   const bad = event.level === "bad" || event.level === "error";
   return (
-    <li className="flex gap-4 border-t border-line px-4 py-3 first:border-t-0">
+    <li className="flex gap-4 border-t border-line py-3 first:border-t-0">
       <span className="w-12 shrink-0 font-mono text-[13px] text-muted">
         {new Date(event.at).toLocaleTimeString(currentLocale(), { hour: "2-digit", minute: "2-digit" })}
       </span>
@@ -161,7 +166,7 @@ export function EventList({ server, cluster, source, limit }: { server?: string;
 }
 
 // EventFeed is the one way a history shows: events by day, each with its
-// time, what happened, on what and by whom.
+// time, what happened, on what and by whom, in rows under a line.
 export function EventFeed({ events }: { events: InfraEvent[] }) {
   const groups: { day: string; rows: InfraEvent[] }[] = [];
   for (const event of events) {
@@ -175,7 +180,7 @@ export function EventFeed({ events }: { events: InfraEvent[] }) {
       {groups.map((group) => (
         <section key={group.day}>
           <h3 className="mb-2 text-[13px] text-muted">{group.day}</h3>
-          <ul className="overflow-hidden rounded-md border border-line bg-surface">
+          <ul className="border-t border-line">
             {group.rows.map((event) => (
               <EventRow key={event.id} event={event} />
             ))}

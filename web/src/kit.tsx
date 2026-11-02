@@ -315,11 +315,15 @@ export function Tabs<K extends string>({
   active,
   onChange,
   label,
+  aside,
 }: {
   tabs: { key: K; label: string; mark?: boolean }[];
   active: K;
   onChange: (key: K) => void;
   label: string;
+  // aside sets actions on the line of the tabs, on the right. On a narrow
+  // screen they go above it, the tabs staying on the line.
+  aside?: ReactNode;
 }) {
   function onKey(event: React.KeyboardEvent<HTMLDivElement>) {
     if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
@@ -329,8 +333,8 @@ export function Tabs<K extends string>({
     onChange(next.key);
     event.currentTarget.querySelector<HTMLButtonElement>(`[data-tab="${next.key}"]`)?.focus();
   }
-  return (
-    <div role="tablist" aria-label={label} onKeyDown={onKey} className="-mx-1 flex gap-1 overflow-x-auto border-b border-line">
+  const list = (
+    <div role="tablist" aria-label={label} onKeyDown={onKey} className={`-mx-1 flex gap-1 ${aside ? "" : "overflow-x-auto border-b border-line"}`}>
       {tabs.map((tab) => (
         <button
           key={tab.key}
@@ -348,6 +352,13 @@ export function Tabs<K extends string>({
           {tab.mark ? <span className="size-1.5 rounded-full bg-bad" role="img" aria-label={text("package.hasProblem")} /> : null}
         </button>
       ))}
+    </div>
+  );
+  if (!aside) return list;
+  return (
+    <div className="flex flex-wrap-reverse items-end justify-between gap-x-6 gap-y-2 border-b border-line">
+      {list}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pb-1.5">{aside}</div>
     </div>
   );
 }

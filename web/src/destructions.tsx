@@ -30,7 +30,7 @@ export function DestructionPage() {
 
   return (
     <>
-      <PageTitle title={job.name} icon={Trash2} />
+      <PageTitle inTree title={job.name} icon={Trash2} />
       <p className="mb-2 text-muted">{kindLabel(job.kind)}</p>
       {error ? (
         <div className="mb-8">

@@ -87,6 +87,7 @@ export function UsersPage() {
   return (
     <>
       <PageTitle
+        inTree
         title={text("nav.users")}
         icon={Users}
         action={

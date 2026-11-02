@@ -305,6 +305,7 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
   return (
     <>
       <PageTitle
+        inTree
         title={text("crumb.newApp")}
         action={
           onCancel ? (
@@ -665,7 +666,7 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
         />
       </form>
       {picked ? (
-        <aside aria-label={text("newApp.recap")} className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4 lg:sticky lg:top-[65px] lg:w-[300px] lg:shrink-0">
+        <aside aria-label={text("newApp.recap")} className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4 lg:sticky lg:top-4 lg:w-[300px] lg:shrink-0">
           <h2>{text("newApp.recap")}</h2>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[13px]">
             {(
@@ -855,49 +856,57 @@ export function ApplicationPage() {
   const locked = app.rollout === "updating" || updating(app.serverId, app.clusterId) || transferring;
   const mutable = canDeploy && !app.guarded;
 
+  // The head of the page: the application with its actions on the right,
+  // then its state and where it answers, and its measures beside them on a
+  // wide screen. Below the plan, the settings keep the width of a form.
+  const actions = mutable ? (
+    <div className="flex flex-wrap items-center gap-3">
+      {address ? (
+        <a href={`https://${address}`} target="_blank" rel="noreferrer" className={`inline-flex min-h-11 items-center gap-2 rounded-md bg-ink px-4 py-2 text-canvas sm:min-h-0 ${focus}`}>
+          <Icon icon={ExternalLink} />
+          {text("apps.open")}
+        </a>
+      ) : null}
+      <Button type="button" variant="secondary" onClick={() => (app.paused ? void setPaused(false) : setConfirm("pause"))} disabled={pausing || locked}>
+        {pausing ? <Spinner /> : null}
+        {app.paused ? text("home.resume") : text("apps.pauseAction")}
+      </Button>
+      <ActionsMenu label={text("apps.more")}>
+        {app.sourceKind === "image" && !locked ? <MenuItem onClick={() => navigate(`/applications/${app.id}/services`)}>{text("appServices.edit")}</MenuItem> : null}
+        {!app.paused && !locked ? <MenuItem onClick={() => setConfirm("restart")}>{text("apps.restart")}</MenuItem> : null}
+        <MenuItem onClick={() => void keepAsPackage()}>{text("appServices.keep")}</MenuItem>
+        <MenuItem tone="danger" onClick={() => setConfirm("delete")}>
+          {text("common.delete")}
+        </MenuItem>
+      </ActionsMenu>
+    </div>
+  ) : null;
+
   return (
-    <div className="max-w-[720px]">
-      <PageTitle title={app.name} mark={<AppLogo slug={app.logo ?? ""} name={app.name} size={40} />} />
-      <div className="flex flex-col gap-2">
-        <StatusBadge status={health} />
-        {health !== "running" && health !== "paused" && app.runDetail ? <p className="text-muted">{app.runDetail}</p> : null}
-        {address ? (
-          <a href={`https://${address}`} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-2 break-all font-mono text-[13px] underline">
-            {address}
-            <Icon icon={ExternalLink} />
-          </a>
-        ) : null}
-        <p className="break-all text-muted">
-          {app.source.replace(/@sha256:[a-f0-9]+$/, "")} · {where}
-        </p>
+    <div>
+      <PageTitle title={app.name} mark={<AppLogo slug={app.logo ?? ""} name={app.name} size={48} />} action={actions} />
+      <div className="flex flex-col gap-6 md:-mt-3 xl:flex-row xl:items-center xl:justify-between xl:gap-12">
+        <div className="flex min-w-0 flex-col gap-1.5 md:pl-[60px]">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <StatusBadge status={health} />
+            {address ? (
+              <a href={`https://${address}`} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-2 break-all font-mono text-[13px] underline">
+                {address}
+                <Icon icon={ExternalLink} />
+              </a>
+            ) : null}
+          </div>
+          {health !== "running" && health !== "paused" && app.runDetail ? <p className="text-muted">{app.runDetail}</p> : null}
+          <p className="break-all text-muted">
+            {app.source.replace(/@sha256:[a-f0-9]+$/, "")} · {where}
+          </p>
+        </div>
+        <div className="xl:w-[560px] xl:shrink-0">
+          <UsageMeters sample={runtime} />
+        </div>
       </div>
       {mutable ? <UpdateLock locked={locked && !transferring} /> : null}
       {mutable ? <AppUpdateNotice app={app} onStarted={() => void appPoll.reload()} /> : null}
-      {mutable ? (
-        <div className="mt-6 flex flex-wrap items-center gap-3">
-          {address ? (
-            <a href={`https://${address}`} target="_blank" rel="noreferrer" className={`inline-flex min-h-11 items-center gap-2 rounded-md bg-ink px-4 py-2 text-canvas sm:min-h-0 ${focus}`}>
-              <Icon icon={ExternalLink} />
-              {text("apps.open")}
-            </a>
-          ) : null}
-          <Button type="button" variant="secondary" onClick={() => (app.paused ? void setPaused(false) : setConfirm("pause"))} disabled={pausing || locked}>
-            {pausing ? <Spinner /> : null}
-            {app.paused ? text("home.resume") : text("apps.pauseAction")}
-          </Button>
-          <ActionsMenu label={text("apps.more")}>
-            {app.sourceKind === "image" && !locked ? <MenuItem onClick={() => navigate(`/applications/${app.id}/services`)}>{text("appServices.edit")}</MenuItem> : null}
-            {!app.paused && !locked ? <MenuItem onClick={() => setConfirm("restart")}>{text("apps.restart")}</MenuItem> : null}
-            <MenuItem onClick={() => void keepAsPackage()}>{text("appServices.keep")}</MenuItem>
-            <MenuItem tone="danger" onClick={() => setConfirm("delete")}>
-              {text("common.delete")}
-            </MenuItem>
-          </ActionsMenu>
-        </div>
-      ) : null}
-      <div className="mt-8">
-        <UsageMeters sample={runtime} />
-      </div>
       {(app.services ?? []).length > 0 && !app.guarded ? (
         <>
           <div className="mt-8" />
@@ -906,123 +915,125 @@ export function ApplicationPage() {
           </PlanPanel>
         </>
       ) : null}
-      <section className="mt-8">
-        <SectionTitle>{text("field.services")}</SectionTitle>
-        {app.guarded ? (
-          <div className="mt-4 flex flex-col gap-3">
-            <p className="text-muted">{text("apps.selfCopies")}</p>
-            {(app.services ?? []).map((service) => (
-              <p key={service.name} className="font-mono text-[13px]">
-                {service.name} · {service.image} · {text(service.replicas === 1 ? "apps.copyOne" : "apps.copyMany", { count: service.replicas || 1 })}
-              </p>
-            ))}
-          </div>
-        ) : app.services && app.services.length > 0 ? (
-          mutable ? <ImageEditor app={app} onChange={setApp} /> : (
-            <ul className="mt-4 flex flex-col gap-2">
-              {app.services.map((service) => (
-                <li key={service.name} className="font-mono text-[13px] text-muted">
-                  {service.name} · {service.image}
+      <div className="max-w-[720px]">
+        <section className="mt-8">
+          <SectionTitle>{text("field.services")}</SectionTitle>
+          {app.guarded ? (
+            <div className="mt-4 flex flex-col gap-3">
+              <p className="text-muted">{text("apps.selfCopies")}</p>
+              {(app.services ?? []).map((service) => (
+                <p key={service.name} className="font-mono text-[13px]">
+                  {service.name} · {service.image} · {text(service.replicas === 1 ? "apps.copyOne" : "apps.copyMany", { count: service.replicas || 1 })}
+                </p>
+              ))}
+            </div>
+          ) : app.services && app.services.length > 0 ? (
+            mutable ? <ImageEditor app={app} onChange={setApp} /> : (
+              <ul className="mt-4 flex flex-col gap-2">
+                {app.services.map((service) => (
+                  <li key={service.name} className="font-mono text-[13px] text-muted">
+                    {service.name} · {service.image}
+                  </li>
+                ))}
+              </ul>
+            )
+          ) : (
+            <p className="mt-4 text-muted">{text("apps.noService")}</p>
+          )}
+        </section>
+        <div className="mt-8">
+          <Fold title={text("apps.instances")} defaultOpen={failing}>
+            <ul className="flex flex-col">
+              {pods.map((pod) => {
+                const state = podHealth(pod);
+                return (
+                  <li key={pod.name} className="border-t border-line py-4">
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+                      <span className="break-all font-mono text-[13px]">{pod.name}</span>
+                      <span className={state.tone}>{state.text}</span>
+                    </div>
+                    <p className="mt-1 text-muted">
+                      {pod.server} · {podCpu(pod.cpu)} · {size(pod.memory)} · {size(pod.disk)}
+                    </p>
+                    <PodActions appId={app.id} name={pod.name} failed={podFailed(pod)} />
+                  </li>
+                );
+              })}
+            </ul>
+            {!runtime ? <LoadingLines lines={2} label={text("apps.instances")} /> : pods.length === 0 ? <p className="text-muted">{runtime.measured ? text("common.noPod") : text("common.noMeasure")}</p> : null}
+          </Fold>
+        </div>
+        {(app.domains && app.domains.length > 0) || mutable ? (
+          <section className="mt-8">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <SectionTitle>{text("apps.addresses")}</SectionTitle>
+              {mutable ? (
+                <TextButton type="button" onClick={() => setEditingNames(true)} disabled={locked}>
+                  {text("names.edit")}
+                </TextButton>
+              ) : null}
+            </div>
+            <ul className="mt-2 flex flex-col">
+              {listedDomains.length === 0 ? (
+                <li className="border-t border-line py-4 text-muted">{text("names.none")}</li>
+              ) : null}
+              {listedDomains.map((domain) => (
+                <li key={domain.hostname} className="border-t border-line py-4">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+                    <span className="flex min-w-0 flex-wrap items-baseline gap-x-3">
+                      <a href={`https://${domain.hostname}`} target="_blank" rel="noreferrer" className="break-all font-mono text-[13px] underline">
+                        {domain.hostname}
+                      </a>
+                      {publics.others.length > 0 ? <span className="text-[13px] text-muted">{domain.service || publics.main}</span> : null}
+                    </span>
+                    <StatusBadge status={domain.status} />
+                  </div>
+                  {domain.detail ? <p className={`mt-2 ${domain.status === "ready" ? "text-muted" : "text-bad"}`}>{domain.detail}</p> : null}
+                  {domain.record ? (
+                    <div className="mt-3 flex flex-wrap items-center gap-4">
+                      <code className="break-all font-mono text-[13px] text-muted">{domain.record}</code>
+                      <IconButton icon={Copy} label={text("common.copy")} onClick={() => copy(domain.record!)} />
+                      {copied === domain.record ? <span className="text-muted">{text("common.copied")}</span> : null}
+                    </div>
+                  ) : null}
+                  {domain.zone ? (
+                    <div className="mt-3">
+                      <Fold title={text("common.advanced")}>
+                        <TofuFiles path={`/api/dns/${domain.hostname}/tofu`} readOnly={!canAdmin} />
+                      </Fold>
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>
-          )
-        ) : (
-          <p className="mt-4 text-muted">{text("apps.noService")}</p>
-        )}
-      </section>
-      <div className="mt-8">
-        <Fold title={text("apps.instances")} defaultOpen={failing}>
-          <ul className="flex flex-col">
-            {pods.map((pod) => {
-              const state = podHealth(pod);
-              return (
-                <li key={pod.name} className="border-t border-line py-4">
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-                    <span className="break-all font-mono text-[13px]">{pod.name}</span>
-                    <span className={state.tone}>{state.text}</span>
-                  </div>
-                  <p className="mt-1 text-muted">
-                    {pod.server} · {podCpu(pod.cpu)} · {size(pod.memory)} · {size(pod.disk)}
-                  </p>
-                  <PodActions appId={app.id} name={pod.name} failed={podFailed(pod)} />
+          </section>
+        ) : null}
+        {exposed.length > 0 ? (
+          <section className="mt-8">
+            <SectionTitle>{text("apps.exposed")}</SectionTitle>
+            <p className="mt-2 text-muted">{text("apps.exposedHint")}</p>
+            <ul className="mt-2 flex flex-col">
+              {exposed.map((item) => (
+                <li key={item.service} className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-t border-line py-4">
+                  <span className="font-mono text-[13px]">{item.ports.join(", ")}</span>
+                  <span className="text-[13px] text-muted">{item.service}</span>
                 </li>
-              );
-            })}
-          </ul>
-          {!runtime ? <LoadingLines lines={2} label={text("apps.instances")} /> : pods.length === 0 ? <p className="text-muted">{runtime.measured ? text("common.noPod") : text("common.noMeasure")}</p> : null}
-        </Fold>
-      </div>
-      {(app.domains && app.domains.length > 0) || mutable ? (
-        <section className="mt-8">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <SectionTitle>{text("apps.addresses")}</SectionTitle>
-            {mutable ? (
-              <TextButton type="button" onClick={() => setEditingNames(true)} disabled={locked}>
-                {text("names.edit")}
-              </TextButton>
-            ) : null}
+              ))}
+            </ul>
+          </section>
+        ) : null}
+        {mutable ? <AppBackups app={app} locked={locked} /> : null}
+        {mutable ? <AppVariables app={app} onSaved={() => void appPoll.reload()} /> : null}
+        {mutable ? <AppSecretLinks appId={app.id} /> : null}
+        {app.guarded && canDeploy ? (
+          <div className="mt-8">
+            <TextButton type="button" tone="danger" onClick={() => setConfirm("delete")}>
+              <Icon icon={Trash2} />
+              {text("common.delete")}
+            </TextButton>
           </div>
-          <ul className="mt-2 flex flex-col">
-            {listedDomains.length === 0 ? (
-              <li className="border-t border-line py-4 text-muted">{text("names.none")}</li>
-            ) : null}
-            {listedDomains.map((domain) => (
-              <li key={domain.hostname} className="border-t border-line py-4">
-                <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-                  <span className="flex min-w-0 flex-wrap items-baseline gap-x-3">
-                    <a href={`https://${domain.hostname}`} target="_blank" rel="noreferrer" className="break-all font-mono text-[13px] underline">
-                      {domain.hostname}
-                    </a>
-                    {publics.others.length > 0 ? <span className="text-[13px] text-muted">{domain.service || publics.main}</span> : null}
-                  </span>
-                  <StatusBadge status={domain.status} />
-                </div>
-                {domain.detail ? <p className={`mt-2 ${domain.status === "ready" ? "text-muted" : "text-bad"}`}>{domain.detail}</p> : null}
-                {domain.record ? (
-                  <div className="mt-3 flex flex-wrap items-center gap-4">
-                    <code className="break-all font-mono text-[13px] text-muted">{domain.record}</code>
-                    <IconButton icon={Copy} label={text("common.copy")} onClick={() => copy(domain.record!)} />
-                    {copied === domain.record ? <span className="text-muted">{text("common.copied")}</span> : null}
-                  </div>
-                ) : null}
-                {domain.zone ? (
-                  <div className="mt-3">
-                    <Fold title={text("common.advanced")}>
-                      <TofuFiles path={`/api/dns/${domain.hostname}/tofu`} readOnly={!canAdmin} />
-                    </Fold>
-                  </div>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-      {exposed.length > 0 ? (
-        <section className="mt-8">
-          <SectionTitle>{text("apps.exposed")}</SectionTitle>
-          <p className="mt-2 text-muted">{text("apps.exposedHint")}</p>
-          <ul className="mt-2 flex flex-col">
-            {exposed.map((item) => (
-              <li key={item.service} className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-t border-line py-4">
-                <span className="font-mono text-[13px]">{item.ports.join(", ")}</span>
-                <span className="text-[13px] text-muted">{item.service}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-      {mutable ? <AppBackups app={app} locked={locked} /> : null}
-      {mutable ? <AppVariables app={app} onSaved={() => void appPoll.reload()} /> : null}
-      {mutable ? <AppSecretLinks appId={app.id} /> : null}
-      {app.guarded && canDeploy ? (
-        <div className="mt-8">
-          <TextButton type="button" tone="danger" onClick={() => setConfirm("delete")}>
-            <Icon icon={Trash2} />
-            {text("common.delete")}
-          </TextButton>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
       {editingNames ? (
         <NamesSheet
           app={app}

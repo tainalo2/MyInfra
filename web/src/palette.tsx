@@ -36,7 +36,8 @@ function clean(value: string) {
   return value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
 
-export function SearchButton({ compact = false }: { compact?: boolean }) {
+// wide fills the menu's column, like a field.
+export function SearchButton({ compact = false, wide = false }: { compact?: boolean; wide?: boolean }) {
   useI18n();
   const mac = /Mac|iPhone|iPad/.test(navigator.platform);
   if (compact) {
@@ -57,10 +58,10 @@ export function SearchButton({ compact = false }: { compact?: boolean }) {
       onClick={() => window.dispatchEvent(new Event(openEvent))}
       aria-label={text("palette.open")}
       aria-keyshortcuts={mac ? "Meta+K" : "Control+K"}
-      className="inline-flex items-center gap-2 rounded-md border border-line px-2 py-1 text-muted focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-focus"
+      className={`inline-flex items-center rounded-md border border-line text-muted focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-focus ${wide ? "w-full gap-3 bg-surface px-3 py-1.5 text-[13px]" : "gap-2 px-2 py-1"}`}
     >
       <Icon icon={Search} />
-      <span className="hidden sm:inline">{text("palette.search")}</span>
+      <span className={wide ? "flex-1 text-left" : "hidden sm:inline"}>{text("palette.search")}</span>
       <kbd className="hidden rounded border border-line px-1 font-sans text-[12px] sm:inline">{mac ? "⌘K" : "Ctrl K"}</kbd>
     </button>
   );

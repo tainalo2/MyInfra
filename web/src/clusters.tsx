@@ -406,12 +406,11 @@ function ClusterCard({
       onDrop={drag?.onDrop}
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <span className="flex min-w-0 flex-col">
-          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <h2 className="text-[16px]">{cluster.name}</h2>
-            {servers.length > 0 ? <StatusBadge status={servers.every((server) => liveServer(server)) ? "linked" : servers.some((server) => liveServer(server)) ? "preparing" : servers[0].status} /> : null}
-          </span>
-          <span className="text-[13px] text-muted">{clusterLine(servers)}</span>
+        {/* The name, its state and what makes it, on one line while it fits. */}
+        <span className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
+          <h2 className="text-[16px]">{cluster.name}</h2>
+          {servers.length > 0 ? <StatusBadge status={servers.every((server) => liveServer(server)) ? "linked" : servers.some((server) => liveServer(server)) ? "preparing" : servers[0].status} /> : null}
+          <span className="text-muted">{clusterLine(servers)}</span>
         </span>
         <span className="flex items-center gap-4">
           {cluster.origin === "imported" ? null : (
@@ -488,7 +487,8 @@ function ClusterCard({
       ) : null}
       {dialogError && !confirm ? <ErrorText>{dialogError}</ErrorText> : null}
       {cluster.origin === "imported" ? null : (
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:gap-6">
+        // On a card, the measures make a band of their own between two lines.
+        <div className={`flex flex-col gap-4 md:flex-row md:items-end md:gap-6 ${mode === "cards" ? "-mx-4 border-t border-line px-4 pt-4" : ""}`}>
           <div className="min-w-0 flex-1">
             <UsageMeters sample={usage === undefined ? null : usage ?? { measured: false, cpu: zero, memory: zero, disk: zero }} />
           </div>
@@ -499,6 +499,7 @@ function ClusterCard({
         <ArgoList id={cluster.id} />
       ) : servers.length > 0 ? (
         <ServerTable
+          flush={mode === "cards"}
           servers={servers}
           usage={usage ?? undefined}
           usageLoading={usage === undefined}
@@ -671,13 +672,17 @@ type DragProps = {
 
 // ServerTable lists servers as rows: name and address, place, size, load and
 // what runs there. A row can be dragged to another cluster.
+// ServerTable lists servers with their place, size and load. flush lays it
+// in the card that holds it, from edge to edge under a line.
 function ServerTable({
   servers,
   usage,
   usageLoading,
   pods,
   drag,
+  flush = false,
 }: {
+  flush?: boolean;
   servers: Server[];
   usage?: ClusterUsage;
   usageLoading?: boolean;
@@ -686,7 +691,7 @@ function ServerTable({
 }) {
   const grid = "md:grid md:grid-cols-[minmax(0,1.4fr)_minmax(0,0.9fr)_minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,0.8fr)] md:items-center md:gap-4";
   return (
-    <div className="overflow-hidden rounded-md border border-line bg-surface">
+    <div className={flush ? "-mx-4 -mb-4 mt-1 overflow-hidden rounded-b-md border-t border-line" : "overflow-hidden rounded-md border border-line bg-surface"}>
       <div aria-hidden className={`hidden border-b border-line px-4 py-2 text-[12px] text-muted ${grid}`}>
         <span>{text("server.col.name")}</span>
         <span>{text("server.col.place")}</span>

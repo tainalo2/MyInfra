@@ -81,8 +81,9 @@ function since(op: Operation) {
 }
 
 // BusyIndicator is the red mark of the header while this copy, on the
-// person's computer, drives machines: switching it off would cut them.
-export function BusyIndicator() {
+// person's computer, drives machines: switching it off would cut them. wide
+// fills the menu's column, its details opening to the right side.
+export function BusyIndicator({ wide = false }: { wide?: boolean }) {
   useI18n();
   const { activity } = useActivity();
   const [open, setOpen] = useState(false);
@@ -97,9 +98,9 @@ export function BusyIndicator() {
         onBlur={() => setOpen(false)}
         aria-describedby={tipId}
         aria-expanded={open}
-        className={`inline-flex items-center gap-2 rounded-full border border-bad px-2.5 py-1 text-[12px] text-bad ${focus}`}
+        className={`inline-flex items-center border border-bad text-bad ${wide ? "w-full gap-3 rounded-md px-3 py-1.5 text-[13px]" : "gap-2 rounded-full px-2.5 py-1 text-[12px]"} ${focus}`}
       >
-        <span className="relative inline-flex size-2.5">
+        <span className={`relative inline-flex size-2.5 ${wide ? "mx-[3px]" : ""}`}>
           <span className="absolute inline-flex size-full animate-ping rounded-full bg-bad opacity-60" aria-hidden />
           <span className="relative inline-flex size-2.5 rounded-full bg-bad" aria-hidden />
         </span>
@@ -109,7 +110,7 @@ export function BusyIndicator() {
       <div
         id={tipId}
         role="tooltip"
-        className={`absolute right-0 top-full z-50 mt-2 w-72 rounded-md border border-line bg-surface p-3 text-[13px] shadow-sm ${open ? "block" : "hidden"}`}
+        className={`absolute ${wide ? "left-0" : "right-0"} top-full z-50 mt-2 w-72 rounded-md border border-line bg-surface p-3 text-[13px] shadow-sm ${open ? "block" : "hidden"}`}
       >
         <p className="mb-2 font-medium text-bad">{text("activity.keepOnTitle")}</p>
         <p className="mb-2 text-muted">{text("activity.keepOnText")}</p>

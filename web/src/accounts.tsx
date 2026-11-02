@@ -230,6 +230,7 @@ function TokenPage({
   return (
     <>
       {section ? heading : <PageTitle
+        inTree
         title={title}
         action={
           creating || editing ? (

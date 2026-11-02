@@ -5,7 +5,7 @@ import { ApiError, api, peek, type Package, type PackageAbout, type PackageDisk,
 import { Code, languageOf } from "./code-lazy";
 import { knownMessage, text, type MsgKey } from "./i18n";
 import { useI18n } from "./lang";
-import { PlanPanel, packagePlan } from "./plan";
+import { PlanPanel, packagePlan, underPlan } from "./plan";
 import { AppsTabs, ConfirmDialog, Sheet, Spinner, Tabs, useToast } from "./kit";
 import { useSession } from "./session";
 import { ToolInstall } from "./tools";
@@ -26,6 +26,7 @@ import {
   PageTitle,
   Select,
   TextButton,
+  cardGrid,
   useTrail,
 } from "./ui";
 
@@ -201,7 +202,7 @@ export function Packages() {
           <p className="text-muted">{text("package.empty")}</p>
         )
       ) : (
-        <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <ul className={cardGrid}>
           {rows.map((row) => (
             <li key={row.id} className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4">
               <div className="flex items-start justify-between gap-3">
@@ -393,6 +394,7 @@ function PackageStart() {
   return (
     <>
       <PageTitle
+        inTree
         title={text("package.new")}
         action={
           <TextButton type="button" onClick={() => setAbout((open) => !open)} aria-expanded={about}>
@@ -744,6 +746,8 @@ export function PackageEditor() {
   // revision rebuilds the form when a whole package replaces the one shown:
   // its fields keep what is typed, and would keep the old text otherwise.
   const [revision, setRevision] = useState(0);
+  // Choosing an element of the plan opens its settings below it.
+  const [chosen, setChosen] = useState<string | null>(null);
 
   // An import opens here in the YAML view, with what it could not keep; an
   // example opens in the form, to learn by changing it.
@@ -853,33 +857,31 @@ export function PackageEditor() {
   if (!ready) return <LoadingLines lines={6} />;
 
   const general = problems.filter((problem) => !problem.path.startsWith("services["));
+  // A chosen service shows its settings alone; a chosen disk or the whole
+  // package shows the package's own.
+  const only = chosen?.startsWith("svc:") ? chosen.slice(4) : "";
+  const known = !only || pkg.services.some((service) => service.name === only);
+
+  // A new service is chosen at once, so that its settings open.
+  function addService() {
+    const name = freeServiceName(pkg.services);
+    setPkg({ ...pkg, services: [...pkg.services, { name, image: "" }] });
+    setChosen(`svc:${name}`);
+  }
+
+  // A new storage is a shared disk: dashed in the plan until a service mounts it.
+  function addStorage() {
+    const disks = pkg.disks ?? [];
+    let n = disks.length + 1;
+    let name = disks.length === 0 ? "media" : `disk-${n}`;
+    while (disks.some((disk) => disk.name === name)) name = `disk-${++n}`;
+    setPkg({ ...pkg, disks: [...disks, { name, sizeGi: 10 }] });
+    setChosen(`disk:${name}`);
+  }
 
   return (
     <>
-      <PageTitle
-        title={id ? pkg.name || text("nav.packages") : text("package.new")}
-        icon={PackageIcon}
-        action={
-          <span className="flex items-center gap-4">
-            <TextButton type="button" onClick={() => setGuide(true)}>
-              <span className="inline-flex items-center gap-2">
-                <Icon icon={BookOpen} />
-                {text("package.guide")}
-              </span>
-            </TextButton>
-            {id ? (
-              <TextButton type="button" onClick={() => void download({ id, name: pkg.name }, "yaml").catch((err) => toast(err.message, "bad"))}>
-                {text("package.exportYaml")}
-              </TextButton>
-            ) : null}
-            {id && canDeploy ? (
-              <Button type="button" variant="secondary" onClick={() => navigate(`/nouveau?package=${id}`)}>
-                {text("package.installCta")}
-              </Button>
-            ) : null}
-          </span>
-        }
-      />
+      <PageTitle inTree title={id ? pkg.name || text("nav.packages") : text("package.new")} icon={PackageIcon} />
       {saved && id && canDeploy ? (
         <section className="mb-8 flex max-w-[960px] flex-wrap items-center justify-between gap-4 rounded-md border border-line bg-surface p-4" role="status">
           <span>
@@ -898,17 +900,69 @@ export function PackageEditor() {
       ) : null}
       {!id ? <p className="mb-6 max-w-[720px] text-muted">{text("package.newHint")}</p> : null}
       {guide ? <PackageGuide onClose={() => setGuide(false)} /> : null}
+      {/* The plan comes first; in the YAML view it follows the text, and
+          choosing an element goes back to the form to change it. */}
+      {pkg.services.length > 0 || (pkg.disks ?? []).length > 0 ? (
+        <>
+          <PlanPanel
+            model={packagePlan(pkg)}
+            label={text("plan.labelPackage")}
+            whole={text("plan.wholePackage")}
+            selected={mode === "visual" && known ? chosen : null}
+            onSelect={(key) => {
+              if (mode === "yaml") void switchTo("visual");
+              setChosen(key);
+            }}
+          />
+          <div className="mt-6" />
+        </>
+      ) : null}
       <form onSubmit={save} className="flex flex-col gap-8">
         {warnings.length > 0 ? <WarningList warnings={warnings} /> : null}
-        <Tabs
-          label={text("package.view")}
-          active={mode}
-          onChange={(next) => void switchTo(next)}
-          tabs={[
-            { key: "visual", label: text("package.visual") },
-            { key: "yaml", label: text("package.advanced"), mark: !readable },
-          ]}
-        />
+        {/* One line under the plan: the two views, what to add to the
+            package, then what to do with it. It stays in sight under it. */}
+        <div className={underPlan}>
+          <Tabs
+            label={text("package.view")}
+            active={mode}
+            onChange={(next) => void switchTo(next)}
+            tabs={[
+              { key: "visual", label: text("package.visual") },
+              { key: "yaml", label: text("package.advanced"), mark: !readable },
+            ]}
+            aside={
+              <>
+                {mode === "visual" && canDeploy ? (
+                  <>
+                    <TextButton type="button" onClick={addService}>
+                      <Icon icon={Plus} />
+                      {text("package.addService")}
+                    </TextButton>
+                    <TextButton type="button" onClick={addStorage}>
+                      <Icon icon={Plus} />
+                      {text("package.addStorage")}
+                    </TextButton>
+                    <span aria-hidden className="hidden h-5 w-px bg-line sm:block" />
+                  </>
+                ) : null}
+                <TextButton type="button" onClick={() => setGuide(true)}>
+                  <Icon icon={BookOpen} />
+                  {text("package.guide")}
+                </TextButton>
+                {id ? (
+                  <TextButton type="button" onClick={() => void download({ id, name: pkg.name }, "yaml").catch((err) => toast(err.message, "bad"))}>
+                    {text("package.exportYaml")}
+                  </TextButton>
+                ) : null}
+                {id && canDeploy ? (
+                  <Button type="button" variant="secondary" onClick={() => navigate(`/nouveau?package=${id}`)}>
+                    {text("package.installCta")}
+                  </Button>
+                ) : null}
+              </>
+            }
+          />
+        </div>
         {mode === "yaml" ? (
           <div className="flex flex-col gap-4">
             <p className="max-w-[720px] text-muted">{text("package.yamlHint")}</p>
@@ -916,7 +970,7 @@ export function PackageEditor() {
             {problems.length > 0 ? <ProblemList problems={problems} /> : <p className="text-ok">{text("package.valid")}</p>}
           </div>
         ) : (
-          <VisualEditor key={revision} pkg={pkg} onChange={setPkg} problems={problems} general={general} />
+          <VisualEditor key={revision} pkg={pkg} onChange={setPkg} problems={problems} general={general} only={known ? only : ""} />
         )}
         {error ? <ErrorText>{error}</ErrorText> : null}
         {canDeploy ? (
@@ -937,26 +991,22 @@ function VisualEditor({
   onChange,
   problems,
   general,
+  only,
 }: {
   pkg: Package;
   onChange: (pkg: Package) => void;
   problems: PackageProblem[];
   general: PackageProblem[];
+  // only is the service chosen in the plan: its settings alone show.
+  only: string;
 }) {
   function set<K extends keyof Package>(key: K, value: Package[K]) {
     onChange({ ...pkg, [key]: value });
   }
-  // Choosing an element of the plan opens its settings just below it.
-  const [chosen, setChosen] = useState<string | null>(null);
-  const only = chosen?.startsWith("svc:") ? chosen.slice(4) : "";
-  const known = !only || pkg.services.some((service) => service.name === only);
 
   return (
     <div className="flex flex-col">
-      {pkg.services.length > 0 ? (
-        <PlanPanel model={packagePlan(pkg)} label={text("plan.labelPackage")} whole={text("plan.wholePackage")} selected={known ? chosen : null} onSelect={setChosen} />
-      ) : null}
-      <section className={`mt-6 flex max-w-[720px] flex-col gap-4 ${only && known ? "hidden" : ""}`}>
+      <section className={`flex max-w-[720px] flex-col gap-4 ${only ? "hidden" : ""}`}>
         <Field label={text("package.name")}>
           <Input value={pkg.name} onChange={(e) => set("name", e.target.value)} required />
         </Field>
@@ -975,7 +1025,7 @@ function VisualEditor({
         {general.length > 0 ? <ProblemList problems={general} /> : null}
       </section>
       <div className="mt-8" />
-      <ServicesEditor services={pkg.services} onChange={(services) => set("services", services)} problems={problems} disks={(pkg.disks ?? []).map((disk) => disk.name).filter(Boolean)} only={known ? only : ""} />
+      <ServicesEditor services={pkg.services} onChange={(services) => set("services", services)} problems={problems} disks={(pkg.disks ?? []).map((disk) => disk.name).filter(Boolean)} only={only} addable={false} />
     </div>
   );
 }
@@ -1021,14 +1071,25 @@ function SharedDisks({ disks, onChange }: { disks: PackageDisk[]; onChange: (dis
 
 // ServicesEditor edits the services of a package or of a running
 // application: one card each, who waits for whom above them.
+// freeServiceName names a new service after those there are: service-N.
+function freeServiceName(services: PackageService[]) {
+  let n = services.length + 1;
+  while (services.some((service) => service.name === `service-${n}`)) n++;
+  return `service-${n}`;
+}
+
 function ServicesEditor({
   services,
   onChange,
   problems,
   disks,
   only = "",
+  addable = true,
 }: {
   only?: string;
+  // addable puts the button that adds a service at the head of the list;
+  // a page that has it on its line of tabs leaves it out.
+  addable?: boolean;
   services: PackageService[];
   onChange: (services: PackageService[]) => void;
   problems: PackageProblem[];
@@ -1047,9 +1108,7 @@ function ServicesEditor({
   }
 
   function addService() {
-    let n = services.length + 1;
-    while (services.some((service) => service.name === `service-${n}`)) n++;
-    onChange([...services, { name: `service-${n}`, image: "" }]);
+    onChange([...services, { name: freeServiceName(services), image: "" }]);
   }
 
   function removeService(index: number) {
@@ -1061,9 +1120,11 @@ function ServicesEditor({
     <section className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h2 className="text-base">{text("field.services")}</h2>
-        <TextButton type="button" onClick={addService}>
-          {text("package.addService")}
-        </TextButton>
+        {addable ? (
+          <TextButton type="button" onClick={addService}>
+            {text("package.addService")}
+          </TextButton>
+        ) : null}
       </div>
       <div className={only ? "hidden" : ""}>
         <Dependencies services={services} />
@@ -1788,25 +1849,7 @@ export function AppServices() {
 
   return (
     <>
-      <PageTitle
-        title={text("appServices.title", { name })}
-        icon={PackageIcon}
-        action={
-          <span className="flex items-center gap-4">
-            <TextButton type="button" onClick={() => setGuide(true)}>
-              <span className="inline-flex items-center gap-2">
-                <Icon icon={BookOpen} />
-                {text("package.guide")}
-              </span>
-            </TextButton>
-            {canDeploy ? (
-              <TextButton type="button" onClick={() => void keep()}>
-                {text("appServices.keep")}
-              </TextButton>
-            ) : null}
-          </span>
-        }
-      />
+      <PageTitle inTree title={text("appServices.title", { name })} icon={PackageIcon} />
       {guide ? <PackageGuide onClose={() => setGuide(false)} /> : null}
       <form
         className="flex flex-col gap-8"
@@ -1817,6 +1860,7 @@ export function AppServices() {
       >
         <p className="max-w-[720px] text-muted">{text("appServices.intro")}</p>
         {address ? <p className="-mt-4 max-w-[720px] text-faint">{text("address.hint", { address })}</p> : null}
+        {/* As in a package: the two views, then what to add and to do, on one line. */}
         <Tabs
           label={text("package.view")}
           active={mode}
@@ -1825,6 +1869,28 @@ export function AppServices() {
             { key: "visual", label: text("package.visual") },
             { key: "yaml", label: text("package.advanced"), mark: !readable },
           ]}
+          aside={
+            <>
+              {mode === "visual" && canDeploy ? (
+                <>
+                  <TextButton type="button" onClick={() => setServices([...services, { name: freeServiceName(services), image: "" }])}>
+                    <Icon icon={Plus} />
+                    {text("package.addService")}
+                  </TextButton>
+                  <span aria-hidden className="hidden h-5 w-px bg-line sm:block" />
+                </>
+              ) : null}
+              <TextButton type="button" onClick={() => setGuide(true)}>
+                <Icon icon={BookOpen} />
+                {text("package.guide")}
+              </TextButton>
+              {canDeploy ? (
+                <TextButton type="button" onClick={() => void keep()}>
+                  {text("appServices.keep")}
+                </TextButton>
+              ) : null}
+            </>
+          }
         />
         {mode === "yaml" ? (
           <div className="flex flex-col gap-4">
@@ -1832,7 +1898,7 @@ export function AppServices() {
             {problems.length > 0 ? <ProblemList problems={problems} /> : null}
           </div>
         ) : (
-          <ServicesEditor services={services} onChange={setServices} problems={problems} />
+          <ServicesEditor services={services} onChange={setServices} problems={problems} addable={false} />
         )}
         {error ? <ErrorText>{error}</ErrorText> : null}
         {canDeploy ? (

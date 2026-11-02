@@ -54,7 +54,7 @@ export function Images() {
   return (
     <div className="flex max-w-[860px] flex-col gap-8">
       <div>
-        <PageTitle title={text("nav.images")} />
+        <PageTitle inTree title={text("nav.images")} />
         <p className="text-muted">{text("images.pageIntro")}</p>
       </div>
       <section>

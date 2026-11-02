@@ -12,7 +12,7 @@ import { useSession } from "./session";
 import { Pill } from "./dnsrecords";
 import { RedundancyDialog, placements, type Placement } from "./redundancy";
 import { ListRow, RowGroup } from "./rows";
-import { ActionsMenu, Button, EmptyList, ErrorText, HealthDot, Icon, LoadingCards, MenuItem, PageTitle, TextButton, focus, removalOf, statusLabel, useDestructions, useListMode } from "./ui";
+import { ActionsMenu, Button, EmptyList, ErrorText, HealthDot, Icon, LoadingCards, MenuItem, PageTitle, TextButton, cardGrid, focus, removalOf, statusLabel, useDestructions, useListMode } from "./ui";
 
 type Filter = "all" | "running" | "preparing" | "failed" | "paused";
 
@@ -157,7 +157,7 @@ export function Home() {
               </>
             ) : null
           ) : (
-            <ul className={mode === "cards" ? "grid grid-cols-1 gap-4 md:grid-cols-2" : "flex flex-col overflow-hidden rounded-md border border-line bg-surface"}>
+            <ul className={mode === "cards" ? cardGrid : "flex flex-col overflow-hidden rounded-md border border-line bg-surface"}>
               {shown.map((app) => (
                 <li key={app.id} className={mode === "cards" ? "h-full" : "border-t border-line first:border-t-0"}>
                   <AppEntry

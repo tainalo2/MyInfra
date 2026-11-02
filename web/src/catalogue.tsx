@@ -221,7 +221,7 @@ export function CatalogueArticle() {
             </ul>
           </Fold>
         </div>
-        <aside className="flex flex-col gap-6 lg:sticky lg:top-[65px] lg:w-[280px] lg:shrink-0">
+        <aside className="flex flex-col gap-6 lg:sticky lg:top-4 lg:w-[280px] lg:shrink-0">
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-md border border-line bg-surface p-4 text-[13px]">
             <dt className="text-muted">{text("catalogue.category")}</dt>
             <dd>{categoryName(article.category, article.categoryWords)}</dd>

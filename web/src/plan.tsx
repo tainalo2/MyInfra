@@ -1,5 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Box, DatabaseBackup, Globe, HardDrive, LayoutGrid, Network, Server as ServerIcon, Shield, type LucideIcon } from "lucide-react";
+import { ArrowDown, ArrowRight, Box, DatabaseBackup, Globe, HardDrive, LayoutGrid, Network, Server as ServerIcon, Shield, type LucideIcon } from "lucide-react";
 import type { AppRuntime, Application, Package, TemplateApp, TemplateBody, TemplateServer } from "./api";
 import { text, type MsgKey } from "./i18n";
 import { focus } from "./ui";
@@ -28,6 +28,10 @@ export type PlanNode = {
 export type PlanLink = { from: string; to: string; kind: LinkKind; label?: string };
 
 export type PlanModel = { nodes: PlanNode[]; links: PlanLink[] };
+
+// Flow is the direction of a plan: its bands one under the other (rows) or
+// side by side (columns).
+export type Flow = "auto" | "rows" | "columns";
 
 const bands: { key: Band; label: MsgKey }[] = [
   { key: "entry", label: "plan.band.entry" },
@@ -85,6 +89,7 @@ export function Plan({
   label,
   compact = false,
   header,
+  flow = "auto",
 }: {
   model: PlanModel;
   selected: string | null;
@@ -93,6 +98,8 @@ export function Plan({
   compact?: boolean;
   // header heads the frame: the name of the plan and its buttons.
   header?: ReactNode;
+  // flow sets the direction of the bands; auto lets leftToRight choose.
+  flow?: Flow;
 }) {
   const frame = useRef<HTMLDivElement>(null);
   const refs = useRef(new Map<string, HTMLElement>());
@@ -100,7 +107,38 @@ export function Plan({
   const [size, setSize] = useState({ w: 0, h: 0 });
   const near = related(model, selected);
   const [direction, setDirection] = useState("rows");
-  const shape = model.nodes.map((node) => node.key).join("|") + (compact ? "c" : "") + direction;
+
+  // Folded, a band keeps one element in front, or with a selection all those
+  // it reaches by a link; the others are stacked behind the last one in
+  // front, and their links start from the stack.
+  const stacks = new Map<string, PlanNode[]>();
+  const shownAs = new Map<string, string>();
+  if (compact) {
+    const fold = (nodes: PlanNode[]) => {
+      if (nodes.length < 2) return;
+      let front = selected ? nodes.filter((node) => near.has(node.key)) : [];
+      if (front.length === 0) front = [nodes[0]];
+      const behind = nodes.filter((node) => !front.includes(node));
+      if (behind.length === 0) return;
+      const top = front[front.length - 1].key;
+      stacks.set(top, behind);
+      for (const node of behind) {
+        shownAs.set(node.key, top);
+        for (const member of model.nodes) if (member.parent === node.key) shownAs.set(member.key, top);
+      }
+    };
+    for (const band of bands) fold(model.nodes.filter((node) => node.band === band.key && !node.parent));
+    for (const node of model.nodes) if (!shownAs.has(node.key)) fold(model.nodes.filter((item) => item.parent === node.key));
+  }
+  const front = (node: PlanNode) => !shownAs.has(node.key);
+  const at = (key: string) => shownAs.get(key) ?? key;
+
+  const shape = model.nodes.filter(front).map((node) => node.key).join("|") + (compact ? "c" : "") + direction;
+
+  // The last layout, to move from it to the next one.
+  const before = useRef<{ boxes: Map<string, Rect>; height: number; shownAs: Map<string, string> } | null>(null);
+  const shownNow = useRef(shownAs);
+  shownNow.current = shownAs;
 
   // The links follow the boxes: they are measured after each layout.
   useLayoutEffect(() => {
@@ -115,26 +153,44 @@ export function Plan({
       }
       setBoxes(next);
       setSize({ w: base.width, h: base.height });
+      return { next, height: base.height };
     };
-    measure();
-    const observer = new ResizeObserver(measure);
+    const { next, height } = measure();
+    const last = before.current;
+    before.current = { boxes: next, height, shownAs: shownNow.current };
+    const animations = last ? glide(node, refs.current, last, next, height, model) : [];
+    // The links are measured as the boxes move, then once they have arrived.
+    if (animations.length > 0) void Promise.allSettled(animations.map((item) => item.finished)).then(() => frame.current && measure());
+    const observer = new ResizeObserver(() => {
+      const { next: moved, height: now } = measure();
+      if (before.current) before.current = { ...before.current, boxes: moved, height: now };
+    });
     observer.observe(node);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      for (const item of animations) item.cancel();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shape]);
 
   const shownBands = bands.filter((band) => model.nodes.some((node) => node.band === band.key));
   const shownRef = useRef(false);
-  const columns = useMemo(() => leftToRight(model, size.w, compact, shownRef.current), [model, size.w, compact]);
+  const columns = useMemo(
+    () => (flow === "auto" ? leftToRight(model, size.w, compact, shownRef.current) : flow === "columns" && shownBands.length > 1),
+    [model, size.w, compact, flow, shownBands.length],
+  );
   shownRef.current = columns;
   // A change of direction moves every box: the links are measured again.
   useLayoutEffect(() => setDirection(columns ? "columns" : "rows"), [columns]);
 
-  // box draws one element of the plan.
+  // box draws one element of the plan, and the stack behind it when folded.
   const box = (node: PlanNode) => {
     const Glyph = icons[node.kind];
     const on = node.key === selected;
     const dim = selected !== null && !near.has(node.key);
-    return (
+    const behind = stacks.get(node.key);
+    const width = columns ? "w-full max-w-[280px] self-center" : "max-w-[220px]";
+    const button = (
       <button
         key={node.key}
         ref={(element) => {
@@ -148,7 +204,7 @@ export function Plan({
           event.stopPropagation();
           onSelect(on ? null : node.key);
         }}
-        className={`relative z-[2] flex min-w-0 items-center gap-2 bg-surface text-left transition-opacity ${columns ? "w-full max-w-[280px] self-center" : "max-w-[220px]"} ${node.kind === "internet" ? "rounded-full" : "rounded-md"} ${
+        className={`relative z-[2] flex min-w-0 items-center gap-2 bg-surface text-left transition-opacity ${behind ? "w-full" : width} ${node.kind === "internet" ? "rounded-full" : "rounded-md"} ${
           on ? "border-2 border-ink" : node.draft ? "border border-dashed border-faint" : node.kind === "backup" ? "border border-dashed border-[#d6d3d1]" : "border border-[#d6d3d1] dark:border-line"
         } ${node.band === "storage" || node.band === "machines" ? "bg-canvas" : ""} ${compact ? "px-2 py-0.5" : on ? "px-[9px] py-[5px]" : "px-2.5 py-1.5"} ${dim ? "opacity-40" : ""} ${focus}`}
       >
@@ -160,7 +216,22 @@ export function Plan({
           </span>
           {node.detail && !compact ? <span className="truncate text-[12px] text-muted">{node.detail}</span> : null}
         </span>
+        {behind ? (
+          <span className="ml-auto shrink-0 rounded-full border border-line px-1.5 text-[11px] text-muted" title={behind.map((item) => item.label).join(", ")}>
+            <span aria-hidden>+{behind.length}</span>
+            <span className="sr-only">{text("plan.behind", { count: behind.length, names: behind.map((item) => item.label).join(", ") })}</span>
+          </span>
+        ) : null}
       </button>
+    );
+    if (!behind) return button;
+    // Two edges peek out under the box: what is stacked behind it.
+    return (
+      <span key={node.key} data-stack className={`relative z-[2] flex ${width} ${dim ? "opacity-40" : ""}`}>
+        <span aria-hidden className="absolute inset-0 translate-x-[6px] translate-y-[6px] rounded-md border border-line bg-surface" />
+        <span aria-hidden className="absolute inset-0 translate-x-[3px] translate-y-[3px] rounded-md border border-line bg-surface" />
+        {button}
+      </span>
     );
   };
 
@@ -183,8 +254,10 @@ export function Plan({
         {/* The links run above the bands' backgrounds and under the boxes. */}
         <svg className="pointer-events-none absolute inset-0 z-[1]" width={size.w} height={size.h} aria-hidden>
           {model.links.map((link, index) => {
-            const a = boxes.get(link.from);
-            const b = boxes.get(link.to);
+            // A link inside one stack has nowhere to go.
+            if (at(link.from) === at(link.to)) return null;
+            const a = boxes.get(at(link.from));
+            const b = boxes.get(at(link.to));
             if (!a || !b) return null;
             const style = strokes[link.kind];
             const lit = selected !== null && (link.from === selected || link.to === selected);
@@ -209,10 +282,23 @@ export function Plan({
         </svg>
         <div data-band="all" className={columns ? `flex items-stretch ${compact ? "gap-1.5" : "gap-2.5"}` : `flex flex-col ${compact ? "gap-1.5" : "gap-2.5"}`}>
           {shownBands.map((band) => {
-            const nodes = model.nodes.filter((node) => node.band === band.key && !node.parent);
+            const nodes = model.nodes.filter((node) => node.band === band.key && !node.parent && front(node));
             const tint = band.key === "storage" || band.key === "machines" ? "bg-line/25" : "bg-status/40";
+            // The tint of a band is a layer of its own, so that it can follow
+            // the band from one layout to the next without moving its content.
+            const layer = (
+              <span
+                aria-hidden
+                data-band={band.key}
+                ref={(element) => {
+                  if (element) refs.current.set(`band:${band.key}`, element);
+                  else refs.current.delete(`band:${band.key}`);
+                }}
+                className={`absolute inset-0 rounded-md ${tint}`}
+              />
+            );
             const content = nodes.map((node) => {
-              const members = model.nodes.filter((item) => item.parent === node.key);
+              const members = model.nodes.filter((item) => item.parent === node.key && front(item));
               if (members.length === 0) return box(node);
               const on = node.key === selected;
               const dim = selected !== null && !near.has(node.key);
@@ -249,9 +335,10 @@ export function Plan({
             if (columns) {
               // Left to right: a column per band, its elements one under the other.
               return (
-                <div key={band.key} data-band={band.key} className={`relative flex min-w-0 flex-1 flex-col gap-2 rounded-md px-2 ${compact ? "py-1" : "py-2"} ${tint}`}>
+                <div key={band.key} data-band={band.key} className={`relative flex min-w-0 flex-1 flex-col gap-2 rounded-md px-2 ${compact ? "py-1" : "py-2"}`}>
+                  {layer}
                   {compact ? null : (
-                    <span data-band={band.key} className="text-[11px] text-faint">
+                    <span data-band={band.key} className="relative text-[11px] text-faint">
                       {text(band.label)}
                     </span>
                   )}
@@ -262,9 +349,10 @@ export function Plan({
               );
             }
             return (
-              <div key={band.key} data-band={band.key} className={`relative flex items-center gap-2 rounded-md px-2 ${compact ? "py-1" : "py-2"} ${tint}`}>
+              <div key={band.key} data-band={band.key} className={`relative flex items-center gap-2 rounded-md px-2 ${compact ? "py-1" : "py-2"}`}>
+                  {layer}
                 {compact ? null : (
-                  <span data-band={band.key} className="w-[72px] shrink-0 self-start pt-0.5 text-[11px] text-faint">
+                  <span data-band={band.key} className="relative w-[72px] shrink-0 self-start pt-0.5 text-[11px] text-faint">
                     {text(band.label)}
                   </span>
                 )}
@@ -331,6 +419,87 @@ function curve(a: Rect, b: Rect, columns = false) {
   const y2 = down.y;
   const mid = (y1 + y2) / 2;
   return `M ${ux} ${y1} C ${ux} ${mid}, ${dx} ${mid}, ${dx} ${y2}`;
+}
+
+// glide moves a plan from its last layout to the new one, in a short time:
+// the frame changes height, each box slides from where it was, and a box
+// that comes out of a stack starts from it, fading in. Nothing moves when
+// the system asks for less motion.
+function glide(
+  frame: HTMLElement,
+  elements: Map<string, HTMLElement>,
+  last: { boxes: Map<string, Rect>; height: number; shownAs: Map<string, string> },
+  next: Map<string, Rect>,
+  height: number,
+  model: PlanModel,
+) {
+  if (typeof frame.animate !== "function" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return [];
+  const timing: KeyframeAnimationOptions = { duration: 180, easing: "cubic-bezier(0.2, 0, 0, 1)" };
+  const out: Animation[] = [];
+  if (Math.abs(last.height - height) > 1) {
+    // What does not fit yet stays inside the frame while it grows.
+    frame.style.overflow = "hidden";
+    const grow = frame.animate([{ height: `${last.height}px` }, { height: `${height}px` }], timing);
+    void grow.finished.catch(() => undefined).finally(() => (frame.style.overflow = ""));
+    out.push(grow);
+  }
+  const centre = (rect: Rect) => ({ x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 });
+  // A box held in a container moves with it: only its own move is added.
+  const moved = new Map<string, { x: number; y: number }>();
+  const parents = new Map(model.nodes.map((node) => [node.key, node.parent]));
+  const keys = [...next.keys()].sort((a, b) => Number(Boolean(parents.get(a))) - Number(Boolean(parents.get(b))));
+  for (const key of keys) {
+    const now = next.get(key)!;
+    if (key.startsWith("band:")) {
+      // A tint stretches from the band it was to the band it is.
+      const was = last.boxes.get(key);
+      const layer = elements.get(key);
+      if (!was || !layer || !now.w || !now.h) continue;
+      const still = Math.abs(was.x - now.x) < 1 && Math.abs(was.y - now.y) < 1 && Math.abs(was.w - now.w) < 1 && Math.abs(was.h - now.h) < 1;
+      if (still) continue;
+      out.push(
+        layer.animate(
+          [
+            { transformOrigin: "0 0", transform: `translate(${was.x - now.x}px, ${was.y - now.y}px) scale(${was.w / now.w}, ${was.h / now.h})` },
+            { transformOrigin: "0 0", transform: "none" },
+          ],
+          timing,
+        ),
+      );
+      continue;
+    }
+    const from = last.boxes.get(key) ?? last.boxes.get(last.shownAs.get(key) ?? "");
+    const element = elements.get(key);
+    if (!element) continue;
+    const target = element.closest<HTMLElement>("[data-stack]") ?? element;
+    if (!from) {
+      out.push(target.animate([{ opacity: 0 }, { opacity: 1 }], timing));
+      continue;
+    }
+    const a = centre(from);
+    const b = centre(now);
+    const parent = moved.get(parents.get(key) ?? "") ?? { x: 0, y: 0 };
+    const dx = a.x - b.x - parent.x;
+    const dy = a.y - b.y - parent.y;
+    moved.set(key, { x: a.x - b.x, y: a.y - b.y });
+    const fresh = !last.boxes.has(key);
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && !fresh) continue;
+    // A box coming out of a stack shows once it has left it a little, so
+    // that the boxes leaving one stack do not mix their words.
+    out.push(
+      target.animate(
+        fresh
+          ? [
+              { transform: `translate(${dx}px, ${dy}px)`, opacity: 0 },
+              { opacity: 0, offset: 0.35 },
+              { transform: "none", opacity: 1 },
+            ]
+          : [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }],
+        timing,
+      ),
+    );
+  }
+  return out;
 }
 
 // leftToRight chooses the direction of a plan: the one that makes it lower,
@@ -443,6 +612,10 @@ export function packagePlan(pkg: Package): PlanModel {
     }
   }
   for (const [name, sizeGi] of disks) nodes.push({ key: `disk:${name}`, band: "storage", kind: "disk", label: name, detail: sizeGi ? `${sizeGi} Gio` : undefined });
+  // A shared disk no service mounts yet waits, dashed, in its band.
+  for (const disk of pkg.disks ?? []) {
+    if (disk.name && !disks.has(disk.name)) nodes.push({ key: `disk:${disk.name}`, band: "storage", kind: "disk", label: disk.name, detail: disk.sizeGi ? `${disk.sizeGi} Gio` : undefined, draft: true });
+  }
   return { nodes, links };
 }
 
@@ -550,6 +723,10 @@ function shortImage(image: string) {
 }
 
 
+// underPlan keeps a line of the page, such as its tabs, in sight right
+// under the plan while the page scrolls; it follows the plan's height.
+export const underPlan = "md:sticky md:top-[var(--plan-bottom,0px)] md:z-[9] md:bg-canvas md:pt-2";
+
 // PlanPanel holds a plan with what goes around it: the whole object, the
 // table of every link, and the head of the chosen element. It stays in sight
 // while the page scrolls, and shrinks to names once it has scrolled away.
@@ -573,39 +750,77 @@ export function PlanPanel({
 }) {
   const [flows, setFlows] = useState(false);
   const [compact, setCompact] = useState(false);
+  // Trial: the bands go left to right, a button turns them back.
+  const [flow, setFlow] = useState<Flow>("columns");
   const box = useRef<HTMLDivElement>(null);
   const mark = useRef<HTMLDivElement>(null);
+  const hold = useRef<HTMLDivElement>(null);
+  const folded = useRef(false);
+  folded.current = compact;
 
   // The plan shrinks once it is stuck under the trail, and opens again when
-  // the page comes back to it. The mark sits above the plan: shrinking moves
-  // what is below, never the mark, so the plan does not flicker. It shrinks
-  // only when the page is long enough to stay scrolled once it has.
+  // the page comes back to its top. The mark sits above the plan: shrinking
+  // moves what is below, never the mark, so the plan does not flicker. It
+  // shrinks only when the page is long enough to stay scrolled once it has.
+  //
+  // What the plan gives up when it shrinks is held below it, so that the
+  // page does not jump and hide what one was reading. The hold goes once
+  // it has scrolled out of sight, and the page is moved back by as much:
+  // nothing seems to move. Until then, opening the plan again moves nothing
+  // either.
   useLayoutEffect(() => {
     const sticky = box.current;
     const above = mark.current;
+    const room = hold.current;
     const scroller = above?.closest("main");
-    if (!sticky || !above || !scroller) return;
+    if (!sticky || !above || !room || !scroller) return;
     let frame = 0;
+    let full = 0;
+    let holding = false;
+    const line = () => scroller.getBoundingClientRect().top + (parseFloat(getComputedStyle(sticky).top) || 0);
+    // The hold and the line under the plan follow its height, frame by
+    // frame while it changes, so that what is below keeps its place.
+    const fit = () => {
+      const height = sticky.offsetHeight;
+      if (!folded.current && !holding) full = height;
+      if (holding && !folded.current && height >= full - 1) holding = false;
+      room.style.height = holding ? `${Math.max(0, full - height)}px` : "0px";
+      scroller.style.setProperty("--plan-bottom", `${(parseFloat(getComputedStyle(sticky).top) || 0) + height}px`);
+    };
     const check = () => {
       frame = 0;
       if (sticky.offsetParent === null) return;
-      const line = scroller.getBoundingClientRect().top + (parseFloat(getComputedStyle(sticky).top) || 0);
+      const at = line();
       const top = above.getBoundingClientRect().top;
-      setCompact((current) => {
-        if (current) return top < line - 4;
-        const room = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop;
-        return top < line - 24 && room > sticky.offsetHeight;
-      });
+      if (holding && folded.current) {
+        const kept = room.offsetHeight;
+        if (kept > 0 && room.getBoundingClientRect().bottom <= at + sticky.offsetHeight - 8) {
+          holding = false;
+          room.style.height = "0px";
+          scroller.scrollTop -= kept;
+          return;
+        }
+      }
+      const current = folded.current;
+      const next = current ? top < at - 4 : top < at - 24 && scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop > sticky.offsetHeight;
+      if (next === current) return;
+      if (next) holding = true;
+      setCompact(next);
     };
     const schedule = () => {
       if (!frame) frame = requestAnimationFrame(check);
     };
+    const observer = new ResizeObserver(fit);
+    observer.observe(sticky);
     scroller.addEventListener("scroll", schedule, { passive: true });
     window.addEventListener("resize", schedule);
+    fit();
     check();
     return () => {
+      observer.disconnect();
       scroller.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);
+      scroller.style.removeProperty("--plan-bottom");
       if (frame) cancelAnimationFrame(frame);
     };
   }, []);
@@ -651,6 +866,14 @@ export function PlanPanel({
         <button type="button" aria-expanded={flows} onClick={() => setFlows((value) => !value)} className={`rounded-md border border-line px-2 py-0.5 text-[12px] text-muted ${focus}`}>
           {text("plan.flows", { count: model.links.length })}
         </button>
+        <button
+          type="button"
+          onClick={() => setFlow((value) => (value === "columns" ? "rows" : "columns"))}
+          className={`inline-flex items-center gap-1 rounded-md border border-line px-2 py-0.5 text-[12px] text-muted ${focus}`}
+        >
+          {flow === "columns" ? <ArrowDown size={12} aria-hidden /> : <ArrowRight size={12} aria-hidden />}
+          {text(flow === "columns" ? "plan.rows" : "plan.columns")}
+        </button>
       </div>
     </div>
   );
@@ -664,10 +887,10 @@ export function PlanPanel({
       <div ref={mark} aria-hidden className="hidden h-0 md:block" />
       <div
         ref={box}
-        className="sticky top-0 z-10 hidden flex-col gap-2 bg-canvas pb-2 pt-1 md:top-[49px] md:flex"
+        className="sticky top-0 z-10 hidden flex-col gap-2 bg-canvas pb-2 pt-1 md:flex"
         style={span ? { marginLeft: span.left, width: span.width } : undefined}
       >
-        <Plan model={model} selected={selected} onSelect={onSelect} label={label} compact={compact} header={header} />
+        <Plan model={model} selected={selected} onSelect={onSelect} label={label} compact={compact} header={header} flow={flow} />
         {chosen ? (
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-line pb-1.5">
             <span className="text-[12px] text-muted">{text(`plan.kind.${chosen.kind}` as MsgKey)}</span>
@@ -676,6 +899,7 @@ export function PlanPanel({
           </div>
         ) : null}
       </div>
+      <div ref={hold} aria-hidden className="hidden md:block" style={{ height: 0 }} />
       {flows ? (
         <section aria-label={text("plan.flows", { count: model.links.length })} className="mb-4 mt-2 hidden overflow-hidden rounded-md border border-line bg-surface md:block">
           <div className="grid grid-cols-[1fr_1fr_1fr_1fr] gap-4 border-b border-line px-4 py-2 text-[12px] text-muted">

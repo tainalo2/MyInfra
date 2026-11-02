@@ -70,6 +70,7 @@ export function Secrets() {
   return (
     <>
       <PageTitle
+        inTree
         title={text("nav.secrets")}
         icon={Shield}
         action={
@@ -209,7 +210,7 @@ export function SecretPage() {
 
   return (
     <div className="max-w-[720px]">
-      <PageTitle title={secret.name} icon={Shield} />
+      <PageTitle inTree title={secret.name} icon={Shield} />
       <p className="text-muted">{text("secret.hidden")}</p>
       {error ? (
         <div className="mt-6">

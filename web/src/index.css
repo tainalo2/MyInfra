@@ -155,12 +155,6 @@ body {
     background-color: var(--color-surface);
   }
 
-  nav.breadcrumb a:hover {
-    text-decoration-line: underline;
-    text-underline-offset: 3px;
-    background-color: transparent;
-  }
-
   a.row:hover,
   button.row:hover {
     text-decoration: none;

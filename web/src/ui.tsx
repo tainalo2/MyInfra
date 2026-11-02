@@ -1,5 +1,5 @@
 import { createPortal } from "react-dom";
-import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, NavLink, Outlet, matchPath, useLocation } from "react-router-dom";
 import { langNames, langs, text, type MsgKey } from "./i18n";
 import { useI18n } from "./lang";
 import { Suspense, createContext, useContext, useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronUp,
   History,
+  Languages,
   Globe,
   LayoutGrid,
   LayoutTemplate,
@@ -208,7 +209,7 @@ export function LoadingLines({ lines = 3, label }: { lines?: number; label?: str
 
 export function LoadingCards({ count = 4 }: { count?: number }) {
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2" role="status" aria-label={text("list.loading")}>
+    <div className={cardGrid} role="status" aria-label={text("list.loading")}>
       {Array.from({ length: count }, (_, index) => (
         <div key={index} className="flex flex-col gap-3 rounded-md border border-line p-4">
           <Skeleton className="h-4 w-28" />
@@ -286,14 +287,19 @@ function itemClass(active: boolean) {
   return `flex items-center gap-3 rounded-md px-3 py-2 text-ink ${focus} ${active ? "bg-status" : ""}`;
 }
 
+// NavItem is an entry of the menu. On a page deeper than its section, the
+// steps down to the page unfold under it: the section heads the path in
+// bold, the whole of it on the highlight a section alone would have.
 function NavItem({ to, label, icon, end, match, count, hot }: NavSpec & { count?: number; hot?: boolean }) {
   useI18n();
   const location = useLocation();
-  const covered = match?.some((prefix) => location.pathname.startsWith(prefix)) ?? false;
+  const crumbs = useCrumbs();
+  const active = matchPath({ path: to, end: Boolean(end) }, location.pathname) !== null || (match?.some((prefix) => location.pathname.startsWith(prefix)) ?? false);
+  const steps = active ? trailOf(crumbs, to) : [];
   const name = text(label);
-  return (
-    <NavLink to={to} end={end} aria-label={count ? `${name} · ${count}` : name} className={({ isActive }) => itemClass(isActive || covered)}>
-      <Icon icon={icon} className="text-muted" />
+  const entry = (
+    <NavLink to={to} end={end} aria-label={count ? `${name} · ${count}` : name} className={`${itemClass(active && steps.length === 0)} ${steps.length > 0 ? "font-medium" : ""}`}>
+      <Icon icon={icon} className={steps.length > 0 ? "text-ink" : "text-muted"} />
       <span className="hidden flex-1 md:inline" aria-hidden>
         {name}
       </span>
@@ -304,6 +310,70 @@ function NavItem({ to, label, icon, end, match, count, hot }: NavSpec & { count?
         </span>
       ) : null}
     </NavLink>
+  );
+  if (steps.length === 0) return entry;
+  return (
+    <div className="flex flex-col gap-0.5 rounded-md bg-status pb-1.5">
+      {entry}
+      <NavTrail steps={steps} />
+    </div>
+  );
+}
+
+// trailOf keeps the steps of the trail below a section of the menu: the
+// section itself is already its entry.
+function trailOf(crumbs: Crumb[], to: string) {
+  if (crumbs.length < 2) return [];
+  return crumbs[0].to === to ? crumbs.slice(1) : crumbs;
+}
+
+// NavTrail draws the path from a section down to the page: each step hangs
+// from the one above it by an elbow, from under the section's icon first,
+// then from under the first letter of the step above. All of the path is
+// drawn in ink, so that it reads from its root; the page ends it, raised
+// above the highlight of the path.
+function NavTrail({ steps }: { steps: Crumb[] }) {
+  useI18n();
+  // On a low window the menu scrolls: the page is brought into its sight.
+  const page = useRef<HTMLSpanElement>(null);
+  const leaf = steps[steps.length - 1]?.label;
+  // Only the menu moves: scrollIntoView would scroll the whole frame too.
+  useEffect(() => {
+    const mark = page.current;
+    const menu = mark?.closest("nav");
+    if (!mark || !menu) return;
+    const box = menu.getBoundingClientRect();
+    const at = mark.getBoundingClientRect();
+    if (at.bottom > box.bottom) menu.scrollTop += at.bottom - box.bottom + 8;
+    else if (at.top < box.top) menu.scrollTop -= box.top - at.top + 8;
+  }, [leaf]);
+  let from = 20; // the middle of the section's icon
+  return (
+    <ol aria-label={text("crumb.trail")} className="flex flex-col">
+      {steps.map((step, index) => {
+        const last = index === steps.length - 1;
+        const at = from + 12;
+        // The elbow starts under the icon of the section, or under the words of the step above.
+        const top = index === 0 ? -12 : -8;
+        const elbow = { left: from, top, width: at - from, height: 16 - top };
+        from = at + 6;
+        const shape = `min-w-0 truncate rounded-md border px-1.5 py-[3px] text-[13px] text-ink ${focus}`;
+        return (
+          <li key={`${step.label}-${index}`} className="relative flex h-8 min-w-0 items-center pr-1" style={{ paddingLeft: at }}>
+            <span aria-hidden className="pointer-events-none absolute rounded-bl-md border-b border-l border-ink" style={elbow} />
+            {last || !step.to ? (
+              <span ref={last ? page : undefined} aria-current={last ? "page" : undefined} title={step.label} className={`${shape} ${last ? "border-line bg-surface font-medium" : "border-transparent"}`}>
+                {step.label}
+              </span>
+            ) : (
+              <Link to={step.to} title={step.label} className={`${shape} border-transparent hover:bg-surface`}>
+                {step.label}
+              </Link>
+            )}
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -321,10 +391,8 @@ function UpdatesNav() {
 }
 
 
-export function Header({ search = false }: { search?: boolean }) {
-  const { theme, toggle } = useTheme();
-  const { lang, setLang } = useI18n();
-  const label = theme === "dark" ? text("header.themeLight") : text("header.themeDark");
+// Header heads the screens without the menu: signing in, first start.
+export function Header() {
   return (
     <header className="shrink-0 border-b border-line pt-[env(safe-area-inset-top)]">
       <div className="flex items-center justify-between gap-4 px-4 py-3 md:px-6 md:py-4">
@@ -333,26 +401,50 @@ export function Header({ search = false }: { search?: boolean }) {
           MyInfra
         </Link>
         <div className="flex items-center gap-3">
-          {search ? <BusyIndicator /> : null}
-          {search ? <SearchButton /> : null}
-          <select
-            aria-label={text("header.lang")}
-            value={lang}
-            onChange={(event) => setLang(event.target.value as (typeof langs)[number])}
-            className={`${search ? "hidden md:block" : ""} bg-transparent text-ink ${focus}`}
-          >
-            {langs.map((code) => (
-              <option key={code} value={code}>
-                {langNames[code]}
-              </option>
-            ))}
-          </select>
-          <button type="button" onClick={toggle} aria-label={label} className={`${search ? "hidden md:block" : ""} -m-1 rounded-md p-1 text-ink ${focus}`}>
-            <Icon icon={theme === "dark" ? Sun : Moon} />
-          </button>
+          <LangSelect className="bg-transparent text-ink" />
+          <ThemeButton className="-m-1 p-1 text-ink" />
         </div>
       </div>
     </header>
+  );
+}
+
+function LangSelect({ className }: { className: string }) {
+  const { lang, setLang } = useI18n();
+  return (
+    <select aria-label={text("header.lang")} value={lang} onChange={(event) => setLang(event.target.value as (typeof langs)[number])} className={`${className} ${focus}`}>
+      {langs.map((code) => (
+        <option key={code} value={code}>
+          {langNames[code]}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function ThemeButton({ className }: { className: string }) {
+  useI18n();
+  const { theme, toggle } = useTheme();
+  const label = theme === "dark" ? text("header.themeLight") : text("header.themeDark");
+  return (
+    <button type="button" onClick={toggle} aria-label={label} title={label} className={`rounded-md ${className} ${focus}`}>
+      <Icon icon={theme === "dark" ? Sun : Moon} />
+    </button>
+  );
+}
+
+// Preferences ends the menu: the language and the theme, quiet, since they
+// are chosen once.
+function Preferences() {
+  return (
+    <div className="flex items-center gap-1">
+      <label className="relative flex min-w-0 flex-1 items-center gap-3 px-3 py-1.5 text-[13px] text-muted">
+        <Icon icon={Languages} className="shrink-0" />
+        <LangSelect className="min-w-0 flex-1 cursor-pointer appearance-none rounded-sm bg-transparent pr-4 text-muted" />
+        <ChevronDown size={12} aria-hidden className="pointer-events-none absolute right-1 text-faint" />
+      </label>
+      <ThemeButton className="shrink-0 p-2 text-muted" />
+    </div>
   );
 }
 
@@ -470,10 +562,9 @@ export function Shell() {
   const [override, setOverride] = useState<Crumb[] | null>(null);
   const counts = useCounts(location.pathname);
   const names = useCrumbNames(location.pathname);
-  // The trail is read once here: the bar of a phone, the sticky trail of a
-  // wide screen and the page titles all follow it.
+  // The trail is read once here: the bar of a phone and the tree of the
+  // wide screen's menu both follow it.
   const crumbs = override ?? crumbsFor(location.pathname, names);
-  const trail = crumbs.length >= 2;
   return (
     <ToastHost>
     <CrumbsContext.Provider value={crumbs}>
@@ -483,12 +574,19 @@ export function Shell() {
     <DestructionJobs.Provider value={jobs}>
     <OpenDeployments.Provider value={deploys}>
     <div className="flex h-dvh flex-col overflow-hidden">
-      <div className="hidden md:block">
-        <Header search />
-      </div>
       <div className="flex min-h-0 flex-1">
-        <aside className="hidden h-full min-h-0 w-56 shrink-0 flex-col border-r border-line md:flex">
-          <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 py-4 md:px-4">
+        {/* The column holds all of the wide screen's menu: where to go on top,
+            what is set once at the bottom. */}
+        <aside className="hidden h-full min-h-0 w-60 shrink-0 flex-col border-r border-line pt-[env(safe-area-inset-top)] md:flex">
+          <div className="flex shrink-0 flex-col gap-3 px-4 pb-2 pt-4">
+            <Link to="/" className={`inline-flex items-center gap-3 self-start rounded-md px-3 py-1 font-medium ${focus}`}>
+              <Icon icon={Boxes} />
+              MyInfra
+            </Link>
+            <SearchButton wide />
+            <BusyIndicator wide />
+          </div>
+          <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-4 py-2">
             {nav.map((item) => (
               <NavItem key={item.to} {...item} count={item.to === "/applications" ? counts.apps : item.to === "/clusters" ? counts.servers : undefined} />
             ))}
@@ -499,9 +597,12 @@ export function Shell() {
               <AccountNav />
             </div>
           </nav>
-          <div className="hidden shrink-0 flex-col gap-1 px-4 pb-4 md:flex">
-            <VersionNote />
-            <p className="text-[11px] leading-tight text-faint">{text("footer.license")}</p>
+          <div className="flex shrink-0 flex-col gap-2 px-4 pb-4 pt-2">
+            <Preferences />
+            <div className="flex flex-col gap-1 px-3">
+              <VersionNote />
+              <p className="text-[11px] leading-tight text-faint">{text("footer.license")}</p>
+            </div>
           </div>
         </aside>
         {location.pathname === "/" ? (
@@ -518,11 +619,12 @@ export function Shell() {
           // not jump back by what it saved, or the plan would grow again.
           <main className="min-w-0 flex-1 overflow-y-auto px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)] [overflow-anchor:none] md:px-6 md:pb-12 md:pt-0">
             <MobileBar />
-            <div className={`mx-auto w-full max-w-[960px] ${trail ? "" : "md:pt-8"}`}>
+            {/* The page takes the room it is given, up to where lines grow too long
+                to read: lists add columns, forms keep their own width. */}
+            <div className="@container mx-auto w-full max-w-[1600px] md:pt-8">
               <ReadOnlyBanner />
               <TransferBanner />
               <ReplicaBanner />
-              <Breadcrumb />
               <Suspense fallback={<LoadingLines lines={4} />}>
                 <Outlet />
               </Suspense>
@@ -547,35 +649,6 @@ const CrumbsContext = createContext<Crumb[]>([]);
 
 function useCrumbs() {
   return useContext(CrumbsContext);
-}
-
-function Breadcrumb() {
-  useI18n();
-  const crumbs = useCrumbs();
-  // A trail of one step says nothing the title does not.
-  if (crumbs.length < 2) return null;
-  return (
-    // The trail stays at the top while the page scrolls: it says where one is.
-    <nav aria-label={text("crumb.trail")} className="breadcrumb sticky top-0 z-20 -mx-6 mb-4 hidden border-b border-line bg-canvas px-6 py-3 md:block">
-      <ol className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        {crumbs.map((crumb, index) => {
-          const last = index === crumbs.length - 1;
-          return (
-            <li key={`${crumb.label}-${index}`} className="flex items-center gap-2">
-              {index > 0 ? <span className="text-faint" aria-hidden="true">/</span> : null}
-              {last || !crumb.to ? (
-                <span className={last ? "text-ink" : "text-muted"}>{crumb.label}</span>
-              ) : (
-                <Link to={crumb.to} className={`text-link ${focus}`}>
-                  {crumb.label}
-                </Link>
-              )}
-            </li>
-          );
-        })}
-      </ol>
-    </nav>
-  );
 }
 
 // PhoneAction puts the one action of a page in the phone's top bar.
@@ -765,6 +838,7 @@ export function PageTitle({
   note,
   action,
   phoneAction,
+  inTree = false,
 }: {
   title: string;
   icon?: LucideIcon;
@@ -774,6 +848,9 @@ export function PageTitle({
   action?: ReactNode;
   // phoneAction replaces action on a phone: one icon in the top bar.
   phoneAction?: { icon: LucideIcon; label: string; onClick: () => void };
+  // inTree says the tree of the menu already names the page: a wide screen
+  // hides the title, kept for the phone, the tab and readers. A note stays.
+  inTree?: boolean;
 }) {
   // Each page names its tab, so that several tabs can be told apart. A page
   // without a title, such as the overview, leaves just MyInfra.
@@ -783,16 +860,18 @@ export function PageTitle({
       document.title = "MyInfra";
     };
   }, [title]);
-  // Under a trail, a wide screen reads the page's name in the trail: the
-  // title stays for readers and for the phone, which has no trail.
-  const trail = useContext(CrumbsContext).length >= 2;
   return (
-    <div className={`mb-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 ${trail ? (action ? "md:mb-6 md:justify-end" : "md:mb-0") : "md:mb-6"}`}>
-      <h1 className={`flex min-w-0 items-center gap-3 text-[28px] font-medium leading-[1.2] md:text-2xl md:leading-8 ${trail ? "md:sr-only" : ""}`}>
+    <div className={`mb-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 ${!inTree ? "md:mb-6" : note || action ? `md:mb-6 ${note ? "" : "md:justify-end"}` : "md:mb-0"}`}>
+      <h1 className={`flex min-w-0 items-center gap-3 text-[28px] font-medium leading-[1.2] md:text-2xl md:leading-8 ${inTree ? "md:sr-only" : ""}`}>
         {mark ? mark : icon ? <Icon icon={icon} /> : null}
         {title}
         {note ? <span className="hidden self-end pb-1 text-[15px] font-normal leading-normal text-muted sm:inline">{note}</span> : null}
       </h1>
+      {inTree && note ? (
+        <span aria-hidden className="hidden text-[15px] text-muted md:inline">
+          {note}
+        </span>
+      ) : null}
       {phoneAction && action ? <div className="hidden md:block">{action}</div> : action}
       {phoneAction ? <PhoneAction {...phoneAction} /> : null}
     </div>
@@ -883,8 +962,12 @@ export function EmptyList({ message, label, onCreate }: { message: string; label
   );
 }
 
+// cardGrid lays cards out as wide as the page allows: one column, then two,
+// three and four, each card keeping about 360px.
+export const cardGrid = "grid grid-cols-1 gap-4 @2xl:grid-cols-2 @6xl:grid-cols-3 @[92rem]:grid-cols-4";
+
 export function ItemList({ mode, columns = 2, children }: { mode: ListMode; columns?: 1 | 2; children: ReactNode }) {
-  const cards = columns === 2 ? "grid grid-cols-1 gap-4 md:grid-cols-2" : "grid grid-cols-1 gap-4";
+  const cards = columns === 2 ? cardGrid : "grid grid-cols-1 gap-4";
   return <ul className={mode === "cards" ? cards : "flex flex-col"}>{children}</ul>;
 }
 
