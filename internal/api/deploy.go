@@ -166,6 +166,8 @@ func (a *API) continueCluster(ctx context.Context, owner, id, name, clusterID, c
 	}
 	var leader store.Server
 	hasLeader := false
+	release := func() {}
+	defer func() { release() }()
 	engine := deploy.Engine()
 	if engine != "k3s" {
 		host.NodeIP = ""
@@ -209,6 +211,18 @@ func (a *API) continueCluster(ctx context.Context, owner, id, name, clusterID, c
 				return
 			}
 			if join {
+				if self.ControlPlane {
+					steps = deploy.Mark(steps, tag, "running", "Attente du control plane précédent.")
+					_ = a.saveDeploy(owner, id, "deploying", address, machineID, steps)
+					release, err = a.holdPlaneJoin(ctx, clusterID)
+					if err != nil {
+						release = func() {}
+						a.failDeploy(owner, id, steps, tag, address, machineID, "Le déploiement n'a pas pu continuer.")
+						return
+					}
+					steps = deploy.Mark(steps, tag, "running", labels[tag])
+					_ = a.saveDeploy(owner, id, "deploying", address, machineID, steps)
+				}
 				leader, err = a.waitReadyLeader(ctx, owner, clusterID, id)
 				if err != nil {
 					a.failDeploy(owner, id, steps, tag, address, machineID, "Le control plane n'est pas encore prêt.")
@@ -274,6 +288,9 @@ func (a *API) continueCluster(ctx context.Context, owner, id, name, clusterID, c
 					return
 				}
 			}
+			// The node is Ready: etcd has taken it, the next one can come.
+			release()
+			release = func() {}
 		}
 		steps = deploy.Mark(steps, tag, "done", labels[tag])
 	}
@@ -533,6 +550,21 @@ func (a *API) joinsCluster(ctx context.Context, owner string, self store.Server)
 		}
 	}
 	return false, nil
+}
+
+// holdPlaneJoin waits for the turn of a control plane to join its cluster, and
+// gives back what ends that turn. etcd takes its members one at a time: two
+// arriving together can leave the cluster without a quorum, and its first
+// server stops answering.
+func (a *API) holdPlaneJoin(ctx context.Context, clusterID string) (func(), error) {
+	held, _ := a.planeJoins.LoadOrStore(clusterID, make(chan struct{}, 1))
+	turn := held.(chan struct{})
+	select {
+	case turn <- struct{}{}:
+		return func() { <-turn }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 func (a *API) waitReadyLeader(ctx context.Context, owner, clusterID, excludeID string) (store.Server, error) {

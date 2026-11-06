@@ -285,3 +285,38 @@ func TestGPUPluginSelectsLabelledNodes(t *testing.T) {
 		}
 	}
 }
+
+// k3s runs over WireGuard: a new node must not take the tunnel of the others down.
+func TestWireGuardChangesPeersWithoutCuttingTheTunnel(t *testing.T) {
+	if !strings.Contains(playbook, "wg syncconf myinfra <(wg-quick strip myinfra)") {
+		t.Fatal("les pairs ne changent pas à chaud")
+	}
+	if strings.Contains(playbook, "name: wg-quick@myinfra") {
+		t.Fatal("le module systemd redémarrerait le tunnel à chaque nœud")
+	}
+}
+
+// A control plane out of sight for a moment is no failure: systemd restarts k3s.
+func TestControlPlaneJoinOutlivesAShortAbsence(t *testing.T) {
+	for _, part := range []string{"connection refused|connection reset|: EOF", `while [ "$i" -lt 90 ]; do`} {
+		if !strings.Contains(playbook, part) {
+			t.Fatalf("jonction fragile : %s absent", part)
+		}
+	}
+}
+
+// Ansible reads the quotes of a script before the shell does: one left open,
+// even in a comment, refuses the whole playbook and every deployment with it.
+func TestPlaybookSyntax(t *testing.T) {
+	binary, err := exec.LookPath("ansible-playbook")
+	if err != nil {
+		t.Skip("ansible-playbook absent")
+	}
+	path := filepath.Join(t.TempDir(), "site.yml")
+	if err := os.WriteFile(path, []byte(playbook), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command(binary, "--syntax-check", path).CombinedOutput(); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+}

@@ -75,19 +75,24 @@
       when: kubernetes_engine == "k3s" and node_role == "server" and k3s_server_url | length == 0
       tags: [kubernetes]
 
+    # Le control plane visé peut être absent un instant : k3s s'arrête alors à sa
+    # première erreur, et systemd le relance. Le reste est un vrai échec.
+    # Pas d'apostrophe hors guillemets dans un script : Ansible refuserait le fichier.
     - name: Joindre un control plane k3s
       ansible.builtin.shell: |
         systemctl disable --now k3s >/dev/null 2>&1 || true
         systemctl stop k3s-agent >/dev/null 2>&1 || true
         sleep 2
         if ! curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" INSTALL_K3S_FORCE_RESTART=true K3S_TOKEN="{{ k3s_token }}" sh -s - server --server "{{ k3s_server_url }}" --node-name "{{ node_name }}" {{ k3s_extra }}; then
-          echo "L'installation du control plane a échoué."
-          journalctl -u k3s -n 15 --no-pager || true
-          exit 1
+          if ! journalctl -u k3s -n 15 --no-pager | grep -qE 'connection refused|connection reset|: EOF|i/o timeout|no route to host|context deadline exceeded'; then
+            echo "L'installation du control plane a échoué."
+            journalctl -u k3s -n 15 --no-pager || true
+            exit 1
+          fi
         fi
         systemctl enable --now k3s >/dev/null 2>&1 || true
         i=0
-        while [ "$i" -lt 15 ]; do
+        while [ "$i" -lt 90 ]; do
           if systemctl is-active --quiet k3s; then exit 0; fi
           i=$((i + 1))
           sleep 2
@@ -267,12 +272,22 @@
           {% endfor %}
       tags: [wireguard]
 
+    # k3s passe par ce réseau : le couper à chaque nouveau nœud ferait tomber un
+    # control plane au moment où un autre le rejoint. Les pairs changent à chaud ;
+    # seule une adresse nouvelle, celle d'un serveur déplacé, demande un redémarrage.
     - name: Démarrer WireGuard
-      ansible.builtin.systemd:
-        name: wg-quick@myinfra
-        enabled: true
-        state: restarted
-        daemon_reload: true
+      ansible.builtin.shell: |
+        set -eu
+        address="{{ wireguard_address }}"
+        if systemctl is-active --quiet wg-quick@myinfra && ip -4 -o addr show dev myinfra | grep -qF " $address "; then
+          wg syncconf myinfra <(wg-quick strip myinfra)
+        else
+          systemctl daemon-reload
+          systemctl enable wg-quick@myinfra
+          systemctl restart wg-quick@myinfra
+        fi
+      args:
+        executable: /bin/bash
       tags: [wireguard]
 
     - name: Fermer les entrées non prévues

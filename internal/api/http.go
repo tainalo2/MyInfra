@@ -45,6 +45,8 @@ type API struct {
 	Shutdown     func(context.Context) error
 	transfer     transferState
 	deployMu     sync.Mutex
+	// planeJoins holds, per cluster, the one control plane joining its etcd.
+	planeJoins   sync.Map
 	deployStopMu sync.Mutex
 	deployStop   map[string]context.CancelFunc
 	deliverMu    sync.Mutex
