@@ -1,6 +1,6 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { LayoutTemplate, Plus } from "lucide-react";
+import { FormEvent, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Link, useBlocker, useNavigate, useParams, type BlockerFunction } from "react-router-dom";
+import { LayoutTemplate, Plus, Rocket, Trash2 } from "lucide-react";
 import {
   api,
   peek,
@@ -21,7 +21,9 @@ import { CancelDeployment } from "./deployments";
 import { currentLang, text, knownMessage } from "./i18n";
 import { Code } from "./code-lazy";
 import { OfferFields, OfferStorage, formatPrice } from "./offers";
-import { ConfirmDialog, Sheet, Spinner, Steps, useToast } from "./kit";
+import { ConfirmDialog, Sheet, Spinner, StatusBadge, Tabs, useToast, useWide } from "./kit";
+import { ChosenName, PlanPanel, templatePlan, underPlan } from "./plan";
+import { ProgressSteps } from "./progress";
 import { usePoll } from "./poll";
 import { AppLogo } from "./app-logo";
 import { CommunityTag, LibraryTag } from "./library-tag";
@@ -38,6 +40,7 @@ import {
   Field,
   Fold,
   Icon,
+  IconButton,
   Input,
   LoadingLines,
   MenuItem,
@@ -45,6 +48,8 @@ import {
   SectionTitle,
   Select,
   TextButton,
+  cardGrid,
+  focus,
 } from "./ui";
 
 const emptyServer = (): TemplateServer => ({ name: "", period: "hour", keyIds: [] });
@@ -89,7 +94,7 @@ export function Templates() {
     <>
       <PageTitle
         title={text("nav.templates")}
-        icon={LayoutTemplate}
+        phoneAction={rows && rows.length > 0 && canDeploy ? { icon: Plus, label: text("crumb.newTemplate"), onClick: () => navigate("/templates/nouveau") } : undefined}
         action={
           rows && rows.length > 0 && canDeploy ? (
             <span className="flex items-center gap-4">
@@ -104,6 +109,7 @@ export function Templates() {
           ) : null
         }
       />
+      <p className="mb-6 max-w-[720px] text-muted">{text("template.intro")}</p>
       <input
         id="template-file"
         type="file"
@@ -134,30 +140,54 @@ export function Templates() {
           <p className="text-muted">{text("template.empty")}</p>
         )
       ) : (
-        <ul className="flex flex-col gap-4">
-          {rows.map((row) => (
-            <li key={row.id} className="relative rounded-md border border-line hover:bg-status">
-              <Link to={`/templates/${row.id}`} className="block p-4 pr-14 text-ink">
-                <span>{row.name}</span>
-                <LibraryTag mark={row.library} />
-                <p className="mt-2 text-muted">{summary(row.body)}</p>
-              </Link>
-              <div className="absolute right-3 top-3">
-                <ActionsMenu label={text("apps.more")}>
-                  {canDeploy ? <MenuItem onClick={() => navigate(`/templates/${row.id}/deploy`)}>{text("template.deploy")}</MenuItem> : null}
-                  <MenuItem onClick={() => void download(row).catch((err) => toast(err instanceof Error ? err.message : text("common.error"), "bad"))}>
-                    {text("template.export")}
-                  </MenuItem>
-                  {canDeploy ? (
-                    <MenuItem tone="danger" onClick={() => setRemoving(row)}>
-                      {text("common.delete")}
+        <section>
+          <h2 className="mb-3">
+            {text("template.mine")} · {rows.length}
+          </h2>
+          <ul className={cardGrid}>
+            {rows.map((row) => (
+              <li key={row.id} className="flex h-full flex-col gap-3 rounded-md border border-line bg-surface p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link to={`/templates/${row.id}`} className={`font-medium text-ink ${focus}`}>
+                      {row.name}
+                    </Link>
+                    <LibraryTag mark={row.library} />
+                    <p className="text-[13px] text-muted">{summary(row.body)}</p>
+                  </div>
+                  <ActionsMenu label={text("apps.actionsOf", { name: row.name })}>
+                    <MenuItem onClick={() => navigate(`/templates/${row.id}`)}>{text("template.edit")}</MenuItem>
+                    <MenuItem onClick={() => void download(row).catch((err) => toast(err instanceof Error ? err.message : text("common.error"), "bad"))}>
+                      {text("template.export")}
                     </MenuItem>
-                  ) : null}
-                </ActionsMenu>
-              </div>
-            </li>
-          ))}
-        </ul>
+                    {canDeploy ? (
+                      <MenuItem tone="danger" onClick={() => setRemoving(row)}>
+                        {text("common.delete")}
+                      </MenuItem>
+                    ) : null}
+                  </ActionsMenu>
+                </div>
+                {(row.body.applications ?? []).length > 0 ? (
+                  <ul className="flex flex-wrap gap-1.5" aria-label={text("starter.apps")}>
+                    {(row.body.applications ?? []).map((app, index) => (
+                      <li key={`${app.name}-${index}`} title={app.name}>
+                        <AppLogo slug={app.package?.about?.logo ?? ""} name={app.name} size={24} />
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {canDeploy ? (
+                  <div className="mt-auto border-t border-line pt-3">
+                    <TextButton type="button" onClick={() => navigate(`/templates/${row.id}/deploy`)}>
+                      <Icon icon={Rocket} />
+                      {text("template.deploy")}
+                    </TextButton>
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
       <Starters />
       {removing ? (
@@ -177,9 +207,57 @@ export function Templates() {
   );
 }
 
+// snapshot is what a template's editor compares to tell whether it changed.
+function snapshot(name: string, body: TemplateBody) {
+  return JSON.stringify({ name, clusterName: body.clusterName ?? "", servers: body.servers ?? [], applications: body.applications ?? [] });
+}
+
+// LeaveDialog holds a navigation back while there is something to save. A
+// failed save keeps it open: leaving then would lose the changes.
+function LeaveDialog({ onSave, onLeave, onClose }: { onSave: () => Promise<unknown>; onLeave: () => void; onClose: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save() {
+    setBusy(true);
+    setError("");
+    try {
+      await onSave();
+      onLeave();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : text("common.error"));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Sheet title={text("template.leaveTitle")} onClose={onClose} busy={busy}>
+      <p className="mb-6 text-muted">{text("template.leaveHint")}</p>
+      {error ? (
+        <div className="mb-6">
+          <ErrorText>{error}</ErrorText>
+        </div>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-4">
+        <Button type="button" onClick={() => void save()} disabled={busy} data-autofocus>
+          {busy ? <Spinner /> : null}
+          {text("common.save")}
+        </Button>
+        <TextButton type="button" tone="danger" onClick={onLeave} disabled={busy}>
+          {text("template.leaveQuit")}
+        </TextButton>
+        <TextButton type="button" onClick={onClose} disabled={busy}>
+          {text("common.cancel")}
+        </TextButton>
+      </div>
+    </Sheet>
+  );
+}
+
 export function TemplateEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { canDeploy } = useSession();
   const [name, setName] = useState("");
   const [body, setBody] = useState<TemplateBody>({ servers: [], applications: [] });
   const [providers, setProviders] = useState<Secret[]>([]);
@@ -188,7 +266,27 @@ export function TemplateEditor() {
   const [error, setError] = useState("");
   const [ready, setReady] = useState(!id);
   const [saving, setSaving] = useState(false);
+  const [picking, setPicking] = useState(false);
+  // The element of the plan whose settings show, and which of its parts.
+  const [chosen, setChosen] = useState<string | null>(null);
+  const [part, setPart] = useState("general");
   const toast = useToast();
+  // Refs, so that a navigation made right after saving sees it at once.
+  const draft = useRef({ name, body });
+  draft.current = { name, body };
+  const savedAs = useRef(snapshot("", {}));
+  // Someone who cannot save has nothing to be offered.
+  const changed = useCallback(() => canDeploy && snapshot(draft.current.name, draft.current.body) !== savedAs.current, [canDeploy]);
+  const blocker = useBlocker(useCallback<BlockerFunction>(({ currentLocation, nextLocation }) => currentLocation.pathname !== nextLocation.pathname && changed(), [changed]));
+
+  // Closing the tab cannot show a page of ours: the browser asks by itself.
+  useEffect(() => {
+    function warn(event: BeforeUnloadEvent) {
+      if (changed()) event.preventDefault();
+    }
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [changed]);
 
   useEffect(() => {
     api<Secret[]>("/api/secrets")
@@ -206,29 +304,38 @@ export function TemplateEditor() {
     if (!id) return;
     api<Template>(`/api/templates/${id}`)
       .then((row) => {
-        setName(row.name);
-        setBody({
+        const next = {
           clusterName: row.body.clusterName ?? "",
           servers: row.body.servers ?? [],
           applications: row.body.applications ?? [],
-        });
+        };
+        setName(row.name);
+        setBody(next);
+        savedAs.current = snapshot(row.name, next);
       })
       .catch((err) => setError(err.message))
       .finally(() => setReady(true));
   }, [id]);
+
+  async function persist() {
+    const sent = snapshot(name, body);
+    const payload = { name, ...body };
+    const saved = id
+      ? await api<Template>(`/api/templates/${id}`, { method: "PUT", body: JSON.stringify(payload) })
+      : await api<Template>("/api/templates", { method: "POST", body: JSON.stringify(payload) });
+    savedAs.current = sent;
+    toast(text("template.saved", { name: saved.name }));
+    return saved;
+  }
 
   async function save(event: FormEvent) {
     event.preventDefault();
     if (saving) return;
     setError("");
     setSaving(true);
-    const payload = { name, ...body };
     try {
-      const saved = id
-        ? await api<Template>(`/api/templates/${id}`, { method: "PUT", body: JSON.stringify(payload) })
-        : await api<Template>("/api/templates", { method: "POST", body: JSON.stringify(payload) });
       // Saving keeps the editor open: deploying is a choice of its own.
-      toast(text("template.saved", { name: saved.name }));
+      const saved = await persist();
       if (!id) navigate(`/templates/${saved.id}`, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : text("common.error"));
@@ -240,131 +347,145 @@ export function TemplateEditor() {
   if (!ready) return <LoadingLines lines={4} />;
   const servers = body.servers ?? [];
   const apps = body.applications ?? [];
-  const [picking, setPicking] = useState(false);
+  // What is left open here is completed at deployment: only a missing name
+  // stops the template from being saved.
+  const model = templatePlan(body, {
+    cluster: body.clusterName ?? "",
+    clusterLater: true,
+    serverReady: (server) => server.name.trim() !== "",
+    appReady: (app) => app.name.trim() !== "",
+  });
+  const picked = model.nodes.find((node) => node.key === chosen);
+  const [kind, raw] = (picked?.key ?? "").split(":");
+  const index = Number(raw);
+  const planes = servers.filter((server) => server.controlPlane).length;
+  const setServer = (at: number, next: TemplateServer) => setBody({ ...body, servers: servers.map((item, i) => (i === at ? next : item)) });
+  const setApp = (at: number, next: TemplateApp) => setBody({ ...body, applications: apps.map((item, i) => (i === at ? next : item)) });
+
+  // A new element is chosen at once, so that its settings open.
+  function open(key: string, tab: string) {
+    setChosen(key);
+    setPart(tab);
+  }
+
+  function addServer() {
+    setBody({ ...body, servers: [...servers, { ...emptyServer(), controlPlane: !servers.some((server) => server.controlPlane) }] });
+    open(`server:${servers.length}`, "machine");
+  }
+
+  function addApp(app: TemplateApp) {
+    setBody({ ...body, applications: [...apps, app] });
+    open(`app:${apps.length}`, "general");
+  }
+
+  function remove() {
+    setChosen(null);
+    if (kind === "server") setBody({ ...body, servers: servers.filter((_, i) => i !== index) });
+    else setBody({ ...body, applications: apps.filter((_, i) => i !== index) });
+  }
+
+  const clusterField = (
+    <Field label={text("cluster.name")}>
+      <Input value={body.clusterName ?? ""} placeholder={text("ui.videPourChoisirUnClusterAu")} onChange={(e) => setBody({ ...body, clusterName: e.target.value })} />
+    </Field>
+  );
 
   return (
     <>
-      <PageTitle title={id ? name || "Template" : text("crumb.newTemplate")} icon={LayoutTemplate} />
-      <form onSubmit={save} className="flex max-w-[720px] flex-col gap-10">
-        <Steps
-          steps={[
-            {
-              title: text("steps.cluster"),
-              content: (
-                <>
-                <Field label={text("template.name")}>
-                  <Input value={name} onChange={(e) => setName(e.target.value)} required />
-                </Field>
-                <section className="flex flex-col gap-4">
-                  <div className="hidden md:block">
-                    <SectionTitle>{text("field.cluster")}</SectionTitle>
-                  </div>
-                  <Field label={text("cluster.name")}>
-                    <Input
-                      value={body.clusterName ?? ""}
-                      placeholder={text("ui.videPourChoisirUnClusterAu")}
-                      onChange={(e) => setBody({ ...body, clusterName: e.target.value })}
-                    />
-                  </Field>
-                </section>
-                </>
-              ),
-            },
-            {
-              title: text("steps.servers"),
-              content: (
-                <section className="flex flex-col gap-4">
-                  <div className="hidden md:block">
-                    <SectionTitle>{text("cluster.servers")}</SectionTitle>
-                  </div>
-                  {servers.map((server, index) => (
-                    <div key={index} className="flex flex-col gap-4 rounded-md border border-line p-4">
-                      <MachineFields
-                        server={server}
-                        providers={providers}
-                        keys={keys}
-                        onChange={(next) => setBody({ ...body, servers: servers.map((item, i) => (i === index ? next : item)) })}
-                      />
-                      <TextButton type="button" tone="danger" onClick={() => setBody({ ...body, servers: servers.filter((_, i) => i !== index) })}>
-                        {text("common.remove")}
-                      </TextButton>
-                    </div>
-                  ))}
-                  <div>
-                    <TextButton
-                      type="button"
-                      onClick={() => setBody({ ...body, servers: [...servers, { ...emptyServer(), controlPlane: !servers.some((server) => server.controlPlane) }] })}
-                    >
-                      <Icon icon={Plus} />
-                      {text("ui.ajouterUnServeur")}
-                    </TextButton>
-                  </div>
-                  {servers.length > 0 ? <p className="text-faint">{text("template.planesHint")}</p> : null}
-                  {servers.filter((server) => server.controlPlane).length % 2 === 0 && servers.some((server) => server.controlPlane) ? (
-                    <p className="text-warn">{text("server.evenPlanes")}</p>
-                  ) : null}
-                </section>
-              ),
-            },
-            {
-              title: text("steps.apps"),
-              content: (
-                <section className="flex flex-col gap-4">
-                  <div className="hidden md:block">
-                    <SectionTitle>{text("nav.apps")}</SectionTitle>
-                  </div>
-                  {apps.map((app, index) => (
-                    <div key={index} className="flex flex-col gap-4 rounded-md border border-line p-4">
-                      <AppFields
-                        app={app}
-                        zones={zones}
-                        onChange={(next) => setBody({ ...body, applications: apps.map((item, i) => (i === index ? next : item)) })}
-                      />
-                      <TextButton type="button" tone="danger" onClick={() => setBody({ ...body, applications: apps.filter((_, i) => i !== index) })}>
-                        {text("common.remove")}
-                      </TextButton>
-                    </div>
-                  ))}
-                  <div className="flex flex-wrap gap-6">
-                    <TextButton type="button" onClick={() => setBody({ ...body, applications: [...apps, emptyApp()] })}>
-                      <Icon icon={Plus} />
-                      {text("ui.ajouterUneApplication")}
-                    </TextButton>
-                    <TextButton type="button" onClick={() => setPicking(true)}>
-                      <Icon icon={Plus} />
-                      {text("template.fromPackage")}
-                    </TextButton>
-                  </div>
-                  {picking ? (
-                    <PackagePick
-                      onClose={() => setPicking(false)}
-                      onPick={(pkg) => {
-                        setPicking(false);
-                        const pub = pkg.services.find((service) => service.public) ?? pkg.services[0];
-                        setBody({ ...body, applications: [...apps, { name: pkg.name, sourceKind: "image", source: pub?.image ?? "", replicas: 1, package: pkg, inputs: {} }] });
-                      }}
-                    />
-                  ) : null}
-                </section>
-              ),
-            },
-          ]}
-          error={error ? <ErrorText>{error}</ErrorText> : null}
-          submit={
+      <PageTitle inTree title={id ? name || "Template" : text("crumb.newTemplate")} icon={LayoutTemplate} />
+      <PlanPanel
+        model={model}
+        adds={
+          canDeploy
+            ? {
+                apps: { label: text("ui.ajouterUneApplication"), onClick: () => addApp(emptyApp()) },
+                machines: { label: text("ui.ajouterUnServeur"), onClick: addServer },
+              }
+            : undefined
+        }
+        label={text("plan.labelTemplate")}
+        whole={text("plan.wholeTemplate")}
+        summary={text("plan.templateSummary", { apps: apps.length, servers: servers.length })}
+        named={false}
+        selected={picked ? picked.key : null}
+        onSelect={(key) => {
+          setChosen(key);
+          setPart("general");
+        }}
+      />
+      <div className="mt-2" />
+      {/* Fields out of sight must not stop the form: the server says what is
+          wrong, and the page shows it. */}
+      <form onSubmit={save} noValidate className="flex flex-col gap-3">
+        <div className={underPlan}>
+          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-line py-1">
+            <div className="min-w-0">
+              {picked ? (
+                <span className="flex min-w-0 items-center gap-3">
+                  <ChosenName node={picked} />
+                  {canDeploy && (kind === "server" || kind === "app") ? <IconButton type="button" icon={Trash2} label={text("common.remove")} onClick={remove} /> : null}
+                </span>
+              ) : null}
+            </div>
+            {canDeploy ? (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <TextButton type="button" onClick={() => setPicking(true)}>
+                  <Icon icon={Plus} />
+                  {text("template.fromPackage")}
+                </TextButton>
+                {id ? (
+                  <Button type="button" variant="secondary" className="sm:py-1!" onClick={() => navigate(`/templates/${id}/deploy`)}>
+                    {text("template.deployment")}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </div>
+        {picked ? (
+          <ElementSettings
+            chosen={picked.key}
+            part={part}
+            onPart={setPart}
+            body={body}
+            setServer={setServer}
+            setApp={setApp}
+            cluster={clusterField}
+            providers={providers}
+            keys={keys}
+            zones={zones}
+          />
+        ) : (
+          <div className="mb-6 flex max-w-[720px] flex-col gap-4">
+            <Field label={text("template.name")}>
+              <Input value={name} onChange={(e) => setName(e.target.value)} required />
+            </Field>
+            {clusterField}
+          </div>
+        )}
+        {kind === "server" ? <p className="max-w-[720px] text-faint">{text("template.planesHint")}</p> : null}
+        {planes > 0 && planes % 2 === 0 ? <p className="max-w-[720px] text-warn">{text("server.evenPlanes")}</p> : null}
+        {error ? <ErrorText>{error}</ErrorText> : null}
+        {canDeploy ? (
+          <div>
             <Button type="submit" disabled={saving}>
               {saving ? <Spinner /> : null}
               {text("common.save")}
             </Button>
-          }
-        />
-        {id ? (
-          <p>
-            <Link to={`/templates/${id}/deploy`} className="text-muted underline">
-              {text("template.deploy")}
-            </Link>
-          </p>
+          </div>
         ) : null}
       </form>
+      {picking ? (
+        <PackagePick
+          onClose={() => setPicking(false)}
+          onPick={(pkg) => {
+            setPicking(false);
+            const pub = pkg.services.find((service) => service.public) ?? pkg.services[0];
+            addApp({ name: pkg.name, sourceKind: "image", source: pub?.image ?? "", replicas: 1, package: pkg, inputs: {} });
+          }}
+        />
+      ) : null}
+      {blocker.state === "blocked" ? <LeaveDialog onSave={persist} onLeave={() => blocker.proceed()} onClose={() => blocker.reset()} /> : null}
     </>
   );
 }
@@ -375,14 +496,17 @@ export function TemplateLaunch() {
   const [template, setTemplate] = useState<Template | null>(null);
   const [body, setBody] = useState<TemplateBody>({});
   const [target, setTarget] = useState("");
-  const [phase, setPhase] = useState<"fill" | "summary">("fill");
-  const [launching, setLaunching] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [providers, setProviders] = useState<Secret[]>([]);
   const [keys, setKeys] = useState<Secret[]>([]);
   const [zones, setZones] = useState<DnsZone[]>([]);
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
+  // The element of the plan whose settings show, and which of its parts.
+  const [chosen, setChosen] = useState<string | null>(null);
+  const [part, setPart] = useState("general");
+  const wide = useWide();
 
   useEffect(() => {
     Promise.all([
@@ -403,26 +527,18 @@ export function TemplateLaunch() {
         setKeys(secrets.filter((secret) => secret.kind === "ssh_key"));
         setZones(nextZones);
         setClusters(nextClusters);
-        if (!hasGaps(next, nextZones) && !needsCluster(next)) setPhase("summary");
       })
       .catch((err) => setError(err.message))
       .finally(() => setReady(true));
   }, [id]);
 
-  async function validate() {
-    if (launching) return;
-    setError("");
-    setLaunching(true);
-    try {
-      const run = await api<TemplateRun>(`/api/templates/${id}/runs`, {
-        method: "POST",
-        body: JSON.stringify({ ...body, targetClusterId: body.clusterName ? "" : target }),
-      });
-      navigate(`/templates/suivis/${run.id}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : text("common.error"));
-      setLaunching(false);
-    }
+  // A failure stays in the dialog that asked for it.
+  async function launch() {
+    const run = await api<TemplateRun>(`/api/templates/${id}/runs`, {
+      method: "POST",
+      body: JSON.stringify({ ...body, targetClusterId: body.clusterName ? "" : target }),
+    });
+    navigate(`/templates/suivis/${run.id}`);
   }
 
   if (!ready) return <LoadingLines lines={4} />;
@@ -432,146 +548,296 @@ export function TemplateLaunch() {
   const missing = hasGaps(body, zones);
   const choices = clusters.filter((cluster) => (servers.length > 0 ? cluster.origin !== "imported" : true));
 
+  const clusterLabel = body.clusterName || choices.find((cluster) => cluster.id === target)?.name || "";
+  const model = templatePlan(body, {
+    cluster: clusterLabel,
+    serverReady,
+    appReady: (app) => !(app.names ?? []).some((name) => name.subdomain.trim() !== "" && !knownZone(name.zone, zones)),
+  });
+  const canContinue = !missing && (!needsCluster(body) || Boolean(target));
+  const setServer = (index: number, next: TemplateServer) => setBody({ ...body, servers: servers.map((item, i) => (i === index ? next : item)) });
+  const setApp = (index: number, next: TemplateApp) => setBody({ ...body, applications: apps.map((item, i) => (i === index ? next : item)) });
+  const clusterField = body.clusterName ? (
+    <Field label={text("template.createdCluster")}>
+      <Input value={body.clusterName} onChange={(e) => setBody({ ...body, clusterName: e.target.value })} required />
+    </Field>
+  ) : choices.length === 0 ? (
+    <p className="text-muted">{text("template.noCluster")}</p>
+  ) : (
+    <Field label={text("field.cluster")}>
+      <Select value={target} onChange={(e) => setTarget(e.target.value)} required>
+        <option value="">{text("common.choose")}</option>
+        {choices.map((cluster) => (
+          <option key={cluster.id} value={cluster.id}>
+            {cluster.name}
+          </option>
+        ))}
+      </Select>
+    </Field>
+  );
+
+  const picked = model.nodes.find((node) => node.key === chosen);
+  const settings = picked ? (
+    <ElementSettings
+      chosen={picked.key}
+      part={part}
+      onPart={setPart}
+      body={body}
+      setServer={setServer}
+      setApp={setApp}
+      cluster={clusterField}
+      providers={providers}
+      keys={keys}
+      zones={zones}
+    />
+  ) : null;
+
   return (
     <>
-      <PageTitle title={template.name} icon={LayoutTemplate} />
+      <PageTitle inTree title={template.name} icon={LayoutTemplate} />
       {error ? (
         <div className="mb-8">
           <ErrorText>{error}</ErrorText>
         </div>
       ) : null}
-      {phase === "fill" ? (
-        <form
-          className="flex max-w-[720px] flex-col gap-8"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (!missing && (body.clusterName || target)) setPhase("summary");
-          }}
-        >
-          <SectionTitle>{text("template.complete")}</SectionTitle>
-          {needsCluster(body) ? (
-            choices.length === 0 ? (
-              <p className="text-muted">{text("template.noCluster")}</p>
-            ) : (
-              <Field label={text("field.cluster")}>
-                <Select value={target} onChange={(e) => setTarget(e.target.value)} required>
-                  <option value="">{text("common.choose")}</option>
-                  {choices.map((cluster) => (
-                    <option key={cluster.id} value={cluster.id}>
-                      {cluster.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-            )
-          ) : null}
-          {servers.map((server, index) =>
-            serverReady(server) ? null : (
-              <div key={index} className="flex flex-col gap-4 rounded-md border border-line p-4">
-                <MachineFields
-                  server={server}
-                  providers={providers}
-                  keys={keys}
-                  onChange={(next) => setBody({ ...body, servers: servers.map((item, i) => (i === index ? next : item)) })}
-                />
-              </div>
-            ),
-          )}
-          {apps.map((app, index) => {
-            const open = (app.names ?? []).some((name) => name.subdomain && !knownZone(name.zone, zones));
-            if (!open) return null;
-            return (
-              <AppFields
-                key={index}
-                app={app}
-                zones={zones}
-                onChange={(next) => setBody({ ...body, applications: apps.map((item, i) => (i === index ? next : item)) })}
-              />
-            );
-          })}
-          <div>
-            <Button type="submit" disabled={missing || (needsCluster(body) && !target)}>
-              {text("auth.continue")}
+      <PlanPanel
+        model={model}
+        label={text("plan.labelTemplate")}
+        whole={text("plan.wholeTemplate")}
+        summary={text("plan.templateSummary", { apps: apps.length, servers: servers.length })}
+        named={false}
+        selected={picked ? picked.key : null}
+        onSelect={(key) => {
+          setChosen(key);
+          setPart("general");
+        }}
+      >
+        {wide ? null : settings}
+      </PlanPanel>
+      <div className="mt-2" />
+      {/* Deploying stays in reach wherever the page is: under the plan on a
+          wide screen, above the tabs on a phone. */}
+      <div className={`${underPlan} max-md:fixed max-md:inset-x-0 max-md:bottom-[calc(4rem+env(safe-area-inset-bottom))] max-md:z-20 max-md:border-t max-md:border-line max-md:bg-canvas max-md:px-4 max-md:py-2`}>
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 md:border-b md:border-line md:py-1">
+          <div className="min-w-0 max-md:hidden">{picked ? <ChosenName node={picked} /> : null}</div>
+          <div className="flex items-center gap-4 max-md:w-full max-md:justify-end">
+            {canContinue ? null : <span className="text-[13px] text-warn">{text("plan.missing")}</span>}
+            <Button type="button" className="sm:py-1!" disabled={!canContinue} onClick={() => setConfirming(true)}>
+              <Icon icon={Rocket} />
+              {text("template.deploy")}
             </Button>
-          </div>
-        </form>
-      ) : (
-        <div className="flex max-w-[720px] flex-col gap-8">
-          <SectionTitle>{text("template.summary")}</SectionTitle>
-          {body.clusterName ? (
-            <Field label={text("template.createdCluster")}>
-              <Input value={body.clusterName} onChange={(e) => setBody({ ...body, clusterName: e.target.value })} required />
-            </Field>
-          ) : (
-            <p>{text("field.cluster")} {choices.find((cluster) => cluster.id === target)?.name}</p>
-          )}
-          {servers.map((server, index) => {
-            const marked = servers.some((item) => item.controlPlane);
-            const control = server.controlPlane || (!marked && index === 0 && Boolean(body.clusterName));
-            return (
-            <div key={index} className="flex flex-col gap-2 border-t border-line pt-4">
-              <Field label={control ? text("template.controlServer") : text("template.server")}>
-                <Input
-                  value={server.name}
-                  onChange={(e) => setBody({ ...body, servers: servers.map((item, i) => (i === index ? { ...item, name: e.target.value } : item)) })}
-                  required
-                />
-              </Field>
-              <ServerLine server={server} providers={providers} keys={keys} />
-            </div>
-            );
-          })}
-          {apps.map((app, index) => (
-            <div key={index} className="flex flex-col gap-2 border-t border-line pt-4">
-              <Field label={text("crumb.application")}>
-                <Input
-                  value={app.name}
-                  onChange={(e) =>
-                    setBody({ ...body, applications: apps.map((item, i) => (i === index ? { ...item, name: e.target.value } : item)) })
-                  }
-                  required
-                />
-              </Field>
-              <p className="text-muted">
-                {app.sourceKind === "git" ? text("ui.depot") : text("common.image")} {app.source}
-                {(app.replicas ?? 1) > 1 ? ` · ${text("template.copies", { count: app.replicas ?? 1 })}` : ""}
-              </p>
-              {(app.services ?? []).map((service) => (
-                <p key={service.name} className="text-muted">
-                  {service.name} · {service.image}
-                  {` · ${service.published ? text("template.published") : text("template.internal")}`}
-                  {service.disk ? ` · ${text("template.disk")}` : ""}
-                </p>
-              ))}
-              {(app.names ?? []).map((name, nameIndex) => (
-                <p key={nameIndex} className="text-muted">
-                  {name.subdomain}.{name.zone}
-                </p>
-              ))}
-            </div>
-          ))}
-          <Cost servers={servers} />
-          <ToolInstall
-            ansible={servers.length > 0}
-            tofu={servers.some((server) => {
-              const kind = server.provider || providers.find((item) => item.id === server.providerId)?.provider;
-              return kind === "hetzner" || kind === "scaleway";
-            })}
-          />
-          <div className="flex items-center gap-4">
-            <Button type="button" onClick={() => void validate()} disabled={launching}>
-              {launching ? <Spinner /> : null}
-              {text("ui.valider")}
-            </Button>
-            {missing || needsCluster(body) ? (
-              <TextButton type="button" onClick={() => setPhase("fill")}>
-                {text("ui.retour")}
-              </TextButton>
-            ) : null}
           </div>
         </div>
+      </div>
+      <div className="mt-3" />
+      {wide ? settings : null}
+      {picked ? null : (
+        <div className="flex max-w-[720px] flex-col gap-8">
+          {missing || needsCluster(body) ? (
+            <>
+              <SectionTitle>{text("template.complete")}</SectionTitle>
+              {needsCluster(body) ? (
+                choices.length === 0 ? (
+                  <p className="text-muted">{text("template.noCluster")}</p>
+                ) : (
+                  <Field label={text("field.cluster")}>
+                    <Select value={target} onChange={(e) => setTarget(e.target.value)} required>
+                      <option value="">{text("common.choose")}</option>
+                      {choices.map((cluster) => (
+                        <option key={cluster.id} value={cluster.id}>
+                          {cluster.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                )
+              ) : null}
+              {servers.map((server, index) =>
+                serverReady(server) ? null : (
+                  <div key={index} className="flex flex-col gap-4 rounded-md border border-line p-4">
+                    <MachineFields server={server} providers={providers} keys={keys} onChange={(next) => setServer(index, next)} />
+                  </div>
+                ),
+              )}
+              {apps.map((app, index) => {
+                const open = (app.names ?? []).some((name) => name.subdomain && !knownZone(name.zone, zones));
+                if (!open) return null;
+                return <AppFields key={index} app={app} zones={zones} onChange={(next) => setApp(index, next)} />;
+              })}
+            </>
+          ) : null}
+          {canContinue ? (
+            <>
+              <SectionTitle>{text("template.summary")}</SectionTitle>
+              {body.clusterName ? (
+                <Field label={text("template.createdCluster")}>
+                  <Input value={body.clusterName} onChange={(e) => setBody({ ...body, clusterName: e.target.value })} required />
+                </Field>
+              ) : null}
+              {servers.map((server, index) => {
+                const marked = servers.some((item) => item.controlPlane);
+                const control = server.controlPlane || (!marked && index === 0 && Boolean(body.clusterName));
+                return (
+                  <div key={index} className="flex flex-col gap-2 border-t border-line pt-4">
+                    <Field label={control ? text("template.controlServer") : text("template.server")}>
+                      <Input value={server.name} onChange={(e) => setServer(index, { ...server, name: e.target.value })} required />
+                    </Field>
+                    <ServerLine server={server} providers={providers} keys={keys} />
+                  </div>
+                );
+              })}
+              {apps.map((app, index) => (
+                <div key={index} className="flex flex-col gap-2 border-t border-line pt-4">
+                  <Field label={text("crumb.application")}>
+                    <Input value={app.name} onChange={(e) => setApp(index, { ...app, name: e.target.value })} required />
+                  </Field>
+                  <p className="text-muted">
+                    {app.sourceKind === "git" ? text("ui.depot") : text("common.image")} {app.source}
+                    {(app.replicas ?? 1) > 1 ? ` · ${text("template.copies", { count: app.replicas ?? 1 })}` : ""}
+                  </p>
+                  {(app.services ?? []).map((service) => (
+                    <p key={service.name} className="text-muted">
+                      {service.name} · {service.image}
+                      {` · ${service.published ? text("template.published") : text("template.internal")}`}
+                      {service.disk ? ` · ${text("template.disk")}` : ""}
+                    </p>
+                  ))}
+                  {(app.names ?? []).map((name, nameIndex) => (
+                    <p key={nameIndex} className="text-muted">
+                      {name.subdomain}.{name.zone}
+                    </p>
+                  ))}
+                </div>
+              ))}
+              <Cost servers={servers} />
+              <ToolInstall
+                ansible={servers.length > 0}
+                tofu={servers.some((server) => {
+                  const kind = server.provider || providers.find((item) => item.id === server.providerId)?.provider;
+                  return kind === "hetzner" || kind === "scaleway";
+                })}
+              />
+            </>
+          ) : null}
+        </div>
       )}
+      {/* The bar of a phone sits over the end of the page. */}
+      <div aria-hidden className="h-16 md:hidden" />
+      {confirming ? (
+        <ConfirmDialog title={text("template.deployTitle", { name: template.name })} confirmLabel={text("template.deploy")} onConfirm={launch} onClose={() => setConfirming(false)}>
+          <div className="flex flex-col gap-2">
+            {clusterLabel ? (
+              <p>
+                {text("field.cluster")} {clusterLabel}
+              </p>
+            ) : null}
+            <p>{text("plan.templateSummary", { apps: apps.length, servers: servers.length })}</p>
+            <Cost servers={servers} />
+          </div>
+        </ConfirmDialog>
+      ) : null}
     </>
+  );
+}
+
+// ElementSettings shows the settings of one element of a template's plan;
+// an element with several kinds of settings has a nav to go from one to the other.
+function ElementSettings({
+  chosen,
+  part,
+  onPart,
+  body,
+  setServer,
+  setApp,
+  cluster,
+  providers,
+  keys,
+  zones,
+}: {
+  chosen: string;
+  part: string;
+  onPart: (part: string) => void;
+  body: TemplateBody;
+  setServer: (index: number, server: TemplateServer) => void;
+  setApp: (index: number, app: TemplateApp) => void;
+  // cluster is what the page offers for the cluster: naming it or choosing one.
+  cluster: ReactNode;
+  providers: Secret[];
+  keys: Secret[];
+  zones: DnsZone[];
+}) {
+  const [kind, raw] = chosen.split(":");
+  const index = Number(raw);
+  let parts: { key: string; label: string; body: ReactNode }[] = [];
+  if (kind === "cluster") {
+    parts = [{ key: "general", label: text("tpl.part.general"), body: cluster }];
+  } else if (kind === "server") {
+    const servers = body.servers ?? [];
+    const server = servers[index];
+    if (!server) return null;
+    const marked = servers.some((item) => item.controlPlane);
+    const pilot = server.controlPlane || (!marked && index === 0 && Boolean(body.clusterName));
+    parts = [
+      {
+        key: "general",
+        label: text("tpl.part.general"),
+        body: (
+          <>
+            <p className="text-muted">{pilot ? text("tpl.pilotHint") : text("tpl.appsHint")}</p>
+            <ServerLine server={server} providers={providers} keys={keys} />
+            {serverReady(server) ? null : <p className="text-[13px] text-warn">{text("plan.missing")}</p>}
+          </>
+        ),
+      },
+      {
+        key: "machine",
+        label: text("tpl.part.machine"),
+        body: <MachineFields server={server} providers={providers} keys={keys} onChange={(next) => setServer(index, next)} />,
+      },
+    ];
+  } else if (kind === "app") {
+    const app = (body.applications ?? [])[index];
+    if (!app) return null;
+    const change = (next: TemplateApp) => setApp(index, next);
+    parts = [
+      { key: "general", label: text("tpl.part.general"), body: <AppGeneral app={app} onChange={change} /> },
+      { key: "addresses", label: text("tpl.part.addresses"), body: <AppNames app={app} zones={zones} onChange={change} /> },
+      ...(app.package ? [] : [{ key: "services", label: text("tpl.part.services"), body: <AppServicesFields app={app} onChange={change} /> }]),
+      { key: "copies", label: text("tpl.part.copies"), body: <AppCopies app={app} onChange={change} /> },
+      { key: "variables", label: text("tpl.part.variables"), body: <AppVariables key={chosen} app={app} onChange={change} /> },
+    ];
+  } else {
+    const names = (body.applications ?? []).flatMap((app) => (app.names ?? []).filter((name) => name.subdomain.trim()).map((name) => ({ app: app.name, host: `${name.subdomain}.${name.zone}` })));
+    parts = [
+      {
+        key: "general",
+        label: text("tpl.part.addresses"),
+        body:
+          names.length === 0 ? (
+            <p className="text-muted">{text("names.none")}</p>
+          ) : (
+            <ul className="overflow-hidden rounded-md border border-line bg-surface">
+              {names.map((name) => (
+                <li key={name.host} className="flex flex-wrap items-baseline justify-between gap-x-4 border-t border-line px-4 py-2 first:border-t-0">
+                  <span className="break-all font-mono text-[13px]">{name.host}</span>
+                  <span className="text-[13px] text-muted">{name.app}</span>
+                </li>
+              ))}
+            </ul>
+          ),
+      },
+    ];
+  }
+  const shown = parts.find((item) => item.key === part) ?? parts[0];
+  return (
+    <div className="mb-6 flex max-w-[720px] flex-col gap-4">
+      {parts.length > 1 ? (
+        <Tabs label={text("tpl.part.parts")} active={shown.key} onChange={onPart} tabs={parts.map((item) => ({ key: item.key, label: item.label }))} />
+      ) : null}
+      <div role={parts.length > 1 ? "tabpanel" : undefined} className="flex flex-col gap-4">
+        {shown.body}
+      </div>
+    </div>
   );
 }
 
@@ -599,46 +865,53 @@ export function TemplateRunPage() {
 
   return (
     <>
-      <PageTitle title={text("template.follow")} icon={LayoutTemplate} />
+      <PageTitle
+        inTree
+        title={text("template.follow")}
+        mark={null}
+        note={<StatusBadge status={run.status === "done" ? "running" : run.status === "running" ? "deploying" : run.status} />}
+      />
       {error ? (
         <div className="mb-8">
           <ErrorText>{error}</ErrorText>
         </div>
       ) : null}
-      <p className={`mb-8 ${run.status === "failed" ? "text-bad" : run.status === "done" ? "text-ok" : "text-muted"}`}>{label}</p>
-      <ol className="max-w-[720px]">
-        {run.steps.map((step, index) => (
-          <li key={index} className="border-t border-line py-4">
-            <div className="flex items-baseline justify-between gap-4">
-              <span>
-                {step.kind === "server" && step.resourceId ? (
-                  <Link to={`/serveurs/${step.resourceId}`} className="underline">
-                    {step.name}
-                  </Link>
-                ) : step.kind === "application" && step.resourceId ? (
-                  <Link to={`/applications/${step.resourceId}`} className="underline">
-                    {step.name}
-                  </Link>
-                ) : (
-                  step.name
-                )}
-              </span>
-              <span className={step.status === "failed" ? "text-bad" : step.status === "done" ? "text-ok" : "text-muted"}>{stepText(step.status)}</span>
-            </div>
-            {step.detail ? <p className="mt-1 text-faint">{knownMessage(step.detail)}</p> : null}
-            {step.deploy && step.deploy.length > 0 ? (
-              <ul className="mt-3 flex flex-col gap-1">
-                {step.deploy.map((item) => (
-                  <li key={item.id} className={item.status === "failed" ? "text-bad" : item.status === "done" ? "text-ok" : "text-muted"}>
-                    {item.label}
-                    {item.detail ? ` · ${knownMessage(item.detail)}` : ""}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </li>
-        ))}
-      </ol>
+      <p className={`mb-6 ${run.status === "failed" ? "text-bad" : "text-muted"}`}>
+        {label}
+        {run.status === "running" ? ` · ${text("progress.leave")}` : ""}
+      </p>
+      <div className="max-w-[720px] rounded-md border border-line bg-surface p-4 md:p-6">
+        <ProgressSteps
+          steps={run.steps.map((step, index) => ({
+            key: String(index),
+            status: step.status,
+            title:
+              step.kind === "server" && step.resourceId ? (
+                <Link to={`/serveurs/${step.resourceId}`} className={`text-ink ${focus}`}>
+                  {step.name}
+                </Link>
+              ) : step.kind === "application" && step.resourceId ? (
+                <Link to={`/applications/${step.resourceId}`} className={`text-ink ${focus}`}>
+                  {step.name}
+                </Link>
+              ) : (
+                step.name
+              ),
+            detail: step.detail ? knownMessage(step.detail) : undefined,
+            children:
+              step.deploy && step.deploy.length > 0 ? (
+                <ul className="mt-1 flex flex-col gap-0.5 text-[13px]">
+                  {step.deploy.map((item) => (
+                    <li key={item.id} className={item.status === "failed" ? "text-bad" : item.status === "done" ? "text-ok" : "text-muted"}>
+                      {item.label}
+                      {item.detail ? ` · ${knownMessage(item.detail)}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              ) : null,
+          }))}
+        />
+      </div>
       {run.status === "failed" ? (
         <div className="mt-8">
           <Button type="button" onClick={() => void resume()}>
@@ -865,16 +1138,27 @@ function StorageFields({
   );
 }
 
+type AppPart = { app: TemplateApp; onChange: (app: TemplateApp) => void };
+
+// AppFields is every setting of an application of a template, in one form.
+// Its parts also show one at a time, under the plan of the template.
 function AppFields({ app, zones, onChange }: { app: TemplateApp; zones: DnsZone[]; onChange: (app: TemplateApp) => void }) {
-  const names = app.names ?? [];
-  const services = app.services ?? [];
-  // The text is kept as typed: a line being written has no "=" yet, and
-  // rebuilding it from the parsed values would erase it.
-  const [variables, setVariables] = useState(() =>
-    Object.entries(app.variables ?? {})
-      .map(([key, value]) => `${key}=${value}`)
-      .join("\n"),
+  return (
+    <>
+      <AppGeneral app={app} onChange={onChange} />
+      <AppNames app={app} zones={zones} onChange={onChange} />
+      {app.package ? null : (
+        <Fold title={text("field.services")}>
+          <AppServicesFields app={app} onChange={onChange} />
+        </Fold>
+      )}
+      <AppCopies app={app} onChange={onChange} />
+      <AppVariables app={app} onChange={onChange} />
+    </>
   );
+}
+
+function AppGeneral({ app, onChange }: AppPart) {
   return (
     <>
       <Field label={text("field.name")}>
@@ -891,71 +1175,92 @@ function AppFields({ app, zones, onChange }: { app: TemplateApp; zones: DnsZone[
               <Input value={app.inputs?.[input.key] ?? ""} onChange={(e) => onChange({ ...app, inputs: { ...app.inputs, [input.key]: e.target.value } })} required />
             </Field>
           ))}
-          <NameList names={names} zones={zones} onChange={(next) => onChange({ ...app, names: next })} />
         </>
       ) : (
-      <>
-      <Field label={text("field.source")}>
-        <Select value={app.sourceKind} onChange={(e) => onChange({ ...app, sourceKind: e.target.value })}>
-          <option value="image">{text("common.image")}</option>
-          {/* Kept for a template written before: no build from Git yet. */}
-          {app.sourceKind === "git" ? <option value="git">{text("ui.depot")}</option> : null}
-        </Select>
-      </Field>
-      <Field label={app.sourceKind === "git" ? text("ui.depot") : text("common.image")}>
-        <Input value={app.source} onChange={(e) => onChange({ ...app, source: e.target.value })} required />
-      </Field>
-      <NameList names={names} zones={zones} onChange={(next) => onChange({ ...app, names: next })} />
-      <Fold title={text("field.services")}>
-        <div className="flex flex-col gap-3">
-          {services.map((service, index) => (
-            <div key={index} className="flex flex-col gap-2 rounded-md border border-line p-3">
-              <Input value={service.name} placeholder={text("field.name")} aria-label={text("field.name")} onChange={(e) => onChange({ ...app, services: services.map((item, i) => (i === index ? { ...item, name: e.target.value } : item)) })} />
-              <Input value={service.image} placeholder={text("common.image")} aria-label={text("common.image")} onChange={(e) => onChange({ ...app, services: services.map((item, i) => (i === index ? { ...item, image: e.target.value } : item)) })} />
-              <label className="flex items-center gap-2 text-muted">
-                <input type="checkbox" checked={service.published} onChange={() => onChange({ ...app, services: services.map((item, i) => ({ ...item, published: i === index })) })} />
-                {text("status.ready")}
-              </label>
-              <label className="flex items-center gap-2 text-muted">
-                <input
-                  type="checkbox"
-                  checked={service.disk}
-                  onChange={(e) => onChange({ ...app, services: services.map((item, i) => (i === index ? { ...item, disk: e.target.checked } : item)) })}
-                />
-                {text("common.disk")}
-              </label>
-            </div>
-          ))}
-          <TextButton type="button" onClick={() => onChange({ ...app, services: [...services, { name: "", image: "", published: services.length === 0, disk: false }] })}>
-            <Icon icon={Plus} />
-            {text("ui.ajouterUnService")}
-          </TextButton>
-        </div>
-      </Fold>
-      </>
+        <>
+          <Field label={text("field.source")}>
+            <Select value={app.sourceKind} onChange={(e) => onChange({ ...app, sourceKind: e.target.value })}>
+              <option value="image">{text("common.image")}</option>
+              {/* Kept for a template written before: no build from Git yet. */}
+              {app.sourceKind === "git" ? <option value="git">{text("ui.depot")}</option> : null}
+            </Select>
+          </Field>
+          <Field label={app.sourceKind === "git" ? text("ui.depot") : text("common.image")}>
+            <Input value={app.source} onChange={(e) => onChange({ ...app, source: e.target.value })} required />
+          </Field>
+        </>
       )}
+    </>
+  );
+}
+
+function AppNames({ app, zones, onChange }: AppPart & { zones: DnsZone[] }) {
+  return <NameList names={app.names ?? []} zones={zones} onChange={(next) => onChange({ ...app, names: next })} />;
+}
+
+function AppServicesFields({ app, onChange }: AppPart) {
+  const services = app.services ?? [];
+  return (
+    <div className="flex flex-col gap-3">
+      {services.map((service, index) => (
+        <div key={index} className="flex flex-col gap-2 rounded-md border border-line p-3">
+          <Input value={service.name} placeholder={text("field.name")} aria-label={text("field.name")} onChange={(e) => onChange({ ...app, services: services.map((item, i) => (i === index ? { ...item, name: e.target.value } : item)) })} />
+          <Input value={service.image} placeholder={text("common.image")} aria-label={text("common.image")} onChange={(e) => onChange({ ...app, services: services.map((item, i) => (i === index ? { ...item, image: e.target.value } : item)) })} />
+          <label className="flex items-center gap-2 text-muted">
+            <input type="checkbox" checked={service.published} onChange={() => onChange({ ...app, services: services.map((item, i) => ({ ...item, published: i === index })) })} />
+            {text("status.ready")}
+          </label>
+          <label className="flex items-center gap-2 text-muted">
+            <input
+              type="checkbox"
+              checked={service.disk}
+              onChange={(e) => onChange({ ...app, services: services.map((item, i) => (i === index ? { ...item, disk: e.target.checked } : item)) })}
+            />
+            {text("common.disk")}
+          </label>
+        </div>
+      ))}
+      <TextButton type="button" onClick={() => onChange({ ...app, services: [...services, { name: "", image: "", published: services.length === 0, disk: false }] })}>
+        <Icon icon={Plus} />
+        {text("ui.ajouterUnService")}
+      </TextButton>
+    </div>
+  );
+}
+
+function AppCopies({ app, onChange }: AppPart) {
+  return (
+    <>
       <Field label={text("field.redundancy")}>
-        <Input
-          value={String(app.replicas ?? 1)}
-          inputMode="numeric"
-          onChange={(e) => onChange({ ...app, replicas: Number(e.target.value) || 1 })}
-        />
+        <Input value={String(app.replicas ?? 1)} inputMode="numeric" onChange={(e) => onChange({ ...app, replicas: Number(e.target.value) || 1 })} />
       </Field>
       <p className="text-faint">{text("app.replicasHint")}</p>
-      <Field label={text("app.variables")}>
-        <Code
-          value={variables}
-          language="env"
-          label={text("app.variables")}
-          placeholder="NOM=valeur"
-          minHeight="6rem"
-          onChange={(next) => {
-            setVariables(next);
-            onChange({ ...app, variables: parseVariables(next) });
-          }}
-        />
-      </Field>
     </>
+  );
+}
+
+function AppVariables({ app, onChange }: AppPart) {
+  // The text is kept as typed: a line being written has no "=" yet, and
+  // rebuilding it from the parsed values would erase it.
+  const [variables, setVariables] = useState(() =>
+    Object.entries(app.variables ?? {})
+      .map(([key, value]) => `${key}=${value}`)
+      .join("\n"),
+  );
+  return (
+    <Field label={text("app.variables")}>
+      <Code
+        value={variables}
+        language="env"
+        label={text("app.variables")}
+        placeholder="NOM=valeur"
+        minHeight="6rem"
+        onChange={(next) => {
+          setVariables(next);
+          onChange({ ...app, variables: parseVariables(next) });
+        }}
+      />
+    </Field>
   );
 }
 
@@ -1112,14 +1417,6 @@ function summary(body: TemplateBody) {
   return `${cluster} · ${text(servers === 1 ? "template.serversOne" : "template.serversMany", { count: servers })} · ${text(apps === 1 ? "template.appsOne" : "template.appsMany", { count: apps })}`;
 }
 
-function stepText(status: string) {
-  if (status === "cancelled") return text("deploy.cancelled");
-  if (status === "done") return text("status.done");
-  if (status === "failed") return text("status.failed");
-  if (status === "running") return text("ui.enCours");
-  return text("status.pending");
-}
-
 function parseVariables(value: string) {
   const vars: Record<string, string> = {};
   for (const line of value.split("\n")) {
@@ -1199,9 +1496,9 @@ function Starters() {
 
   if (error && !data) return null;
   return (
-    <section className="mt-12">
-      <h2 className="mb-2 text-lg">{text("starter.title")}</h2>
-      <p className="mb-6 max-w-[720px] text-muted">{text("starter.intro")}</p>
+    <section className="mt-8">
+      <h2 className="mb-1">{text("starter.title")}</h2>
+      <p className="mb-4 max-w-[720px] text-[13px] text-muted">{text("starter.intro")}</p>
       {shared ? (
         <div className="mb-6 flex flex-wrap gap-2">
           <button
@@ -1222,9 +1519,9 @@ function Starters() {
       {!data ? (
         <LoadingLines lines={3} />
       ) : (
-        <ul className="grid gap-4 md:grid-cols-2">
+        <ul className={cardGrid}>
           {shown.map((starter) => (
-            <li key={starter.id} className="flex flex-col gap-3 rounded-md border border-line p-4">
+            <li key={starter.id} className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4">
               <div>
                 <p className="flex flex-wrap items-baseline gap-2">
                   <span className="font-medium">{starterWords(starter).name}</span>
@@ -1246,11 +1543,11 @@ function Starters() {
                 {" · "}
                 {starterWords(starter).sizing}
               </p>
-              <div className="mt-auto">
-                <Button type="button" variant="secondary" onClick={() => void use(starter)} disabled={busy !== ""}>
+              <div className="mt-auto border-t border-line pt-3">
+                <TextButton type="button" onClick={() => void use(starter)} disabled={busy !== ""}>
                   {busy === starter.id ? <Spinner /> : null}
                   {text("starter.use")}
-                </Button>
+                </TextButton>
               </div>
             </li>
           ))}

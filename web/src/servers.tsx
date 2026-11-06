@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
-import { ConfirmDialog, Sheet, Spinner, StatusBadge, Steps, useToast } from "./kit";
+import { ConfirmDialog, CopyButton, Sheet, Spinner, StatusBadge, Steps, Tabs, useToast } from "./kit";
 import { usePoll } from "./poll";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Copy, KeyRound, Plus, RotateCcw, Server as ServerIcon, SquareTerminal, Trash2 } from "lucide-react";
@@ -10,6 +10,7 @@ import { hourlyRate, money, podCpu, size, usageText } from "./measure";
 import { HostingFields, HostingMark, ServerHosting, ServerSSHUser, emptyHosting, hostingLabel } from "./hosting";
 import { OfferFields, OfferStorage, cheapestOffer, chosenStorage, formatPrice, machineLine } from "./offers";
 import { knownPlaces, placeLabel, placeOf } from "./places";
+import { ProgressSteps } from "./progress";
 import { ProviderSelect } from "./provider-select";
 import { TofuFiles } from "./tofu";
 import { EventList } from "./world";
@@ -20,10 +21,8 @@ import {
   Button,
   ErrorText,
   Field,
-  Fold,
   Group,
   MenuItem,
-  SectionTitle,
   focus,
   Icon,
   IconButton,
@@ -219,9 +218,19 @@ export function ServerForm({ clusterId }: { clusterId: string }) {
   const chosenKeys = keyIds.filter(Boolean);
   const canAddKey = keys.length > keyIds.length && chosenKeys.length === keyIds.length;
 
+  const providerRow = providers.find((row) => row.id === providerId);
+  const summary: [string, string][] = [
+    [text("ui.provider"), providerId === "manual" ? text("server.recap.manual") : providerRow ? providerRow.name : "—"],
+    [text("server.col.place"), providerId === "manual" ? "—" : placeLabel(location) || location || "—"],
+    [text("server.col.size"), offer ? machineLine(offer.name, offer.vcpu, offer.memoryMb, offer.gpus, offer.gpu) : "—"],
+    [text("server.recap.role"), controlPlane ? text("server.recap.pilot") : text("server.recap.apps")],
+    [text("server.recap.keys"), keys.filter((key) => chosenKeys.includes(key.id)).map((key) => key.name).join(", ") || "—"],
+  ];
+  const price = offer && catalog ? (period === "month" ? offer.monthly : offer.hourly) : "";
+
   return (
-    <>
-      <form onSubmit={addServer} className="flex max-w-[720px] flex-col gap-6">
+    <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
+      <form onSubmit={addServer} className="flex min-w-0 max-w-[720px] flex-1 flex-col gap-6">
         <Steps
           steps={[
             {
@@ -469,6 +478,24 @@ export function ServerForm({ clusterId }: { clusterId: string }) {
           }
         />
       </form>
+      <aside aria-label={text("server.recap.title")} className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4 lg:sticky lg:top-4 lg:w-[300px] lg:shrink-0">
+        <h2>{text("server.recap.title")}</h2>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[13px]">
+          {summary.map(([label, value]) => (
+            <div key={label} className="contents">
+              <dt className="text-muted">{label}</dt>
+              <dd className="min-w-0 break-words">{value}</dd>
+            </div>
+          ))}
+        </dl>
+        {price && catalog ? (
+          <p className="border-t border-line pt-3">
+            <span className="text-[20px] font-medium">{formatPrice(price, period !== "month", catalog.currency)}</span>
+            <span className="mt-1 block text-[12px] text-muted">{text("server.recap.priceHint")}</span>
+          </p>
+        ) : null}
+        <p className="text-[12px] text-muted">{clusterId ? text("server.recap.joins") : text("server.recap.alone")}</p>
+      </aside>
       {keySheet ? (
         <NewKeySheet
           onClose={() => setKeySheet(false)}
@@ -479,7 +506,7 @@ export function ServerForm({ clusterId }: { clusterId: string }) {
           }}
         />
       ) : null}
-    </>
+    </div>
   );
 }
 
@@ -726,6 +753,7 @@ export function ServerPage() {
   const [retrying, setRetrying] = useState(false);
   const [copied, setCopied] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [part, setPart] = useState<"history" | "pods" | "advanced">("history");
   const serverPoll = usePoll<Server>(id ? `/api/servers/${id}` : null, 10000);
   const { updating, transferring } = useActivity();
   const server = serverPoll.data;
@@ -792,27 +820,85 @@ export function ServerPage() {
     )],
     ...(server.plan ? [[text("server.offer"), machineLine(server.plan.name, server.plan.vcpu, server.plan.memoryMb, server.plan.gpus, server.plan.gpu, server.plan.diskGb)] as [string, ReactNode]] : []),
     ...(placeLabel(server.plan?.location) || (!(canDeploy && !server.providerId) && placeLabel(server.place)) ? [[text("server.place"), placeLabel(server.plan?.location) || placeLabel(server.place)] as [string, ReactNode]] : []),
-    ...(server.address ? [[text("server.address"), <span className="break-all font-mono text-[13px]">{server.address}</span>] as [string, ReactNode]] : []),
+    ...(server.address ? [[text("server.address"), (
+      <span className="inline-flex min-w-0 items-center gap-1">
+        <span className="break-all font-mono text-[13px]">{server.address}</span>
+        {linked ? <CopyButton value={server.address} /> : null}
+      </span>
+    )] as [string, ReactNode]] : []),
     [text("server.cost"), server.cost ? billText(server.cost, false, hourlyRate(server)) : text("bill.none")],
     [text("server.uptime"), exploitation(server.createdAt, now)],
   ];
 
+  // Pods exist once the server runs: until then, the history shows.
+  const shownPart = part === "pods" && !linked ? "history" : part;
+  const terminal =
+    linked && canDeploy ? (
+      <Link to={`/serveurs/${server.id}/terminal`} className={`inline-flex min-h-11 items-center gap-2 rounded-md border border-line bg-surface px-4 py-2 sm:min-h-0 ${focus}`}>
+        <Icon icon={SquareTerminal} />
+        {text("server.terminal")}
+      </Link>
+    ) : null;
+
   return (
     <>
-      <PageTitle title={server.name} icon={ServerIcon} />
+      {linked ? (
+        // The name heads the card: the page keeps it for its tab and readers.
+        <div className="sr-only">
+          <PageTitle title={server.name} />
+        </div>
+      ) : (
+        <PageTitle inTree title={server.name} icon={ServerIcon} />
+      )}
       {error ? (
         <div className="mb-8">
           <ErrorText>{error}</ErrorText>
         </div>
       ) : null}
-      <dl className="grid max-w-[720px] grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-[max-content_1fr]">
-        {facts.map(([label, value]) => (
-          <div key={label} className="contents">
-            <dt className="text-muted">{label}</dt>
-            <dd className="-mt-2 mb-1 min-w-0 sm:m-0">{value}</dd>
-          </div>
-        ))}
-      </dl>
+      <div className={linked ? "flex flex-col gap-8 lg:flex-row lg:items-start" : ""}>
+      {linked ? (
+        // A running server keeps what matters in sight while the page scrolls.
+        <aside aria-label={text("server.essentials")} className="flex flex-col gap-4 rounded-md border border-line bg-surface p-4 lg:sticky lg:top-4 lg:order-last lg:w-[320px] lg:shrink-0">
+          <p aria-hidden className="flex items-center gap-2 text-[18px] font-medium">
+            <Icon icon={ServerIcon} className="text-muted" />
+            <span className="truncate">{server.name}</span>
+          </p>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-[13px]">
+            {facts.map(([label, value]) => (
+              <div key={label} className="contents">
+                <dt className="text-muted">{label}</dt>
+                <dd className="min-w-0 break-words">{value}</dd>
+              </div>
+            ))}
+          </dl>
+          {canDeploy ? (
+            <div className="flex flex-col items-start gap-2 border-t border-line pt-4">
+              {terminal}
+              {!locked ? (
+                <TextButton type="button" onClick={() => void retry()} disabled={retrying}>
+                  {retrying ? <Spinner /> : <Icon icon={RotateCcw} />}
+                  {text("ui.relancerLeDeploiement")}
+                </TextButton>
+              ) : null}
+              <TextButton type="button" tone="danger" onClick={() => setConfirm(true)}>
+                <Icon icon={Trash2} />
+                {text("common.delete")}
+              </TextButton>
+            </div>
+          ) : null}
+        </aside>
+      ) : null}
+      <div className={linked ? "min-w-0 flex-1" : ""}>
+      {linked ? null : (
+        <dl className="grid max-w-[720px] grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-[max-content_1fr]">
+          {facts.map(([label, value]) => (
+            <div key={label} className="contents">
+              <dt className="text-muted">{label}</dt>
+              <dd className="-mt-2 mb-1 min-w-0 sm:m-0">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
       {!server.providerId && canDeploy ? (
         <div className="mt-6 max-w-[720px]">
           <ServerPlace
@@ -840,13 +926,8 @@ export function ServerPage() {
           {copied ? <span className="text-muted">{text("common.copied")}</span> : null}
         </div>
       ) : null}
+      {linked ? null : (
       <div className="mt-6 flex flex-wrap items-center gap-3">
-        {linked && canDeploy ? (
-          <Link to={`/serveurs/${server.id}/terminal`} className={`inline-flex min-h-11 items-center gap-2 rounded-md border border-line bg-surface px-4 py-2 sm:min-h-0 ${focus}`}>
-            <Icon icon={SquareTerminal} />
-            {text("server.terminal")}
-          </Link>
-        ) : null}
         {canDeploy && failed ? (
           <Button type="button" onClick={() => void retry()} disabled={retrying || locked}>
             {retrying ? <Spinner /> : <Icon icon={RotateCcw} />}
@@ -863,6 +944,7 @@ export function ServerPage() {
           </ActionsMenu>
         ) : null}
       </div>
+      )}
       <div className="max-w-[720px]">
         <UpdateLock locked={locked && !transferring} />
         <ServerUpdateNotice server={server} onStarted={() => void serverPoll.reload()} />
@@ -871,62 +953,64 @@ export function ServerPage() {
         <UpdateJobs filter={(job) => job.status === "running" && job.steps.some((step) => step.serverId === server.id)} />
       </div>
       {failed || deploying ? <div className="mt-4"><ToolInstall ansible tofu={server.tofu} /></div> : null}
-      {server.deploy && server.deploy.length > 0 ? (
+      {/* Once the machine is deployed, its installation steps are history. */}
+      {server.deploy && server.deploy.length > 0 && !linked ? (
         <div className="mt-8 max-w-[720px]">
-          {linked ? (
-            <Fold title={text("server.deployHistory")}>
-              <DeployTimeline steps={server.deploy} live={false} />
-            </Fold>
-          ) : (
-            <DeployTimeline steps={server.deploy} live={active} />
-          )}
+          <DeployTimeline steps={server.deploy} live={active} />
         </div>
       ) : null}
+      {/* Beside the card of a running server, its measures and its history
+          take the whole column; its settings keep the width of a form. */}
       {linked ? (
-        <div className="mt-8 max-w-[720px]">
+        <div className="[&:not(:first-child)]:mt-8">
           <UsageMeters sample={runtime} />
-          <div className="mt-10">
-            <Fold title={text("apps.instances")} defaultOpen={Boolean(runtime?.pods.some((pod) => podFailed(pod)))}>
-              {runtime && runtime.pods.length > 0 ? (
-                <ul className="flex flex-col">
-                  {runtime.pods.map((pod) => {
-                    const health = podHealth(pod);
-                    return (
-                      <li key={pod.name} className="border-t border-line py-4">
-                        <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-                          <span className="break-all font-mono text-[13px]">{pod.name}</span>
-                          <span className={health.tone}>{health.text}</span>
-                        </div>
-                        <p className="mt-1 text-muted">
-                          <Link to={`/applications/${pod.appId}`} className="underline">{pod.application}</Link>
-                          {pod.service ? ` · ${pod.service}` : ""}
-                          {" · "}
-                          {podCpu(pod.cpu)} · {size(pod.memory)} · {size(pod.disk)}
-                        </p>
-                        <PodActions appId={pod.appId} name={pod.name} failed={podFailed(pod)} />
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : !runtime ? (
-                <LoadingLines lines={2} label={text("apps.instances")} />
-              ) : (
-                <p className="text-muted">{runtime.measured ? text("common.noPod") : text("common.noMeasure")}</p>
-              )}
-            </Fold>
-          </div>
         </div>
       ) : null}
-      <div className="mt-10 max-w-[720px]">
-        <Fold title={text("common.advanced")}>
-          <TofuFiles path={`/api/servers/${server.id}/tofu`} />
-        </Fold>
-      </div>
-      <div className="mt-10 max-w-[720px]">
-        <SectionTitle>{text("nav.history")}</SectionTitle>
-        <div className="mt-4">
-          <EventList server={server.id} />
+      <section className={`mt-8 ${linked ? "" : "max-w-[720px]"}`}>
+        <Tabs
+          label={text("server.parts")}
+          active={shownPart}
+          onChange={setPart}
+          tabs={[
+            { key: "history", label: text("nav.history") },
+            ...(linked ? [{ key: "pods" as const, label: text("apps.instances") }] : []),
+            { key: "advanced", label: text("common.advanced") },
+          ]}
+        />
+        <div className="mt-4" role="tabpanel">
+          {shownPart === "history" ? <EventList server={server.id} /> : null}
+          {shownPart === "pods" ? (
+            runtime && runtime.pods.length > 0 ? (
+              <ul className="overflow-hidden rounded-md border border-line bg-surface">
+                {runtime.pods.map((pod) => {
+                  const health = podHealth(pod);
+                  return (
+                    <li key={pod.name} className="border-t border-line px-4 py-3 first:border-t-0">
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+                        <span className="break-all font-mono text-[13px]">{pod.name}</span>
+                        <span className={health.tone}>{health.text}</span>
+                      </div>
+                      <p className="mt-1 text-[13px] text-muted">
+                        <Link to={`/applications/${pod.appId}`} className={`text-link ${focus}`}>{pod.application}</Link>
+                        {pod.service ? ` · ${pod.service}` : ""}
+                        {" · "}
+                        {podCpu(pod.cpu)} · {size(pod.memory)} · {size(pod.disk)}
+                      </p>
+                      <PodActions appId={pod.appId} name={pod.name} failed={podFailed(pod)} />
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : !runtime ? (
+              <LoadingLines lines={2} label={text("apps.instances")} />
+            ) : (
+              <p className="text-muted">{runtime.measured ? text("common.noPod") : text("common.noMeasure")}</p>
+            )
+          ) : null}
+          {shownPart === "advanced" ? <TofuFiles path={`/api/servers/${server.id}/tofu`} /> : null}
         </div>
+      </section>
+      </div>
       </div>
       {moving ? (
         <MoveServerDialog
@@ -960,33 +1044,11 @@ const emptyServerRuntime: ServerRuntime = { measured: false, cpu: { used: 0, tot
 
 function DeployTimeline({ steps, live }: { steps: DeployStep[]; live: boolean }) {
   return (
-    <ol className="mt-8 max-w-[720px]" aria-live={live ? "polite" : "off"}>
-      {steps.map((step, index) => (
-        <li key={step.id} className="flex gap-4">
-          <span className="flex flex-col items-center">
-            <span className={stepDot(step.status)} />
-            {index < steps.length - 1 ? <span className="min-h-8 w-px flex-1 bg-line" /> : null}
-          </span>
-          <span className="pb-6">
-            <span className={step.status === "pending" ? "text-faint" : step.status === "failed" ? "text-bad" : step.status === "done" ? "text-ok" : ""}>
-              {knownMessage(step.label)}
-            </span>
-            {step.detail ? <span className="mt-1 block text-faint">{knownMessage(step.detail)}</span> : null}
-          </span>
-        </li>
-      ))}
-    </ol>
+    <div className="mt-8 max-w-[720px] rounded-md border border-line bg-surface p-4 md:p-6" aria-live={live ? "polite" : "off"}>
+      <ProgressSteps steps={steps.map((step) => ({ key: step.id, status: step.status, title: knownMessage(step.label), detail: step.detail ? knownMessage(step.detail) : undefined }))} />
+    </div>
   );
 }
-
-function stepDot(status: string) {
-  if (status === "running") return "mt-1.5 size-2.5 animate-pulse rounded-full bg-warn";
-  if (status === "done") return "mt-1.5 size-2.5 rounded-full bg-ok";
-  if (status === "failed") return "mt-1.5 size-2.5 rounded-full bg-bad";
-  return "mt-1.5 size-2.5 rounded-full border border-line";
-}
-
-
 
 function exploitation(iso: string | undefined, now: number) {
   if (!iso) return text("ui.dureeDExploitationInconnue");

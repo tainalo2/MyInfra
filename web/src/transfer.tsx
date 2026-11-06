@@ -227,7 +227,7 @@ export function Transfer() {
 
   return (
     <>
-      <PageTitle title={text("transfer.title")} icon={ArrowRightLeft} />
+      <PageTitle inTree title={text("transfer.title")} icon={ArrowRightLeft} />
       {error ? (
         <div className="mb-8 flex flex-col gap-3">
           <ErrorText>{error}</ErrorText>
@@ -460,7 +460,7 @@ export function TransferFollow() {
 
   return (
     <>
-      <PageTitle title={text("transfer.follow")} icon={ArrowRightLeft} />
+      <PageTitle inTree title={text("transfer.follow")} icon={ArrowRightLeft} />
       {error ? (
         <div className="mb-8">
           <ErrorText>{error}</ErrorText>

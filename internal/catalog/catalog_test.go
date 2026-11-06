@@ -1,6 +1,13 @@
 package catalog
 
-import "testing"
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
 
 func TestBaseOffer(t *testing.T) {
 	cat := sampleDigitalOcean("")
@@ -48,10 +55,11 @@ func TestParseHetzner(t *testing.T) {
 
 func TestParseScaleway(t *testing.T) {
 	body := []byte(`{"servers":{"DEV1-S":{"hourly_price":0.01,"ncpus":2,"ram":2147483648,"gpu":null,"volumes_constraint":{"min_size":20000000000,"max_size":20000000000},"per_volume_constraint":{"l_ssd":{"min_size":1000000000,"max_size":1000000000000}}},"L4-1-24G":{"hourly_price":0.79,"ncpus":8,"ram":51539607552,"gpu":1,"volumes_constraint":{"min_size":0,"max_size":0}},"METAL":{"hourly_price":1,"ncpus":8,"ram":1,"baremetal":true}}}`)
-	cat, err := parseScaleway(body, "fr-par-1")
+	servers, err := parseScalewayServers(body)
 	if err != nil {
 		t.Fatal(err)
 	}
+	cat := scalewayCatalog(servers, nil, "fr-par-1")
 	if len(cat.Offers) != 2 || cat.Offers[0].DiskGB != 20 || cat.Offers[0].Monthly != "7.3" || cat.Offers[0].GPUs != 0 {
 		t.Fatalf("offer %+v", cat.Offers)
 	}
@@ -60,6 +68,85 @@ func TestParseScaleway(t *testing.T) {
 	}
 	if len(cat.Offers[0].Storage) != 1 || cat.Offers[0].Storage[0].ID != "l_ssd" {
 		t.Fatalf("storage %+v", cat.Offers[0].Storage)
+	}
+}
+
+// The Instance API gives no price and pages its offers: every offer of the
+// zone still shows, at the price of the public catalogue.
+func TestScalewayPricesFromCatalogue(t *testing.T) {
+	var tokens []string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/instance/v1/zones/fr-par-1/products/servers", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("page") != "1" {
+			fmt.Fprint(w, `{"servers":{"LAST":{"hourly_price":0,"ncpus":2,"ram":2147483648}}}`)
+			return
+		}
+		rows := make([]string, 0, scalewayPage)
+		rows = append(rows, `"L4-1-24G":{"hourly_price":0,"ncpus":8,"ram":51539607552,"gpu":1}`, `"NO-PRICE":{"hourly_price":0,"ncpus":2,"ram":1}`)
+		for i := len(rows); i < scalewayPage; i++ {
+			rows = append(rows, fmt.Sprintf(`"S-%d":{"hourly_price":0,"ncpus":2,"ram":2147483648}`, i))
+		}
+		fmt.Fprintf(w, `{"servers":{%s}}`, strings.Join(rows, ","))
+	})
+	mux.HandleFunc("/product-catalog/v2alpha1/public-catalog/products", func(w http.ResponseWriter, r *http.Request) {
+		tokens = append(tokens, r.Header.Get("X-Auth-Token"))
+		if r.URL.Query().Get("zone") != "fr-par-1" || r.URL.Query().Get("product_types") != "instance" {
+			t.Errorf("query %s", r.URL.RawQuery)
+		}
+		if r.URL.Query().Get("page") != "1" {
+			fmt.Fprint(w, `{"products":[{"product":"LAST","price":{"retail_price":{"units":1,"nanos":500000000}},"unit_of_measure":{"unit":"hour","size":1}}]}`)
+			return
+		}
+		rows := make([]string, 0, scalewayPage)
+		rows = append(rows, `{"product":"L4-1-24G","price":{"retail_price":{"units":0,"nanos":13125000}},"unit_of_measure":{"unit":"minute","size":1}}`)
+		rows = append(rows, `{"product":"NO-PRICE","price":{"retail_price":{"units":1,"nanos":0}},"unit_of_measure":{"unit":"gigabyte","size":1}}`)
+		for i := len(rows); i < scalewayPage; i++ {
+			rows = append(rows, fmt.Sprintf(`{"product":"S-%d","price":{"retail_price":{"units":0,"nanos":10000000}},"unit_of_measure":{"unit":"hour","size":1}}`, i))
+		}
+		fmt.Fprintf(w, `{"products":[%s]}`, strings.Join(rows, ","))
+	})
+	api := httptest.NewServer(mux)
+	defer api.Close()
+
+	cat, err := Client{ScalewayBase: api.URL}.scaleway(context.Background(), "secret", "fr-par-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cat.Offers) != scalewayPage {
+		t.Fatalf("offers %d", len(cat.Offers))
+	}
+	byName := map[string]Offer{}
+	for _, offer := range cat.Offers {
+		byName[offer.Name] = offer
+	}
+	if byName["L4-1-24G"].Hourly != "0.7875" {
+		t.Fatalf("price by the minute %+v", byName["L4-1-24G"])
+	}
+	if byName["LAST"].Hourly != "1.5" || byName["LAST"].Monthly != "1095" {
+		t.Fatalf("second page %+v", byName["LAST"])
+	}
+	if _, ok := byName["NO-PRICE"]; ok {
+		t.Fatal("offer without an hourly price kept")
+	}
+	for _, token := range tokens {
+		if token != "" {
+			t.Fatal("token sent to the public catalogue")
+		}
+	}
+}
+
+// An empty list would read as a zone without servers: it says why instead.
+func TestScalewayWithoutAnyPrice(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/instance/") {
+			fmt.Fprint(w, `{"servers":{"DEV1-S":{"hourly_price":0,"ncpus":2,"ram":1}}}`)
+			return
+		}
+		fmt.Fprint(w, `{"products":[]}`)
+	}))
+	defer api.Close()
+	if _, err := (Client{ScalewayBase: api.URL}).scaleway(context.Background(), "secret", "fr-par-1"); err == nil {
+		t.Fatal("no price accepted")
 	}
 }
 

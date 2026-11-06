@@ -1,11 +1,12 @@
 import { FormEvent, Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowRight, BookOpen, Copy, LayoutGrid, Package as PackageIcon, Plus, Ship, Trash2, Upload } from "lucide-react";
-import { ApiError, api, peek, type Package, type PackageAbout, type PackageDisk, type PackageFile, type PackageProblem, type PackageRow, type PackageService } from "./api";
+import { ArrowLeft, ArrowRight, BookOpen, Copy, LayoutGrid, Package as PackageIcon, Plus, Ship, Trash2, Upload } from "lucide-react";
+import { ApiError, api, peek, type Package, type PackageAbout, type PackageDisk, type PackageFile, type PackagePort, type PackageProblem, type PackageVolume, type PackageRow, type PackageService } from "./api";
 import { Code, languageOf } from "./code-lazy";
-import { knownMessage, text, type MsgKey } from "./i18n";
+import { currentLocale, knownMessage, text, type MsgKey } from "./i18n";
 import { useI18n } from "./lang";
-import { AppsTabs, ConfirmDialog, Sheet, Tabs, useToast } from "./kit";
+import { ChosenName, PlanPanel, packagePlan, underPlan } from "./plan";
+import { AppsTabs, ConfirmDialog, Sheet, Spinner, Tabs, useToast, useWide } from "./kit";
 import { useSession } from "./session";
 import { ToolInstall } from "./tools";
 import { AppLogo } from "./app-logo";
@@ -25,6 +26,8 @@ import {
   PageTitle,
   Select,
   TextButton,
+  cardGrid,
+  useTrail,
 } from "./ui";
 
 const blank: Package = {
@@ -160,7 +163,7 @@ export function Packages() {
 
   function start(choice: StartChoice) {
     setStarting(false);
-    if (choice === "blank") navigate("/applications/paquets/nouveau");
+    if (choice === "blank") navigate("/applications/paquets/nouveau", { state: { blank: true } });
     else if (choice === "file" || choice === "helm") setImporting(choice);
     else if (choice === "catalogue") setCopying(true);
     else navigate("/applications/paquets/nouveau", { state: { example: choice } });
@@ -173,7 +176,7 @@ export function Packages() {
         icon={LayoutGrid}
         action={
           canDeploy && rows && rows.length > 0 ? (
-            <Button type="button" onClick={() => setStarting(true)}>
+            <Button type="button" onClick={() => navigate("/applications/paquets/nouveau")}>
               <Icon icon={Plus} />
               {text("package.new")}
             </Button>
@@ -199,7 +202,7 @@ export function Packages() {
           <p className="text-muted">{text("package.empty")}</p>
         )
       ) : (
-        <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <ul className={cardGrid}>
           {rows.map((row) => (
             <li key={row.id} className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4">
               <div className="flex items-start justify-between gap-3">
@@ -329,6 +332,147 @@ function StartChoices({ onChoose }: { onChoose: (choice: StartChoice) => void })
         </li>
       ))}
     </ul>
+  );
+}
+
+// PackageNew starts a package: from a docker-compose pasted here, from the
+// catalogue, a chart or nothing, or from an example. A draft, an example or
+// a blank start opens the editor itself.
+export function PackageNew() {
+  const location = useLocation();
+  const state = location.state as { draft?: Draft; example?: string; blank?: boolean } | null;
+  if (state?.draft || state?.example || state?.blank) return <PackageEditor />;
+  return <PackageStart />;
+}
+
+function PackageStart() {
+  useI18n();
+  const navigate = useNavigate();
+  const [compose, setCompose] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [importing, setImporting] = useState<"file" | "helm" | null>(null);
+  const [copying, setCopying] = useState(false);
+  const [about, setAbout] = useState(false);
+  useTrail([
+    { label: text("nav.apps"), to: "/applications" },
+    { label: text("nav.packages"), to: "/applications/paquets" },
+    { label: text("package.new") },
+  ]);
+
+  async function convert() {
+    setBusy(true);
+    setError("");
+    try {
+      const converted = await api<Converted>("/api/packages/convert", { method: "POST", body: JSON.stringify({ text: compose }) });
+      if (converted.format === "package" && converted.problems.length === 0) {
+        const row = await api<PackageRow>("/api/packages/import", { method: "POST", body: JSON.stringify({ text: converted.yaml }) });
+        navigate(`/applications/paquets/${row.id}`, { state: { saved: true } });
+      } else {
+        navigate("/applications/paquets/nouveau", { state: { draft: { yaml: converted.yaml, warnings: converted.warnings, format: converted.format } } });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : text("common.error"));
+      setBusy(false);
+    }
+  }
+
+  const others: { key: StartChoice; title: string; body: string; icon: typeof Plus }[] = [
+    { key: "catalogue", title: text("package.fromCatalogue"), body: text("package.fromCatalogueHint"), icon: Copy },
+    { key: "file", title: text("package.fromCompose"), body: text("package.fromComposeHint"), icon: Upload },
+    { key: "helm", title: text("package.fromHelm"), body: text("package.fromHelmChoice"), icon: Ship },
+    { key: "blank", title: text("package.fromBlank"), body: text("package.fromBlankHint"), icon: Plus },
+  ];
+
+  function choose(key: StartChoice) {
+    if (key === "blank") navigate("/applications/paquets/nouveau", { state: { blank: true } });
+    else if (key === "file" || key === "helm") setImporting(key);
+    else if (key === "catalogue") setCopying(true);
+    else navigate("/applications/paquets/nouveau", { state: { example: key } });
+  }
+
+  return (
+    <>
+      <PageTitle
+        inTree
+        title={text("package.new")}
+        action={
+          <TextButton type="button" onClick={() => setAbout((open) => !open)} aria-expanded={about}>
+            {text("package.whatTitle")}
+          </TextButton>
+        }
+      />
+      <div className="flex max-w-[860px] flex-col gap-8">
+        <p className="text-muted">{text("package.whatHint")}</p>
+        {about ? <PackagesIntro open /> : null}
+        <section className="flex flex-col gap-3">
+          <div>
+            <h2>{text("package.composeTitle")}</h2>
+            <p className="text-[13px] text-muted">{text("package.composeHint")}</p>
+          </div>
+          <Code value={compose} onChange={setCompose} language="yaml" label={text("package.composeTitle")} placeholder={"services:\n  web:\n    image: nginx:1.27"} minHeight="12rem" />
+          {error ? <ErrorText>{error}</ErrorText> : null}
+          <div className="flex flex-wrap items-center gap-4">
+            <Button type="button" onClick={() => void convert()} disabled={busy || compose.trim() === ""}>
+              {busy ? <Spinner /> : null}
+              {text("package.convert")}
+            </Button>
+            <TextButton type="button" onClick={() => setImporting("file")}>
+              <Icon icon={Upload} />
+              {text("package.fromFile")}
+            </TextButton>
+          </div>
+        </section>
+        <section className="flex flex-col gap-3">
+          <h2>{text("package.orFrom")}</h2>
+          <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {others.map((choice) => (
+              <li key={choice.key}>
+                <button type="button" onClick={() => choose(choice.key)} className={`card-link flex h-full w-full items-start gap-3 rounded-md border border-line bg-surface p-4 text-left ${focus}`}>
+                  <Icon icon={choice.icon} className="mt-1 shrink-0 text-muted" />
+                  <span>
+                    <span className="block">{choice.title}</span>
+                    <span className="block text-[13px] text-muted">{choice.body}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+        <section className="flex flex-col gap-3">
+          <h2>{text("package.examplesTitle")}</h2>
+          <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {examples.map((example) => {
+              const pkg = example.pkg();
+              return (
+                <li key={example.key}>
+                  <button type="button" onClick={() => choose(example.key)} className={`card-link flex h-full w-full flex-col gap-2 rounded-md border border-line bg-surface p-4 text-left ${focus}`}>
+                    <span>{example.title()}</span>
+                    <span className="text-[13px] text-muted">{example.summary()}</span>
+                    <span className="flex flex-wrap gap-1.5">
+                      {pkg.services.map((service) => (
+                        <span key={service.name} className="rounded border border-line px-1.5 font-mono text-[12px] text-muted">
+                          {service.name}
+                        </span>
+                      ))}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      </div>
+      {importing ? (
+        <ImportSheet
+          initial={importing}
+          onClose={() => setImporting(null)}
+          onDone={(row) => navigate(`/applications/paquets/${row.id}`, { state: { saved: true } })}
+          onDraft={(draft) => navigate("/applications/paquets/nouveau", { state: { draft } })}
+        />
+      ) : null}
+      {copying ? <CopyArticleSheet onClose={() => setCopying(false)} onDone={(row) => navigate(`/applications/paquets/${row.id}`, { state: { saved: true } })} /> : null}
+    </>
   );
 }
 
@@ -602,6 +746,23 @@ export function PackageEditor() {
   // revision rebuilds the form when a whole package replaces the one shown:
   // its fields keep what is typed, and would keep the old text otherwise.
   const [revision, setRevision] = useState(0);
+  // Choosing an element of the plan opens its settings below it.
+  const [chosen, setChosen] = useState<string | null>(null);
+  // The nav of the chosen element stays under the line of the title: it needs
+  // its height.
+  const line = useRef<HTMLDivElement>(null);
+  const [lineReady, setLineReady] = useState(false);
+  useEffect(() => {
+    const node = line.current;
+    const scroller = node?.closest("main");
+    if (!node || !scroller) return;
+    const observer = new ResizeObserver(() => scroller.style.setProperty("--line-height", `${Math.floor(node.getBoundingClientRect().height)}px`));
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      scroller.style.removeProperty("--line-height");
+    };
+  }, [lineReady]);
 
   // An import opens here in the YAML view, with what it could not keep; an
   // example opens in the form, to learn by changing it.
@@ -710,34 +871,80 @@ export function PackageEditor() {
 
   if (!ready) return <LoadingLines lines={6} />;
 
-  const general = problems.filter((problem) => !problem.path.startsWith("services["));
+  // What the plan has chosen sets what shows under it: a service alone, a
+  // storage, or, with nothing chosen, the package itself.
+  const serviceName = chosen?.startsWith("svc:") ? chosen.slice(4) : null;
+  const diskName = chosen?.startsWith("disk:") ? chosen.slice(5) : null;
+  const diskAt = diskName === null ? -1 : (pkg.disks ?? []).findIndex((disk) => disk.name === diskName);
+  const at = serviceName !== null ? pkg.services.findIndex((service) => service.name === serviceName) : -1;
+  const drawn = packagePlan(pkg);
+  const storage = diskName !== null && (diskAt >= 0 || drawn.nodes.some((node) => node.key === chosen)) ? diskName : null;
+  // A service out of sight still says that something is wrong with it.
+  const plan: typeof drawn = {
+    ...drawn,
+    nodes: drawn.nodes.map((node) => {
+      const index = pkg.services.findIndex((service) => `svc:${service.name}` === node.key);
+      return index >= 0 && problemsUnder(problems, `services[${index}]`).length > 0 ? { ...node, status: "bad" as const } : node;
+    }),
+  };
+  const selected = mode === "visual" && plan.nodes.some((node) => node.key === chosen) ? chosen : null;
+  const picked = plan.nodes.find((node) => node.key === selected);
+
+  // Renaming what is chosen keeps it chosen, even while its name is empty.
+  function edit(next: Package) {
+    if (serviceName !== null && at >= 0 && next.services.length === pkg.services.length && next.services[at].name !== serviceName) setChosen(`svc:${next.services[at].name}`);
+    const disk = next.disks?.[diskAt];
+    if (diskAt >= 0 && disk && next.disks?.length === pkg.disks?.length && disk.name !== diskName) setChosen(`disk:${disk.name}`);
+    setPkg(next);
+  }
+
+  // A new service is chosen at once, so that its settings open.
+  function addService() {
+    const name = freeServiceName(pkg.services);
+    setPkg({ ...pkg, services: [...pkg.services, { name, image: "" }] });
+    setChosen(`svc:${name}`);
+  }
+
+  // A new storage is a shared disk: dashed in the plan until a service mounts it.
+  function addStorage() {
+    const disks = pkg.disks ?? [];
+    let n = disks.length + 1;
+    let name = disks.length === 0 ? "media" : `disk-${n}`;
+    while (disks.some((disk) => disk.name === name)) name = `disk-${++n}`;
+    setPkg({ ...pkg, disks: [...disks, { name, sizeGi: 10 }] });
+    setChosen(`disk:${name}`);
+  }
+
+  // What the plan has chosen is removed from its title.
+  const removal = !canDeploy
+    ? null
+    : at >= 0 && pkg.services.length > 1
+      ? {
+          label: text("package.removeService", { name: pkg.services[at].name }),
+          run: () => {
+            setChosen(null);
+            setPkg(withoutService(pkg, at));
+          },
+        }
+      : storage !== null
+        ? {
+            label: text("package.storageRemove"),
+            run: () => {
+              setChosen(null);
+              setPkg(withoutStorage(pkg, storage));
+            },
+          }
+        : null;
+
+  // Each band of the plan adds its own kind of element, in the form only.
+  const adds =
+    mode === "visual" && canDeploy
+      ? { services: { label: text("package.addService"), onClick: addService }, storage: { label: text("package.addStorage"), onClick: addStorage } }
+      : undefined;
 
   return (
     <>
-      <PageTitle
-        title={id ? pkg.name || text("nav.packages") : text("package.new")}
-        icon={PackageIcon}
-        action={
-          <span className="flex items-center gap-4">
-            <TextButton type="button" onClick={() => setGuide(true)}>
-              <span className="inline-flex items-center gap-2">
-                <Icon icon={BookOpen} />
-                {text("package.guide")}
-              </span>
-            </TextButton>
-            {id ? (
-              <TextButton type="button" onClick={() => void download({ id, name: pkg.name }, "yaml").catch((err) => toast(err.message, "bad"))}>
-                {text("package.exportYaml")}
-              </TextButton>
-            ) : null}
-            {id && canDeploy ? (
-              <Button type="button" variant="secondary" onClick={() => navigate(`/nouveau?package=${id}`)}>
-                {text("package.installCta")}
-              </Button>
-            ) : null}
-          </span>
-        }
-      />
+      <PageTitle inTree title={id ? pkg.name || text("nav.packages") : text("package.new")} icon={PackageIcon} />
       {saved && id && canDeploy ? (
         <section className="mb-8 flex max-w-[960px] flex-wrap items-center justify-between gap-4 rounded-md border border-line bg-surface p-4" role="status">
           <span>
@@ -754,19 +961,72 @@ export function PackageEditor() {
           </span>
         </section>
       ) : null}
-      {!id ? <p className="-mt-4 mb-8 max-w-[720px] text-muted md:-mt-8">{text("package.newHint")}</p> : null}
+      {!id ? <p className="mb-6 max-w-[720px] text-muted">{text("package.newHint")}</p> : null}
       {guide ? <PackageGuide onClose={() => setGuide(false)} /> : null}
-      <form onSubmit={save} className="flex flex-col gap-8">
+      {/* The plan comes first; in the YAML view it follows the text, and
+          choosing an element goes back to the form to change it. */}
+      {adds || pkg.services.length > 0 || (pkg.disks ?? []).length > 0 ? (
+        <>
+          <PlanPanel
+            model={plan}
+            adds={adds}
+            label={text("plan.labelPackage")}
+            whole={text("plan.wholePackage")}
+            named={false}
+            selected={selected}
+            onSelect={(key) => {
+              if (mode === "yaml") void switchTo("visual");
+              setChosen(key);
+            }}
+          />
+          <div className="mt-2" />
+        </>
+      ) : null}
+      {/* Fields out of sight must not stop the form: the server says what is
+          wrong, and the page shows it. */}
+      <form onSubmit={save} noValidate className="flex flex-col gap-3">
         {warnings.length > 0 ? <WarningList warnings={warnings} /> : null}
-        <Tabs
-          label={text("package.view")}
-          active={mode}
-          onChange={(next) => void switchTo(next)}
-          tabs={[
-            { key: "visual", label: text("package.visual") },
-            { key: "yaml", label: text("package.advanced"), mark: !readable },
-          ]}
-        />
+        {/* One line under the plan: the chosen element, then what to do with
+            the package. It stays in sight under the plan. The form is the rule; the text is a part of the menu, and
+            this line leads back from it. */}
+        <div
+          className={underPlan}
+          ref={(node) => {
+            line.current = node;
+            if (node && !lineReady) setLineReady(true);
+          }}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-line py-1">
+            <div className="min-w-0">
+              {mode === "yaml" ? (
+                <span className="flex items-center gap-3">
+                  <TextButton type="button" onClick={() => void switchTo("visual")}>
+                    <Icon icon={ArrowLeft} />
+                    {text("package.visual")}
+                  </TextButton>
+                  <span className="text-[12px] text-muted">{text("package.advanced")}</span>
+                </span>
+              ) : picked ? (
+                <span className="flex min-w-0 items-center gap-3">
+                  <ChosenName node={picked} />
+                  {removal ? <IconButton type="button" icon={Trash2} label={removal.label} onClick={removal.run} /> : null}
+                </span>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              {id && canDeploy ? (
+                <Button type="button" variant="secondary" className="sm:py-1!" onClick={() => navigate(`/nouveau?package=${id}`)}>
+                  {text("package.installCta")}
+                </Button>
+              ) : null}
+              <ActionsMenu label={text("apps.more")}>
+                {mode === "visual" ? <MenuItem onClick={() => void switchTo("yaml")}>{text("package.advanced")}</MenuItem> : null}
+                <MenuItem onClick={() => setGuide(true)}>{text("package.guide")}</MenuItem>
+                {id ? <MenuItem onClick={() => void download({ id, name: pkg.name }, "yaml").catch((err) => toast(err.message, "bad"))}>{text("package.exportYaml")}</MenuItem> : null}
+              </ActionsMenu>
+            </div>
+          </div>
+        </div>
         {mode === "yaml" ? (
           <div className="flex flex-col gap-4">
             <p className="max-w-[720px] text-muted">{text("package.yamlHint")}</p>
@@ -774,7 +1034,7 @@ export function PackageEditor() {
             {problems.length > 0 ? <ProblemList problems={problems} /> : <p className="text-ok">{text("package.valid")}</p>}
           </div>
         ) : (
-          <VisualEditor key={revision} pkg={pkg} onChange={setPkg} problems={problems} general={general} />
+          <VisualEditor key={revision} pkg={pkg} onChange={edit} problems={problems} only={at} storage={storage} onChoose={setChosen} />
         )}
         {error ? <ErrorText>{error}</ErrorText> : null}
         {canDeploy ? (
@@ -794,89 +1054,399 @@ function VisualEditor({
   pkg,
   onChange,
   problems,
-  general,
+  only,
+  storage,
+  onChoose,
 }: {
   pkg: Package;
   onChange: (pkg: Package) => void;
   problems: PackageProblem[];
-  general: PackageProblem[];
+  // only is the index of the service chosen in the plan, or -1: its settings
+  // alone show. storage names the storage chosen. With neither, the package
+  // itself shows. What is out of sight stays mounted, with what it holds.
+  only: number;
+  storage: string | null;
+  onChoose: (key: string | null) => void;
 }) {
+  const [part, setPart] = useState<"questions" | "variables">("questions");
   function set<K extends keyof Package>(key: K, value: Package[K]) {
     onChange({ ...pkg, [key]: value });
   }
+  const whole = only < 0 && storage === null;
+  // The disks of one service another may link to: linking makes them shared.
+  const owned = pkg.services.flatMap((service, at) =>
+    (service.volumes ?? []).flatMap((volume, row) => (volume.disk || !volume.path ? [] : [{ service: at, value: `own:${at}:${row}`, label: `${service.name} · ${volume.path}` }])),
+  );
+  function share(into: number, row: number, value: string) {
+    const [, owner, volume] = value.split(":").map(Number);
+    onChange(shareDisk(pkg, owner, volume, into, row).pkg);
+  }
 
   return (
-    <div className="flex flex-col gap-10">
-      <section className="flex max-w-[720px] flex-col gap-4">
-        <Field label={text("package.name")}>
-          <Input value={pkg.name} onChange={(e) => set("name", e.target.value)} required />
-        </Field>
-        <Field label={text("package.summary")}>
-          <Input value={pkg.summary ?? ""} onChange={(e) => set("summary", e.target.value || undefined)} />
-        </Field>
-        <Field label={text("package.category")}>
-          <Input value={pkg.category ?? ""} onChange={(e) => set("category", e.target.value || undefined)} />
-        </Field>
+    <div className="flex flex-col">
+      <section className={`flex flex-col gap-3 ${whole ? "" : "hidden"}`}>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <Field label={text("package.name")}>
+            <Input value={pkg.name} onChange={(e) => set("name", e.target.value)} required />
+          </Field>
+          <Field label={text("package.summary")}>
+            <Input value={pkg.summary ?? ""} onChange={(e) => set("summary", e.target.value || undefined)} />
+          </Field>
+          <Field label={text("package.category")}>
+            <Input value={pkg.category ?? ""} onChange={(e) => set("category", e.target.value || undefined)} />
+          </Field>
+        </div>
         <AboutFields about={pkg.about} onChange={(about) => set("about", about)} />
-        <Inputs pkg={pkg} onChange={onChange} />
-        <Field label={text("package.sharedEnv")} hint={text("package.sharedEnvHint")}>
-          <EnvEditor value={pkg.env} onChange={(env) => set("env", env)} label={text("package.sharedEnv")} snippets={sharedSnippets()} />
-        </Field>
-        <SharedDisks disks={pkg.disks ?? []} onChange={(disks) => set("disks", disks.length > 0 ? disks : undefined)} />
-        {general.length > 0 ? <ProblemList problems={general} /> : null}
+        <Tabs
+          label={text("package.generalParts")}
+          active={part}
+          onChange={setPart}
+          tabs={[
+            { key: "questions", label: text("package.questionsTab") },
+            { key: "variables", label: text("package.sharedEnv") },
+          ]}
+        />
+        <div className={part === "questions" ? "" : "hidden"}>
+          <Inputs pkg={pkg} onChange={onChange} />
+        </div>
+        <div className={part === "variables" ? "" : "hidden"}>
+          <p className="mb-3 text-faint">{text("package.sharedEnvHint")}</p>
+          <VariableRows value={pkg.env} onChange={(env) => set("env", env)} inputs={pkg.inputs ?? []} services={pkg.services} secrets />
+        </div>
+        {/* The services are out of sight here: what is wrong with them is not. */}
+        {problems.length > 0 ? <ProblemList problems={problems} /> : null}
       </section>
-      <ServicesEditor services={pkg.services} onChange={(services) => set("services", services)} problems={problems} disks={(pkg.disks ?? []).map((disk) => disk.name).filter(Boolean)} />
+      {storage !== null ? <StoragePage pkg={pkg} name={storage} onChange={onChange} onChoose={onChoose} problems={problems} /> : null}
+      <div className={only >= 0 ? "" : "hidden"}>
+        <ServicesEditor services={pkg.services} onChange={(services) => set("services", services)} problems={problems} disks={(pkg.disks ?? []).map((disk) => disk.name).filter(Boolean)} only={only} addable={false} owned={owned} onShare={share} inputs={pkg.inputs ?? []} />
+      </div>
     </div>
   );
 }
 
-// SharedDisks declares the disks several services mount: a name and a size,
-// once for the package.
-function SharedDisks({ disks, onChange }: { disks: PackageDisk[]; onChange: (disks: PackageDisk[]) => void }) {
-  function setDisk(index: number, next: PackageDisk) {
-    onChange(disks.map((disk, at) => (at === index ? next : disk)));
+// RowLegend names the columns of a list of rows, above them.
+function RowLegend({ columns, labels }: { columns: string; labels: string[] }) {
+  return (
+    <div aria-hidden className={`hidden gap-3 text-[13px] text-muted md:grid ${columns}`}>
+      {labels.map((label) => (
+        <span key={label}>{label}</span>
+      ))}
+    </div>
+  );
+}
+
+const withoutCopies = (service: PackageService) => {
+  const next = { ...service };
+  delete next.replicas;
+  return next;
+};
+
+// shareDisk turns the disk of one service into a shared one, and mounts it on
+// another service, at row of its volumes. A shared disk needs a name, and the
+// services that mount it run one copy.
+function shareDisk(pkg: Package, owner: number, volume: number, into: number, row: number) {
+  const source = pkg.services[owner].volumes![volume];
+  const base = `${pkg.services[owner].name}-data`.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^[^a-z]+/, "").slice(0, 28) || "data";
+  const taken = new Set((pkg.disks ?? []).map((disk) => disk.name));
+  let name = base;
+  for (let n = 2; taken.has(name); n++) name = `${base}-${n}`;
+  const services = pkg.services.map((service, at) => {
+    if (at !== owner && at !== into) return service;
+    const volumes = [...(service.volumes ?? [])];
+    if (at === owner) volumes[volume] = { path: source.path, disk: name };
+    if (at === into) volumes[row] = { path: volumes[row]?.path ?? "", disk: name };
+    return { ...withoutCopies(service), volumes };
+  });
+  return { pkg: { ...pkg, services, disks: [...(pkg.disks ?? []), { name, sizeGi: source.sizeGi ?? 1 }] }, name };
+}
+
+// withoutService removes a service, and the waits on it.
+function withoutService(pkg: Package, index: number) {
+  const gone = pkg.services[index].name;
+  return { ...pkg, services: pkg.services.filter((_, at) => at !== index).map((service) => ({ ...service, dependsOn: service.dependsOn?.filter((name) => name !== gone) })) };
+}
+
+// withoutStorage removes a storage from the package and the services.
+function withoutStorage(pkg: Package, name: string) {
+  const shared = (pkg.disks ?? []).some((disk) => disk.name === name);
+  const services = pkg.services.map((service) => {
+    const volumes = (service.volumes ?? []).filter((volume) => (shared ? volume.disk !== name : volume.disk || ownKey(service, volume.path) !== name));
+    return { ...service, volumes: volumes.length > 0 ? volumes : undefined };
+  });
+  const rest = (pkg.disks ?? []).filter((disk) => disk.name !== name);
+  return { ...pkg, services, disks: rest.length > 0 ? rest : undefined };
+}
+
+const ownKey = (service: PackageService, path: string) => `${service.name}${path.replace(/\//g, "-")}`;
+
+// StoragePage sets one storage: its name and size, its type, and the services
+// that use it, each at its own path.
+function StoragePage({
+  pkg,
+  name,
+  onChange,
+  onChoose,
+  problems,
+}: {
+  pkg: Package;
+  name: string;
+  onChange: (pkg: Package) => void;
+  onChoose: (key: string | null) => void;
+  problems: PackageProblem[];
+}) {
+  const disks = pkg.disks ?? [];
+  const diskAt = disks.findIndex((disk) => disk.name === name);
+  const disk = disks[diskAt];
+  const owner = disk ? -1 : pkg.services.findIndex((service) => (service.volumes ?? []).some((volume) => !volume.disk && ownKey(service, volume.path) === name));
+  const row = owner < 0 ? -1 : pkg.services[owner].volumes!.findIndex((volume) => !volume.disk && ownKey(pkg.services[owner], volume.path) === name);
+  const own = owner >= 0 ? pkg.services[owner].volumes![row] : undefined;
+  const mountOf = (service: PackageService, at: number) => (disk ? (service.volumes ?? []).find((volume) => volume.disk === name) : at === owner ? own : undefined);
+  const mine = problems.filter((problem) => problem.path.startsWith(`disks[${diskAt}]`) && diskAt >= 0);
+
+  function setDisk(part: Partial<PackageDisk>) {
+    onChange({ ...pkg, disks: disks.map((item, at) => (at === diskAt ? { ...item, ...part } : item)) });
+  }
+  function setOwnSize(sizeGi?: number) {
+    onChange({ ...pkg, services: pkg.services.map((service, at) => (at === owner ? { ...service, volumes: service.volumes!.map((volume, index) => (index === row ? { ...volume, sizeGi } : volume)) } : service)) });
+  }
+  function setPath(at: number, path: string) {
+    const service = pkg.services[at];
+    const volumes = (service.volumes ?? []).map((volume) => (volume === mountOf(service, at) ? { ...volume, path } : volume));
+    onChange({ ...pkg, services: pkg.services.map((item, index) => (index === at ? { ...item, volumes } : item)) });
+    if (!disk) onChoose(`disk:${ownKey(service, path)}`);
+  }
+  function toggle(at: number, on: boolean) {
+    if (!disk && on) {
+      const shared = shareDisk(pkg, owner, row, at, (pkg.services[at].volumes ?? []).length);
+      onChange(shared.pkg);
+      onChoose(`disk:${shared.name}`);
+      return;
+    }
+    const services = pkg.services.map((service, index) => {
+      if (index !== at) return service;
+      if (on) return { ...withoutCopies(service), volumes: [...(service.volumes ?? []), { path: "", disk: name }] };
+      const volumes = (service.volumes ?? []).filter((volume) => volume.disk !== name);
+      return { ...service, volumes: volumes.length > 0 ? volumes : undefined };
+    });
+    onChange({ ...pkg, services });
   }
   return (
-    <Group label={text("package.sharedDisks")} hint={text("package.sharedDisksHint")}>
-      <div className="flex flex-col gap-3">
-        {disks.map((disk, index) => (
-          <div key={index} className="flex items-center gap-3">
+    <section aria-label={text("plan.band.storage")} className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
+        {disk ? (
+          <Field label={text("package.diskName")}>
+            <Input value={disk.name} placeholder="media" className="font-mono" autoCapitalize="off" spellCheck={false} onChange={(e) => setDisk({ name: e.target.value })} />
+          </Field>
+        ) : (
+          <span />
+        )}
+        <Field label={text("package.diskSize")}>
+          <Input
+            inputMode="numeric"
+            value={(disk ? disk.sizeGi : own?.sizeGi) || ""}
+            placeholder="10"
+            onChange={(e) => (disk ? setDisk({ sizeGi: numberOrUndefined(e.target.value) ?? 0 }) : setOwnSize(numberOrUndefined(e.target.value)))}
+          />
+        </Field>
+      </div>
+      <Group label={text("package.storageType")}>
+        <div className="flex flex-col gap-2">
+          <label className="flex items-start gap-3">
+            <input type="radio" name="storage-type" checked readOnly className="mt-1" />
+            <span>
+              <span className="block">{text("package.storageSimple")}</span>
+              <span className="block text-[13px] text-faint">{text("package.storageSimpleHint")}</span>
+            </span>
+          </label>
+          <label className="flex items-start gap-3 text-muted">
+            <input type="radio" name="storage-type" disabled className="mt-1" />
+            <span>
+              <span className="block">{text("package.storageRedundant")}</span>
+              <span className="block text-[13px] text-faint">{text(disk ? "package.storageRedundantShared" : "package.storageRedundantOwn")}</span>
+            </span>
+          </label>
+        </div>
+      </Group>
+      <div role="group" aria-label={text("package.storageUsers")} className="flex flex-col gap-2">
+        <RowLegend columns={storageUserColumns} labels={[text("package.storageUsers"), text("package.diskPath")]} />
+        {pkg.services.map((service, at) => {
+          const mount = mountOf(service, at);
+          return (
+            <div key={at} className={`grid grid-cols-1 items-center gap-3 ${storageUserColumns}`}>
+              <label className="flex min-w-0 items-center gap-3">
+                <input type="checkbox" checked={Boolean(mount)} disabled={at === owner} onChange={(e) => toggle(at, e.target.checked)} />
+                <span className="truncate font-mono">{service.name || "…"}</span>
+              </label>
+              {mount ? <Input value={mount.path} placeholder="/data" aria-label={text("package.diskPath")} className="font-mono" onChange={(e) => setPath(at, e.target.value)} /> : <span className="hidden md:block" />}
+            </div>
+          );
+        })}
+      </div>
+      {mine.length > 0 ? <ProblemList problems={mine} /> : null}
+    </section>
+  );
+}
+
+const storageUserColumns = "md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]";
+
+// A common variable is told by its kind, not written: the form below reads
+// each value into a kind and writes it back. A value made of several parts
+// stays a text, whole.
+type VariableKind = "text" | "bool" | "secret" | "input" | "url" | "host";
+type Variable = { id: number; key: string; kind: VariableKind; value: string };
+
+function readVariable(raw: string): Pick<Variable, "kind" | "value"> {
+  if (raw === "true" || raw === "false") return { kind: "bool", value: raw };
+  const token = /^\{\{(secret|input|url|host)(?::([^{}]*))?\}\}$/.exec(raw);
+  if (!token) return { kind: "text", value: raw };
+  return { kind: token[1] as VariableKind, value: token[2] ?? "" };
+}
+
+function writeVariable(item: Variable) {
+  if (item.kind === "text") return item.value;
+  if (item.kind === "bool") return item.value === "true" ? "true" : "false";
+  return item.value ? `{{${item.kind}:${item.value}}}` : item.kind === "url" || item.kind === "host" ? `{{${item.kind}}}` : "";
+}
+
+const variableColumns = "md:grid-cols-[minmax(0,1fr)_minmax(0,220px)_minmax(0,1fr)_24px]";
+
+// VariableRows edits variables, one row each: a name, a kind, and the control
+// that kind needs. A blank row follows the last, on screen only.
+function VariableRows({
+  value,
+  onChange,
+  inputs,
+  services,
+  secrets = false,
+}: {
+  value?: Record<string, string>;
+  onChange: (value: Record<string, string> | undefined) => void;
+  inputs: { key: string; label: string }[];
+  services: PackageService[];
+  // secrets offers generated passwords: they belong to the common variables,
+  // which are sealed.
+  secrets?: boolean;
+}) {
+  const next = useRef(0);
+  const blank = (item: Variable) => !item.key && item.kind === "text" && !item.value;
+  // One blank row at the end, whatever was just emptied or filled: the row
+  // being typed in keeps its place, and its focus.
+  const padded = (list: Variable[]) => {
+    const out = [...list];
+    while (out.length > 1 && blank(out[out.length - 1]) && blank(out[out.length - 2])) out.pop();
+    if (out.length === 0 || !blank(out[out.length - 1])) out.push({ id: next.current++, key: "", kind: "text", value: "" });
+    return out;
+  };
+  const [items, setItems] = useState<Variable[]>(() => padded(Object.entries(value ?? {}).map(([key, raw]) => ({ id: next.current++, key, ...readVariable(raw) }))));
+  const kinds: { key: VariableKind; label: MsgKey }[] = [
+    { key: "text", label: "package.envKindText" },
+    { key: "bool", label: "package.envKindBool" },
+    ...(secrets ? [{ key: "secret" as const, label: "package.envKindSecret" as const }] : []),
+    { key: "input", label: "package.envKindInput" },
+    { key: "url", label: "package.envKindUrl" },
+    { key: "host", label: "package.envKindHost" },
+  ];
+  // The first public service is the main one: it is the address without a name.
+  const others = services.filter((service) => service.public).slice(1);
+
+  function commit(list: Variable[]) {
+    setItems(padded(list));
+    const map: Record<string, string> = {};
+    for (const item of list) if (item.key.trim()) map[item.key.trim()] = writeVariable(item);
+    onChange(Object.keys(map).length ? map : undefined);
+  }
+  function change(id: number, part: Partial<Variable>) {
+    commit(items.map((item) => (item.id === id ? { ...item, ...part } : item)));
+  }
+  function setKind(item: Variable, kind: VariableKind) {
+    const value = kind === "bool" ? "false" : kind === "secret" ? item.key.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "password" : kind === "input" ? (inputs[0]?.key ?? "") : "";
+    change(item.id, { kind, value });
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <RowLegend columns={variableColumns} labels={[text("package.envName"), text("package.envKind"), text("package.envValue")]} />
+      {items.map((item) => (
+        <div key={item.id} className={`grid grid-cols-1 items-center gap-3 ${variableColumns}`}>
+          <Input value={item.key} placeholder="ADMIN_EMAIL" aria-label={text("package.envName")} className="font-mono" autoCapitalize="off" spellCheck={false} onChange={(e) => change(item.id, { key: e.target.value })} />
+          <Select value={item.kind} aria-label={text("package.envKind")} onChange={(e) => setKind(item, e.target.value as VariableKind)}>
+            {kinds.map((kind) => (
+              <option key={kind.key} value={kind.key}>
+                {text(kind.label)}
+              </option>
+            ))}
+          </Select>
+          {item.kind === "bool" ? (
+            <label className="flex items-center gap-3">
+              <input type="checkbox" checked={item.value === "true"} onChange={(e) => change(item.id, { value: e.target.checked ? "true" : "false" })} />
+              <span>{text("package.envOn")}</span>
+            </label>
+          ) : item.kind === "input" ? (
+            <Select value={item.value} aria-label={text("package.envValue")} disabled={inputs.length === 0} onChange={(e) => change(item.id, { value: e.target.value })}>
+              {inputs.length === 0 ? <option value="">{text("package.envNoInput")}</option> : null}
+              {inputs.some((input) => input.key === item.value) || inputs.length === 0 ? null : <option value={item.value}>{item.value}</option>}
+              {inputs.map((input) => (
+                <option key={input.key} value={input.key}>
+                  {input.label || input.key}
+                </option>
+              ))}
+            </Select>
+          ) : item.kind === "url" || item.kind === "host" ? (
+            <Select value={item.value} aria-label={text("package.envValue")} onChange={(e) => change(item.id, { value: e.target.value })}>
+              <option value="">{text("package.envMainService")}</option>
+              {others.some((service) => service.name === item.value) || !item.value ? null : <option value={item.value}>{item.value}</option>}
+              {others.map((service) => (
+                <option key={service.name} value={service.name}>
+                  {service.name}
+                </option>
+              ))}
+            </Select>
+          ) : (
             <Input
-              value={disk.name}
-              placeholder="media"
-              aria-label={text("package.diskName")}
-              className="font-mono"
+              value={item.value}
+              aria-label={text(item.kind === "secret" ? "package.envSecretName" : "package.envValue")}
               autoCapitalize="off"
               spellCheck={false}
-              onChange={(e) => setDisk(index, { ...disk, name: e.target.value })}
+              onChange={(e) => change(item.id, { value: e.target.value })}
             />
-            <span className="flex shrink-0 items-center gap-2">
-              <span className="w-20">
-                <Input inputMode="numeric" value={disk.sizeGi || ""} placeholder="10" aria-label={text("package.diskSize")} onChange={(e) => setDisk(index, { ...disk, sizeGi: numberOrUndefined(e.target.value) ?? 0 })} />
-              </span>
-              <span className="text-muted">Gio</span>
-            </span>
-            <IconButton type="button" icon={Trash2} label={text("common.delete")} onClick={() => onChange(disks.filter((_, at) => at !== index))} />
-          </div>
-        ))}
-        <div>
-          <TextButton type="button" onClick={() => onChange([...disks, { name: disks.length === 0 ? "media" : `disk-${disks.length + 1}`, sizeGi: 10 }])}>
-            {text("package.addSharedDisk")}
-          </TextButton>
+          )}
+          {blank(item) ? <span className="hidden md:block" /> : <IconButton type="button" icon={Trash2} label={text("common.delete")} onClick={() => commit(items.filter((other) => other.id !== item.id))} />}
         </div>
-      </div>
-    </Group>
+      ))}
+    </div>
   );
 }
 
 // ServicesEditor edits the services of a package or of a running
 // application: one card each, who waits for whom above them.
+// freeServiceName names a new service after those there are: service-N.
+function freeServiceName(services: PackageService[]) {
+  let n = services.length + 1;
+  while (services.some((service) => service.name === `service-${n}`)) n++;
+  return `service-${n}`;
+}
+
 function ServicesEditor({
   services,
   onChange,
   problems,
   disks,
+  only,
+  addable = true,
+  owned = [],
+  onShare,
+  inputs = [],
 }: {
+  // only is the index of the one service to show.
+  only?: number;
+  // owned are the disks of one service the others may link to; onShare links
+  // one to the service at index, at row of its volumes.
+  owned?: { service: number; value: string; label: string }[];
+  onShare?: (index: number, row: number, value: string) => void;
+  inputs?: { key: string; label: string }[];
+  // addable puts the button that adds a service at the head of the list;
+  // a page that has it on its line of tabs leaves it out.
+  addable?: boolean;
   services: PackageService[];
   onChange: (services: PackageService[]) => void;
   problems: PackageProblem[];
@@ -895,9 +1465,7 @@ function ServicesEditor({
   }
 
   function addService() {
-    let n = services.length + 1;
-    while (services.some((service) => service.name === `service-${n}`)) n++;
-    onChange([...services, { name: `service-${n}`, image: "" }]);
+    onChange([...services, { name: freeServiceName(services), image: "" }]);
   }
 
   function removeService(index: number) {
@@ -907,23 +1475,33 @@ function ServicesEditor({
 
   return (
     <section className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      {/* A chosen service is named on the line above: no title for one card. */}
+      <div className={`flex flex-wrap items-center justify-between gap-4 ${only !== undefined ? "hidden" : ""}`}>
         <h2 className="text-base">{text("field.services")}</h2>
-        <TextButton type="button" onClick={addService}>
-          {text("package.addService")}
-        </TextButton>
+        {addable ? (
+          <TextButton type="button" onClick={addService}>
+            {text("package.addService")}
+          </TextButton>
+        ) : null}
       </div>
-      <Dependencies services={services} />
+      <div className={only !== undefined ? "hidden" : ""}>
+        <Dependencies services={services} />
+      </div>
       {services.map((service, index) => (
+        <div key={index} className={only !== undefined && index !== only ? "hidden" : ""}>
         <ServiceCard
-          key={index}
           service={service}
           others={services.filter((_, at) => at !== index).map((other) => other.name)}
-          disks={shared}
+          links={[...shared.map((name) => ({ value: name, label: name })), ...owned.filter((item) => item.service !== index)]}
+          onShare={(row, value) => onShare?.(index, row, value)}
+          inputs={inputs}
+          services={services}
           problems={problemsUnder(problems, `services[${index}]`).map((problem) => ({ ...problem, path: problem.path.slice(`services[${index}]`.length + 1) }))}
           onChange={(next) => setService(index, next)}
           onRemove={services.length > 1 ? () => removeService(index) : undefined}
+          named={only === undefined}
         />
+        </div>
       ))}
     </section>
   );
@@ -1019,14 +1597,9 @@ function Inputs({ pkg, onChange }: { pkg: Package; onChange: (pkg: Package) => v
 type ServiceTab = "general" | "network" | "storage" | "files" | "env" | "health" | "resources";
 
 // tabTip gives each tab a concrete example, for a first package.
-const tabTip: Record<ServiceTab, MsgKey> = {
+const tabTip: Partial<Record<ServiceTab, MsgKey>> = {
   general: "package.tipGeneral",
-  network: "package.tipNetwork",
-  storage: "package.tipStorage",
-  files: "package.tipFiles",
-  env: "package.tipEnv",
   health: "package.tipHealth",
-  resources: "package.tipResources",
 };
 
 const tabOf: Record<string, ServiceTab> = {
@@ -1049,19 +1622,32 @@ const tabOf: Record<string, ServiceTab> = {
 function ServiceCard({
   service,
   others,
-  disks,
+  links,
+  onShare,
+  inputs,
+  services,
   problems,
   onChange,
   onRemove,
+  named,
 }: {
   service: PackageService;
   others: string[];
-  disks: string[];
+  links: { value: string; label: string }[];
+  onShare: (row: number, value: string) => void;
+  inputs: { key: string; label: string }[];
+  services: PackageService[];
   problems: PackageProblem[];
   onChange: (service: PackageService) => void;
   onRemove?: () => void;
+  // named makes a card headed by the service, one in a list. Without, the
+  // service is alone on the page: the line above says its name and removes
+  // it, and the tabs stay in sight. A phone keeps the name on the page.
+  named: boolean;
 }) {
   const [tab, setTab] = useState<ServiceTab>("general");
+  const roomy = useWide("(min-width: 1024px)");
+  const headless = !named && roomy;
   const marked = useMemo(() => new Set(problems.map((problem) => tabOf[problem.path.split(/[.[]/)[0]] ?? "general")), [problems]);
   const shown = problems.filter((problem) => (tabOf[problem.path.split(/[.[]/)[0]] ?? "general") === tab);
 
@@ -1082,27 +1668,30 @@ function ServiceCard({
     { key: "health", label: text("package.tabHealth") },
     { key: "resources", label: text("package.tabResources") },
   ];
+  const tip = tabTip[tab];
+  const published = service.public ? <span className="rounded border border-line px-1.5 text-[13px] text-muted">{text("common.published")}</span> : null;
+  const remove = onRemove ? <IconButton type="button" icon={Trash2} label={text("package.removeService", { name: service.name })} onClick={onRemove} /> : null;
 
   return (
-    <article className="flex flex-col gap-5 rounded-md border border-line bg-surface p-4">
-      <header className="flex items-center justify-between gap-4">
-        <h3 className="flex min-w-0 items-center gap-2">
-          <span className="truncate font-mono">{service.name || "…"}</span>
-          {service.public ? <span className="rounded border border-line px-1.5 text-[13px] text-muted">{text("common.published")}</span> : null}
-        </h3>
-        {onRemove ? <IconButton type="button" icon={Trash2} label={text("package.removeService", { name: service.name })} onClick={onRemove} /> : null}
-      </header>
-      <Tabs label={service.name} active={tab} onChange={setTab} tabs={tabs.map((item) => ({ ...item, mark: marked.has(item.key) }))} />
-      <p className="text-faint">{text(tabTip[tab])}</p>
+    <article className={named ? "flex flex-col gap-3 rounded-md border border-line bg-surface p-3" : "flex flex-col gap-3"}>
+      {headless ? null : (
+        <header className="flex items-center justify-between gap-4">
+          <h3 className="flex min-w-0 items-center gap-2">
+            <span className="truncate font-mono">{service.name || "…"}</span>
+            {published}
+          </h3>
+          {named ? remove : null}
+        </header>
+      )}
+      <div className={named ? "" : "md:sticky md:top-[calc(var(--plan-bottom,0px)+var(--line-height,0px))] md:z-[8] md:bg-canvas"}>
+        <Tabs label={service.name} active={tab} onChange={setTab} small={!named} tabs={tabs.map((item) => ({ ...item, mark: marked.has(item.key) }))} aside={headless && published ? published : undefined} />
+      </div>
+      {tip ? <p className="text-[13px] text-faint">{text(tip)}</p> : null}
       {tab === "general" ? <GeneralTab service={service} others={others} set={set} onChange={onChange} /> : null}
       {tab === "network" ? <NetworkTab service={service} set={set} /> : null}
-      {tab === "storage" ? <StorageTab service={service} set={set} disks={disks} /> : null}
+      {tab === "storage" ? <StorageTab service={service} set={set} links={links} onShare={onShare} /> : null}
       {tab === "files" ? <FilesTab service={service} set={set} /> : null}
-      {tab === "env" ? (
-        <Field label={text("package.tabEnv")} hint={text("package.serviceEnvHint")}>
-          <EnvEditor value={service.env} onChange={(env) => set("env", env)} label={text("package.tabEnv")} snippets={serviceSnippets()} />
-        </Field>
-      ) : null}
+      {tab === "env" ? <VariableRows value={service.env} onChange={(env) => set("env", env)} inputs={inputs} services={services} /> : null}
       {tab === "health" ? <HealthTab service={service} set={set} /> : null}
       {tab === "resources" ? <ResourcesTab service={service} set={set} /> : null}
       {shown.length > 0 ? <ProblemList problems={shown} /> : null}
@@ -1224,158 +1813,157 @@ function GeneralTab({ service, others, set, onChange }: { service: PackageServic
   );
 }
 
+// A row of the ports, its legend above: the same columns for both.
+const portColumns = "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_124px_132px_minmax(0,1fr)_24px]";
+
+// A row can open a port in both protocols. The package has no such word: it
+// holds two ports of one number, the UDP one unnamed, since a name is unique.
+type PortRow = Omit<PackagePort, "protocol"> & { protocol?: "tcp" | "udp" | "both" };
+
+function portRows(ports: PackagePort[]) {
+  const rows: PortRow[] = [];
+  for (let at = 0; at < ports.length; at++) {
+    const port = ports[at];
+    const twin = ports[at + 1];
+    if (twin && port.port === twin.port && port.expose === twin.expose && (port.protocol ?? "tcp") === "tcp" && twin.protocol === "udp" && !twin.name) {
+      rows.push({ ...port, protocol: "both" });
+      at++;
+    } else {
+      rows.push(port);
+    }
+  }
+  return rows;
+}
+
+function portsOf(rows: PortRow[]) {
+  return rows.flatMap((row): PackagePort[] => {
+    const { protocol, ...port } = row;
+    if (protocol !== "both") return [{ ...port, ...(protocol ? { protocol } : {}) }];
+    const twin: PackagePort = { port: port.port, protocol: "udp" };
+    if (port.expose !== undefined) twin.expose = port.expose;
+    return [port, twin];
+  });
+}
+
+// NetworkTab lists the ports with one blank row after them, on screen only:
+// it joins the package once something is typed in it, and a new one follows
+// as soon as the last has its port.
 function NetworkTab({ service, set }: { service: PackageService; set: Setter }) {
-  const ports = service.ports ?? [];
+  const ports = portRows(service.ports ?? []);
+  const last = ports[ports.length - 1];
+  const rows: PortRow[] = !last || last.port ? [...ports, { port: 0 }] : ports;
+  const empty = (port: PortRow) => !port.name && !port.port && !port.protocol && port.expose === undefined;
+
+  function change(index: number, part: Partial<PortRow>) {
+    const next = rows.map((port, at) => (at === index ? { ...port, ...part } : port));
+    while (next.length > 0 && empty(next[next.length - 1])) next.pop();
+    set("ports", portsOf(next));
+  }
+
   return (
-    <Group label={text("package.ports")} hint={text("package.portsHint")}>
-      <div className="flex flex-col gap-3">
-        {ports.map((port, index) => (
-          <div key={index} className="flex items-center gap-3">
-            <Input
-              value={port.name ?? ""}
-              placeholder="metrics"
-              aria-label={text("package.portName")}
-              onChange={(e) => set("ports", ports.map((item, at) => (at === index ? { ...item, name: e.target.value || undefined } : item)))}
-            />
-            <Input
-              inputMode="numeric"
-              value={port.port || ""}
-              placeholder="9100"
-              aria-label={text("package.port")}
-              onChange={(e) => set("ports", ports.map((item, at) => (at === index ? { ...item, port: numberOrUndefined(e.target.value) ?? 0 } : item)))}
-            />
-            <span className="w-24 shrink-0">
-              <Select
-                value={port.protocol ?? "tcp"}
-                aria-label={text("package.protocol")}
-                onChange={(e) => set("ports", ports.map((item, at) => (at === index ? { ...item, protocol: e.target.value === "udp" ? "udp" : undefined } : item)))}
-              >
-                <option value="tcp">TCP</option>
-                <option value="udp">UDP</option>
-              </Select>
-            </span>
-            <label className="flex shrink-0 items-center gap-2 text-[13px]">
-              <input
-                type="checkbox"
-                checked={port.expose !== undefined}
-                onChange={(e) => set("ports", ports.map((item, at) => (at === index ? { ...item, expose: e.target.checked ? item.port || undefined : undefined } : item)))}
-              />
-              {text("package.expose")}
-            </label>
-            {port.expose !== undefined ? (
-              <Input
-                inputMode="numeric"
-                value={port.expose || ""}
-                placeholder={String(port.port || 51820)}
-                aria-label={text("package.exposePort")}
-                onChange={(e) => set("ports", ports.map((item, at) => (at === index ? { ...item, expose: numberOrUndefined(e.target.value) ?? 0 } : item)))}
-              />
-            ) : null}
-            <IconButton type="button" icon={Trash2} label={text("common.delete")} onClick={() => set("ports", ports.filter((_, at) => at !== index))} />
-          </div>
-        ))}
-        <div>
-          <TextButton type="button" onClick={() => set("ports", [...ports, { port: 0 }])}>
-            {text("package.addPort")}
-          </TextButton>
+    <div role="group" aria-label={text("package.ports")} className="flex flex-col gap-2">
+      <RowLegend columns={portColumns} labels={[text("package.portName"), text("package.port"), text("package.protocol"), text("package.expose"), text("package.exposePort")]} />
+      {rows.map((port, index) => (
+        <div key={index} className={`grid grid-cols-1 items-center gap-3 ${portColumns}`}>
+          <Input value={port.name ?? ""} placeholder="metrics" aria-label={text("package.portName")} onChange={(e) => change(index, { name: e.target.value || undefined })} />
+          <Input inputMode="numeric" value={port.port || ""} placeholder="9100" aria-label={text("package.port")} onChange={(e) => change(index, { port: numberOrUndefined(e.target.value) ?? 0 })} />
+          <Select value={port.protocol ?? "tcp"} aria-label={text("package.protocol")} onChange={(e) => change(index, { protocol: e.target.value === "tcp" ? undefined : (e.target.value as PortRow["protocol"]) })}>
+            <option value="tcp">TCP</option>
+            <option value="udp">UDP</option>
+            <option value="both">TCP + UDP</option>
+          </Select>
+          <label className="flex items-center gap-2 text-[13px]">
+            <input type="checkbox" aria-label={text("package.expose")} checked={port.expose !== undefined} onChange={(e) => change(index, { expose: e.target.checked ? port.port : undefined })} />
+            <span className="md:hidden">{text("package.expose")}</span>
+          </label>
+          {port.expose !== undefined ? (
+            <Input inputMode="numeric" value={port.expose || ""} placeholder={String(port.port || 51820)} aria-label={text("package.exposePort")} onChange={(e) => change(index, { expose: numberOrUndefined(e.target.value) ?? 0 })} />
+          ) : (
+            <span className="hidden md:block" />
+          )}
+          {index < ports.length ? <IconButton type="button" icon={Trash2} label={text("common.delete")} onClick={() => set("ports", portsOf(ports.filter((_, at) => at !== index)))} /> : <span className="hidden md:block" />}
         </div>
-      </div>
-    </Group>
+      ))}
+    </div>
   );
 }
 
-function StorageTab({ service, set, disks }: { service: PackageService; set: Setter; disks: string[] }) {
+const volumeColumns = "md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_120px_24px]";
+
+// StorageTab lists what the service mounts, in the rows of NetworkTab: on each
+// a new storage or an existing one, and the path the service uses.
+function StorageTab({ service, set, links, onShare }: { service: PackageService; set: Setter; links: { value: string; label: string }[]; onShare: (row: number, value: string) => void }) {
   const volumes = service.volumes ?? [];
-  const own = volumes.filter((volume) => !volume.disk);
+  const last = volumes[volumes.length - 1];
+  const rows: PackageVolume[] = !last || last.path ? [...volumes, { path: "" }] : volumes;
+  const empty = (volume: PackageVolume) => !volume.path && !volume.disk && !volume.sizeGi;
+
+  function commit(next: PackageVolume[]) {
+    const list = [...next];
+    while (list.length > 0 && empty(list[list.length - 1])) list.pop();
+    set("volumes", list);
+  }
+  function change(index: number, part: Partial<PackageVolume>) {
+    commit(rows.map((volume, at) => (at === index ? { ...volume, ...part } : volume)));
+  }
+  function choose(index: number, value: string) {
+    if (value.startsWith("own:")) return onShare(index, value);
+    const path = rows[index].path;
+    commit(rows.map((volume, at) => (at === index ? (value ? { path, disk: value } : { path, sizeGi: 1 }) : volume)));
+  }
+
   return (
-    <Group label={text("package.volumes")} hint={text("package.volumesHint")}>
-      <div className="flex flex-col gap-3">
-        {volumes.map((volume, index) => (
-          <div key={index} className="flex flex-col gap-2">
-            <span className="text-muted">
-              {volume.disk ? text("package.sharedDiskOf", { name: volume.disk }) : own.indexOf(volume) === 0 ? text("package.mainDisk") : text("package.extraDisk", { n: own.indexOf(volume) })}
-            </span>
-            <div className="flex items-center gap-3">
-              <Input
-                value={volume.path}
-                placeholder="/data"
-                aria-label={text("package.diskPath")}
-                className="font-mono"
-                onChange={(e) => set("volumes", volumes.map((item, at) => (at === index ? { ...item, path: e.target.value } : item)))}
-              />
-              {disks.length > 0 ? (
-                <span className="w-40 shrink-0">
-                  <Select
-                    value={volume.disk ?? ""}
-                    aria-label={text("package.diskKind")}
-                    onChange={(e) =>
-                      set(
-                        "volumes",
-                        volumes.map((item, at) => (at === index ? (e.target.value ? { path: item.path, disk: e.target.value } : { path: item.path, sizeGi: 1 }) : item)),
-                      )
-                    }
-                  >
-                    <option value="">{text("package.ownDisk")}</option>
-                    {disks.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
-                      </option>
-                    ))}
-                  </Select>
-                </span>
-              ) : null}
-              {volume.disk ? null : (
-                <span className="flex shrink-0 items-center gap-2">
-                  <span className="w-20">
-                    <Input
-                      inputMode="numeric"
-                      value={volume.sizeGi ?? ""}
-                      placeholder="1"
-                      aria-label={text("package.diskSize")}
-                      onChange={(e) => set("volumes", volumes.map((item, at) => (at === index ? { ...item, sizeGi: numberOrUndefined(e.target.value) } : item)))}
-                    />
-                  </span>
-                  <span className="text-muted">Gio</span>
-                </span>
-              )}
-              <IconButton type="button" icon={Trash2} label={text("common.delete")} onClick={() => set("volumes", volumes.filter((_, at) => at !== index))} />
-            </div>
-          </div>
-        ))}
-        <div>
-          <TextButton type="button" onClick={() => set("volumes", [...volumes, { path: "", sizeGi: 1 }])}>
-            {text("package.addDisk")}
-          </TextButton>
+    <div role="group" aria-label={text("package.volumes")} className="flex flex-col gap-2">
+      <RowLegend columns={volumeColumns} labels={[text("plan.band.storage"), text("package.diskPath"), text("package.diskSize")]} />
+      {rows.map((volume, index) => (
+        <div key={index} className={`grid grid-cols-1 items-center gap-3 ${volumeColumns}`}>
+          <Select value={volume.disk ?? ""} aria-label={text("plan.band.storage")} onChange={(e) => choose(index, e.target.value)}>
+            <option value="">{text("package.storageNew")}</option>
+            {volume.disk && !links.some((link) => link.value === volume.disk) ? <option value={volume.disk}>{volume.disk}</option> : null}
+            {links.map((link) => (
+              <option key={link.value} value={link.value}>
+                {link.label}
+              </option>
+            ))}
+          </Select>
+          <Input value={volume.path} placeholder="/data" aria-label={text("package.diskPath")} className="font-mono" onChange={(e) => change(index, { path: e.target.value })} />
+          {volume.disk ? (
+            <span className="hidden md:block" />
+          ) : (
+            <Input inputMode="numeric" value={volume.sizeGi ?? ""} placeholder="1" aria-label={text("package.diskSize")} onChange={(e) => change(index, { sizeGi: numberOrUndefined(e.target.value) })} />
+          )}
+          {index < volumes.length ? <IconButton type="button" icon={Trash2} label={text("common.delete")} onClick={() => set("volumes", volumes.filter((_, at) => at !== index))} /> : <span className="hidden md:block" />}
         </div>
-      </div>
-    </Group>
+      ))}
+    </div>
   );
 }
 
+const fileColumns = "md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_24px]";
+
+// FilesTab lists the files, in the rows of NetworkTab: a path and its content.
 function FilesTab({ service, set }: { service: PackageService; set: Setter }) {
   const files = service.files ?? [];
-  function setFile(index: number, next: PackageFile) {
-    set("files", files.map((item, at) => (at === index ? next : item)));
+  const last = files[files.length - 1];
+  const rows: PackageFile[] = !last || last.path ? [...files, { path: "", content: "" }] : files;
+
+  function change(index: number, part: Partial<PackageFile>) {
+    const next = rows.map((file, at) => (at === index ? { ...file, ...part } : file));
+    while (next.length > 0 && !next[next.length - 1].path && !next[next.length - 1].content) next.pop();
+    set("files", next);
   }
+
   return (
-    <Group label={text("package.files")} hint={text("package.filesHint")}>
-      <div className="flex flex-col gap-6">
-        {files.map((file, index) => (
-          <div key={index} className="flex flex-col gap-2">
-            <div className="flex items-center gap-3">
-              <Input value={file.path} placeholder="/etc/app/config.ini" aria-label={text("package.filePath")} className="font-mono" onChange={(e) => setFile(index, { ...file, path: e.target.value })} />
-              <IconButton type="button" icon={Trash2} label={text("common.delete")} onClick={() => set("files", files.filter((_, at) => at !== index))} />
-            </div>
-            <Code value={file.content} onChange={(content) => setFile(index, { ...file, content })} language={languageOf(file.path)} label={file.path || text("package.fileContent")} />
-          </div>
-        ))}
-        <div>
-          <TextButton type="button" onClick={() => set("files", [...files, { path: "", content: "" }])}>
-            {text("package.addFile")}
-          </TextButton>
+    <div role="group" aria-label={text("package.files")} className="flex flex-col gap-2">
+      <RowLegend columns={fileColumns} labels={[text("package.filePath"), text("package.fileContent")]} />
+      {rows.map((file, index) => (
+        <div key={index} className={`grid grid-cols-1 items-start gap-3 ${fileColumns}`}>
+          <Input value={file.path} placeholder="/etc/app/config.ini" aria-label={text("package.filePath")} className="font-mono" onChange={(e) => change(index, { path: e.target.value })} />
+          <Code value={file.content} onChange={(content) => change(index, { content })} language={languageOf(file.path)} label={file.path || text("package.fileContent")} minHeight="2.5rem" />
+          {index < files.length ? <IconButton type="button" icon={Trash2} label={text("common.delete")} onClick={() => set("files", files.filter((_, at) => at !== index))} /> : <span className="hidden md:block" />}
         </div>
-      </div>
-    </Group>
+      ))}
+    </div>
   );
 }
 
@@ -1412,107 +2000,94 @@ function HealthTab({ service, set }: { service: PackageService; set: Setter }) {
   );
 }
 
+// The stops of the sliders: fine at the start, where a small service sits.
+const cpuStops = ["100m", "250m", "500m", "750m", "1", "2", "3", "4", "6", "8", "12", "16"];
+const memoryStops = ["64Mi", "128Mi", "256Mi", "512Mi", "768Mi", "1Gi", "2Gi", "3Gi", "4Gi", "6Gi", "8Gi", "12Gi", "16Gi", "32Gi"];
+
+const coresOf = (value: string) => (value.endsWith("m") ? parseFloat(value) / 1000 : parseFloat(value));
+
+function mebibytesOf(value: string) {
+  const match = /^([\d.]+)(Ki|Mi|Gi|Ti|K|M|G|T)?$/.exec(value);
+  if (!match) return NaN;
+  const unit: Record<string, number> = { Ki: 1 / 1024, Mi: 1, Gi: 1024, Ti: 1048576, K: 1000 / 1048576, M: 1e6 / 1048576, G: 1e9 / 1048576, T: 1e12 / 1048576 };
+  return parseFloat(match[1]) * (match[2] ? unit[match[2]] : 1 / 1048576);
+}
+
+function coresLabel(value: string) {
+  const cores = coresOf(value);
+  if (Number.isNaN(cores)) return value;
+  return text(cores > 1 ? "package.cpuMany" : "package.cpuOne", { count: cores.toLocaleString(currentLocale()) });
+}
+
+function memoryLabel(value: string) {
+  const size = mebibytesOf(value);
+  if (Number.isNaN(size)) return value;
+  const count = (amount: number) => Math.round(amount * 100) / 100;
+  return size >= 1024 ? text("package.memoryGi", { count: count(size / 1024).toLocaleString(currentLocale()) }) : text("package.memoryMi", { count: count(size).toLocaleString(currentLocale()) });
+}
+
+// ResourceSlider moves along stops, the first being no reservation. A value
+// between two stops gets one of its own, so that showing it never changes it.
+function ResourceSlider({
+  label,
+  hint,
+  value,
+  stops,
+  amount,
+  words,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  stops: string[];
+  amount: (value: string) => number;
+  words: (value: string) => string;
+  onChange: (value: string) => void;
+}) {
+  const known = stops.map((stop) => (value && amount(stop) === amount(value) ? value : stop));
+  const scale = value && !known.includes(value) ? [...known, value].sort((a, b) => (amount(a) || Infinity) - (amount(b) || Infinity)) : known;
+  const all = ["", ...scale];
+  const shown = (item: string) => (item ? words(item) : text("package.resourceAuto"));
+  return (
+    <label className="block">
+      <span className="mb-2 flex items-baseline justify-between gap-3">
+        <span className="text-muted">{label}</span>
+        <span>{shown(value)}</span>
+      </span>
+      <input
+        type="range"
+        min={0}
+        max={all.length - 1}
+        step={1}
+        value={all.indexOf(value)}
+        aria-valuetext={shown(value)}
+        onChange={(e) => onChange(all[Number(e.target.value)])}
+        className="w-full accent-ink"
+      />
+      <span className="mt-1 flex justify-between text-[12px] text-faint">
+        <span>{shown("")}</span>
+        <span>{shown(all[all.length - 1])}</span>
+      </span>
+      {hint ? <span className="mt-2 block text-faint">{hint}</span> : null}
+    </label>
+  );
+}
+
 function ResourcesTab({ service, set }: { service: PackageService; set: Setter }) {
   function setResource(key: "cpu" | "memory", value: string) {
     const next = { ...service.resources, [key]: value || undefined };
-    set("resources", next.cpu || next.memory ? next : undefined);
+    set("resources", next.cpu || next.memory || next.gpu ? next : undefined);
   }
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-      <Field label={text("package.cpu")} hint={text("package.cpuHint")}>
-        <Input value={service.resources?.cpu ?? ""} placeholder="500m" className="font-mono" onChange={(e) => setResource("cpu", e.target.value)} />
-      </Field>
-      <Field label={text("package.memory")} hint={text("package.memoryHint")}>
-        <Input value={service.resources?.memory ?? ""} placeholder="512Mi" className="font-mono" onChange={(e) => setResource("memory", e.target.value)} />
-      </Field>
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <ResourceSlider label={text("package.cpu")} value={service.resources?.cpu ?? ""} stops={cpuStops} amount={coresOf} words={coresLabel} onChange={(value) => setResource("cpu", value)} />
+        <ResourceSlider label={text("package.memory")} hint={text("package.memoryHint")} value={service.resources?.memory ?? ""} stops={memoryStops} amount={mebibytesOf} words={memoryLabel} onChange={(value) => setResource("memory", value)} />
+      </div>
+      <p className="text-[13px] text-faint">{text("package.resourceAutoHint")}</p>
     </div>
   );
-}
-
-// EnvEditor writes variables as KEY=value lines, coloured, and gives them
-// back as a map once each line reads.
-function EnvEditor({
-  value,
-  onChange,
-  label,
-  snippets = [],
-}: {
-  value?: Record<string, string>;
-  onChange: (value: Record<string, string> | undefined) => void;
-  label: string;
-  snippets?: { label: string; line: string }[];
-}) {
-  const [lines, setLines] = useState(() =>
-    Object.entries(value ?? {})
-      .map(([key, item]) => `${key}=${item}`)
-      .join("\n"),
-  );
-  const [bad, setBad] = useState<number[]>([]);
-
-  function onText(next: string) {
-    setLines(next);
-    const map: Record<string, string> = {};
-    const wrong: number[] = [];
-    next.split("\n").forEach((line, index) => {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith("#")) return;
-      const cut = trimmed.indexOf("=");
-      if (cut <= 0) {
-        wrong.push(index + 1);
-        return;
-      }
-      map[trimmed.slice(0, cut).trim()] = trimmed.slice(cut + 1);
-    });
-    setBad(wrong);
-    onChange(Object.keys(map).length ? map : undefined);
-  }
-
-  return (
-    <span className="flex flex-col gap-2">
-      <Code
-        value={lines}
-        onChange={onText}
-        language="env"
-        label={label}
-        placeholder="NOM=valeur"
-        minHeight="5rem"
-        problems={bad.map((line) => ({ line, message: text("ui.uneVariableSEcritCleValeur") }))}
-      />
-      {snippets.length > 0 ? (
-        <span className="flex flex-wrap items-center gap-2">
-          <span className="text-faint">{text("package.insert")}</span>
-          {snippets.map((snippet) => (
-            <button
-              key={snippet.line}
-              type="button"
-              title={snippet.line}
-              onClick={() => onText(lines.trim() ? `${lines.replace(/\n*$/, "")}\n${snippet.line}` : snippet.line)}
-              className="rounded border border-line px-2 py-0.5 text-[13px] text-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus"
-            >
-              + {snippet.label}
-            </button>
-          ))}
-        </span>
-      ) : null}
-    </span>
-  );
-}
-
-// sharedSnippets and serviceSnippets start the lines a first package needs.
-// A secret belongs to the common variables: they are sealed.
-function sharedSnippets() {
-  return [
-    { label: text("package.snippetSecret"), line: "PASSWORD={{secret:password}}" },
-    { label: text("package.snippetUrl"), line: "PUBLIC_URL={{url}}" },
-    { label: text("package.snippetHost"), line: "PUBLIC_HOST={{host}}" },
-  ];
-}
-
-function serviceSnippets() {
-  return [
-    { label: text("package.snippetUrl"), line: "PUBLIC_URL={{url}}" },
-    { label: text("package.snippetHost"), line: "PUBLIC_HOST={{host}}" },
-  ];
 }
 
 type AppPackage = { package: Package; yaml: string; problems: PackageProblem[]; address?: string };
@@ -1633,25 +2208,7 @@ export function AppServices() {
 
   return (
     <>
-      <PageTitle
-        title={text("appServices.title", { name })}
-        icon={PackageIcon}
-        action={
-          <span className="flex items-center gap-4">
-            <TextButton type="button" onClick={() => setGuide(true)}>
-              <span className="inline-flex items-center gap-2">
-                <Icon icon={BookOpen} />
-                {text("package.guide")}
-              </span>
-            </TextButton>
-            {canDeploy ? (
-              <TextButton type="button" onClick={() => void keep()}>
-                {text("appServices.keep")}
-              </TextButton>
-            ) : null}
-          </span>
-        }
-      />
+      <PageTitle inTree title={text("appServices.title", { name })} icon={PackageIcon} />
       {guide ? <PackageGuide onClose={() => setGuide(false)} /> : null}
       <form
         className="flex flex-col gap-8"
@@ -1662,6 +2219,7 @@ export function AppServices() {
       >
         <p className="max-w-[720px] text-muted">{text("appServices.intro")}</p>
         {address ? <p className="-mt-4 max-w-[720px] text-faint">{text("address.hint", { address })}</p> : null}
+        {/* As in a package: the two views, then what to add and to do, on one line. */}
         <Tabs
           label={text("package.view")}
           active={mode}
@@ -1670,6 +2228,28 @@ export function AppServices() {
             { key: "visual", label: text("package.visual") },
             { key: "yaml", label: text("package.advanced"), mark: !readable },
           ]}
+          aside={
+            <>
+              {mode === "visual" && canDeploy ? (
+                <>
+                  <TextButton type="button" onClick={() => setServices([...services, { name: freeServiceName(services), image: "" }])}>
+                    <Icon icon={Plus} />
+                    {text("package.addService")}
+                  </TextButton>
+                  <span aria-hidden className="hidden h-5 w-px bg-line sm:block" />
+                </>
+              ) : null}
+              <TextButton type="button" onClick={() => setGuide(true)}>
+                <Icon icon={BookOpen} />
+                {text("package.guide")}
+              </TextButton>
+              {canDeploy ? (
+                <TextButton type="button" onClick={() => void keep()}>
+                  {text("appServices.keep")}
+                </TextButton>
+              ) : null}
+            </>
+          }
         />
         {mode === "yaml" ? (
           <div className="flex flex-col gap-4">
@@ -1677,7 +2257,7 @@ export function AppServices() {
             {problems.length > 0 ? <ProblemList problems={problems} /> : null}
           </div>
         ) : (
-          <ServicesEditor services={services} onChange={setServices} problems={problems} />
+          <ServicesEditor services={services} onChange={setServices} problems={problems} addable={false} />
         )}
         {error ? <ErrorText>{error}</ErrorText> : null}
         {canDeploy ? (

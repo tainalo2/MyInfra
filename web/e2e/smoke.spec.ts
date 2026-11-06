@@ -70,7 +70,7 @@ test.describe.serial("MyInfra", () => {
   test("an image application offers the port only as an option", async ({ page }) => {
     await signIn(page);
     await page.goto("/nouveau");
-    await page.getByLabel("Source").selectOption("image");
+    await page.getByRole("radio", { name: /Mon image/ }).click();
     await page.getByRole("button", { name: "Réglages" }).click();
     await expect(page.getByPlaceholder("Lu dans l'image")).toBeVisible();
   });
@@ -78,9 +78,9 @@ test.describe.serial("MyInfra", () => {
   test("the screens follow the chosen language", async ({ page }) => {
     await signIn(page);
     await page.goto("/clusters");
-    await page.locator("header select").first().selectOption("en");
+    await page.locator("aside select").first().selectOption("en");
     await expect(page.getByRole("heading", { name: "Standalone machines" })).toBeVisible();
-    await page.locator("header select").first().selectOption("fr");
+    await page.locator("aside select").first().selectOption("fr");
   });
 
   test("the overview shows the map, switches views and keeps them in the address", async ({ page }) => {
@@ -113,7 +113,7 @@ test.describe.serial("MyInfra", () => {
     await expect(card.getByText("Héberge")).toBeVisible();
     await page.goBack();
     await expect(page).toHaveURL(/sel=app/);
-    await expect(page.getByRole("region", { name: "Chiffres clés" }).getByText("1/2 en ligne")).toBeVisible();
+    await expect(page.getByRole("region", { name: "Chiffres clés" }).getByRole("link", { name: /^Applications.*1\s*\/ 2 en ligne/ })).toBeVisible();
   });
 
   test("the search goes to a page from anywhere", async ({ page }) => {
@@ -133,7 +133,7 @@ test.describe.serial("MyInfra", () => {
     const problems = watch(page);
     await signIn(page);
     await page.goto("/assistants");
-    await expect(page.getByRole("heading", { name: "Assistants IA (MCP)" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "API et MCP" })).toBeVisible();
     await expect(page.locator("code").filter({ hasText: /\/mcp$/ })).toBeVisible();
     await page.getByRole("button", { name: "Nouveau jeton" }).click();
     await page.getByLabel("Nom du jeton").fill("e2e portable");

@@ -64,7 +64,7 @@ export function AppBackups({ app, locked }: { app: Application; locked?: boolean
   if (!list && !error) return <LoadingLines lines={1} label={text("backup.loading")} />;
   if (error) {
     return (
-      <section className="mt-10">
+      <section className="mt-8">
         <SectionTitle>{text("backup.title")}</SectionTitle>
         <ErrorText>{error}</ErrorText>
       </section>
@@ -73,7 +73,7 @@ export function AppBackups({ app, locked }: { app: Application; locked?: boolean
   if (rows.length === 0) return null;
 
   return (
-    <section className="mt-10">
+    <section className="mt-8">
       <SectionTitle>{text("backup.title")}</SectionTitle>
       <p className="mt-2 text-muted">{text("backup.hint")}</p>
       <p className="mt-1 text-[13px] text-faint">{text("backup.restoreHint")}</p>

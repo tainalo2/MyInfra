@@ -165,8 +165,8 @@ export function AppLogo({ slug, name, size = 40 }: { slug: string; name: string;
   if (!icon) {
     return (
       <span
-        className="inline-flex shrink-0 items-center justify-center rounded-md bg-ink font-medium text-canvas"
-        style={{ width: size, height: size, fontSize: glyph }}
+        className="inline-flex shrink-0 items-center justify-center rounded-md border border-line bg-surface font-medium text-ink"
+        style={{ width: size, height: size, fontSize: Math.round(size * 0.5) }}
         aria-hidden
       >
         {name.slice(0, 1)}

@@ -124,6 +124,7 @@ function TerminalView({ title, socket }: { title: string; socket: string }) {
   return (
     <>
       <PageTitle
+        inTree
         title={title}
         action={
           <span className="flex flex-wrap items-center gap-4" role="status">

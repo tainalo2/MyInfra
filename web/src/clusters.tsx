@@ -1,19 +1,22 @@
-import { FormEvent, useEffect, useState, type DragEvent } from "react";
-import { Network, Plus, Server as ServerIcon } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { AlertTriangle, Plus } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, peek, type Application, type ArgoApp, type Cluster, type ClusterUsage, type Destruction, type Server, type Template } from "./api";
+import { api, peek, type Application, type ArgoApp, type Cluster, type ClusterUsage, type Destruction, type Gauge, type Overview, type Server, type ServerUsage, type Template } from "./api";
 import { text } from "./i18n";
 import { Code } from "./code-lazy";
-import { ConfirmDialog, Spinner, useToast } from "./kit";
+import { ConfirmDialog, Spinner, StatusBadge, useToast } from "./kit";
 import { usePoll } from "./poll";
-import { usageText } from "./measure";
+import { money } from "./measure";
+import { UsageMeters } from "./meters";
 import { RemovalNotice } from "./destructions";
-import { MoveServerDialog, ServerCard, ServerForm, billText } from "./servers";
-import { UpdateBadge, UpdateDialog, urgent, useUpdates } from "./updates";
+import { MoveServerDialog, ServerForm, billText } from "./servers";
+import { machineLine } from "./offers";
+import { placeLabel } from "./places";
+import { UpdateBadge, UpdateDialog, urgent, useUpdate, useUpdates } from "./updates";
 import { hourlyRate } from "./measure";
 import { useSession } from "./session";
 import { useActivity } from "./activity";
-import { ActionsMenu, Button, EmptyList, ErrorText, Field, Icon, Input, ItemList, ListActions, ListModeButton, LoadingCards, LoadingLines, MenuItem, PageTitle, Skeleton, TextButton, entryClass, liveServer, removalOf, useDestructions, useListMode, type ListMode } from "./ui";
+import { ActionsMenu, Button, EmptyList, ErrorText, Field, HealthDot, Icon, Input, ItemList, ListModeButton, LoadingCards, LoadingLines, MenuItem, PageTitle, Skeleton, TextButton, entryClass, focus, liveServer, removalOf, serverState, statusLabel, useDestructions, useListMode, type ListMode } from "./ui";
 
 export function Clusters() {
   const { canDeploy } = useSession();
@@ -34,6 +37,17 @@ export function Clusters() {
   const [pending, setPending] = useState<{ server: Server; clusterId: string; name: string } | null>(null);
   const { updating, transferring } = useActivity();
   const toast = useToast();
+  // The overview tells which apps run on each server.
+  const overview = usePoll<Overview>("/api/overview", 15000).data;
+  const podsByServer = useMemo(() => {
+    const out = new Map<string, string[]>();
+    const names = new Map((overview?.apps ?? []).map((app) => [app.id, app.name]));
+    for (const pod of overview?.pods ?? []) {
+      if (!pod.serverId) continue;
+      out.set(pod.serverId, [...(out.get(pod.serverId) ?? []), names.get(pod.appId) ?? ""]);
+    }
+    return out;
+  }, [overview]);
 
   async function reload() {
     const [nextClusters, nextServers] = await Promise.all([api<Cluster[]>("/api/clusters"), api<Server[]>("/api/servers")]);
@@ -150,8 +164,9 @@ export function Clusters() {
   return (
     <>
       <PageTitle
-        title={text("nav.clusters")}
-        icon={Network}
+        title={creatingServer ? (target ? text("server.newIn", { name: target.name }) : text("ui.nouveauServeur")) : creatingCluster ? text("cluster.new") : importing ? text("cluster.import") : text("nav.servers")}
+        note={!creating && ready && servers.length > 0 ? pageNote(servers) : undefined}
+        phoneAction={!creating && ready && clusters.length > 0 && canDeploy ? { icon: Plus, label: clusters.length === 1 ? text("ui.nouveauServeur") : text("cluster.new"), onClick: () => (clusters.length === 1 ? setCreatingServer(clusters[0].id) : setCreatingCluster(true)) } : undefined}
         action={
           creating ? (
             <TextButton type="button" onClick={close}>
@@ -159,22 +174,37 @@ export function Clusters() {
             </TextButton>
           ) : ready && clusters.length > 0 ? (
             <div className="flex flex-wrap items-center gap-4">
+              <span className="hidden md:inline-flex">
+                <ListModeButton mode={mode} onToggle={toggleMode} />
+              </span>
               {canDeploy ? (
                 <>
                   <TextButton type="button" onClick={() => setImporting(true)}>
                     {text("cluster.import")}
                   </TextButton>
-                  <ListActions mode={mode} onToggle={toggleMode} label={text("cluster.new")} onCreate={() => setCreatingCluster(true)} />
+                  {clusters.length === 1 ? (
+                    <>
+                      <Button type="button" variant="secondary" onClick={() => setCreatingCluster(true)} disabled={transferring}>
+                        {text("cluster.new")}
+                      </Button>
+                      <Button type="button" onClick={() => setCreatingServer(clusters[0].id)} disabled={transferring}>
+                        <Icon icon={Plus} />
+                        {text("ui.nouveauServeur")}
+                      </Button>
+                    </>
+                  ) : (
+                    <Button type="button" onClick={() => setCreatingCluster(true)} disabled={transferring}>
+                      <Icon icon={Plus} />
+                      {text("cluster.new")}
+                    </Button>
+                  )}
                 </>
-              ) : (
-                <span className="hidden md:inline-flex">
-                  <ListModeButton mode={mode} onToggle={toggleMode} />
-                </span>
-              )}
+              ) : null}
             </div>
           ) : null
         }
       />
+      {ready && !creating ? <PilotNotice clusters={clusters} servers={servers} /> : null}
       {error ? (
         <div className="mb-8">
           <ErrorText>{error}</ErrorText>
@@ -232,7 +262,7 @@ export function Clusters() {
         )
       ) : (
         <>
-          {canDeploy ? <p className="mb-6 text-muted">{text("server.moveDrag")}</p> : null}
+          {canDeploy ? <p className="mb-4 hidden text-[13px] text-muted md:block">{text("server.moveDrag")}</p> : null}
           <ItemList mode={mode} columns={1}>
           {clusters.map((cluster) => (
             <ClusterCard
@@ -241,6 +271,7 @@ export function Clusters() {
               servers={membersOf(servers, cluster.id)}
               mode={mode}
               onAdd={() => setCreatingServer(cluster.id)}
+              pods={podsByServer}
               drag={cluster.origin === "imported" ? undefined : {
                 id: dragId,
                 hot: over === cluster.id,
@@ -258,38 +289,31 @@ export function Clusters() {
       )}
       {ready && !creating ? (
         <section
-          className={`mt-12 rounded-md ${over === "" ? "bg-status" : ""}`}
+          className={`mt-10 rounded-md ${over === "" ? "bg-status" : ""}`}
           onDragOver={(event) => hover(event, "")}
           onDragLeave={(event) => leave(event, "")}
           onDrop={(event) => drop(event, "")}
         >
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-            <h2 className="flex items-center gap-3 text-lg">
-              <Icon icon={ServerIcon} className="text-muted" />
-              {text("server.aloneList")}
-            </h2>
-            <TextButton type="button" onClick={() => setCreatingServer(alone)}>
-              <Icon icon={Plus} />
-              {text("server.newAlone")}
-            </TextButton>
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+            <div>
+              <h2>{text("server.aloneList")}</h2>
+              <p className="text-[13px] text-muted">{text("server.aloneListHint")}</p>
+            </div>
+            {canDeploy ? (
+              <TextButton type="button" onClick={() => setCreatingServer(alone)}>
+                <Icon icon={Plus} />
+                {text("server.newAlone")}
+              </TextButton>
+            ) : null}
           </div>
           {lone.length === 0 ? (
             <p className="text-muted">{text("server.aloneEmpty")}</p>
           ) : (
-            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {lone.map((server) => (
-                <li key={server.id} className="min-w-0">
-                  <ServerCard
-                    compact
-                    server={server}
-                    draggable={canDrag(server)}
-                    lifted={dragId === server.id}
-                    onDragStart={(event) => startDrag(event, server)}
-                    onDragEnd={endDrag}
-                  />
-                </li>
-              ))}
-            </ul>
+            <ServerTable
+              servers={lone}
+              pods={podsByServer}
+              drag={{ id: dragId, canDrag, onDragStart: startDrag, onDragEnd: endDrag }}
+            />
           )}
         </section>
       ) : null}
@@ -319,11 +343,13 @@ function ClusterCard({
   mode,
   onAdd,
   drag,
+  pods,
 }: {
   cluster: Cluster;
   servers: Server[];
   mode: ListMode;
   onAdd: () => void;
+  pods: Map<string, string[]>;
   drag?: {
     id: string | null;
     hot: boolean;
@@ -379,19 +405,22 @@ function ClusterCard({
       onDragLeave={drag?.onDragLeave}
       onDrop={drag?.onDrop}
     >
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <span className="flex items-center gap-3">
-          <Icon icon={Network} className="text-muted" />
-          {cluster.name}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        {/* The name, its state and what makes it, on one line while it fits. */}
+        <span className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
+          <h2 className="text-[16px]">{cluster.name}</h2>
+          {servers.length > 0 ? <StatusBadge status={servers.every((server) => liveServer(server)) ? "linked" : servers.some((server) => liveServer(server)) ? "preparing" : servers[0].status} /> : null}
+          <span className="text-muted">{clusterLine(servers)}</span>
         </span>
         <span className="flex items-center gap-4">
           {cluster.origin === "imported" ? null : (
-            <Button type="button" onClick={onAdd}>
+            <TextButton type="button" onClick={onAdd}>
               <Icon icon={Plus} />
-              {text("ui.nouveauServeur")}
-            </Button>
+              {text("cluster.addServer")}
+            </TextButton>
           )}
-          <ActionsMenu label={text("apps.more")}>
+          <ActionsMenu label={text("apps.actionsOf", { name: cluster.name })}>
+            <MenuItem onClick={() => navigate(`/historique?cluster=${cluster.id}`)}>{text("nav.history")}</MenuItem>
             {cluster.origin === "imported" || nodeUpdates.length === 0 ? null : (
               <MenuItem onClick={() => setUpdating(true)}>{text("upd.cluster.update")}</MenuItem>
             )}
@@ -458,40 +487,25 @@ function ClusterCard({
       ) : null}
       {dialogError && !confirm ? <ErrorText>{dialogError}</ErrorText> : null}
       {cluster.origin === "imported" ? null : (
-        usage === undefined ? (
-          <div role="status" aria-label={text("common.measures")}>
-            <Skeleton className="h-4 w-72" />
+        // On a card, the measures make a band of their own between two lines.
+        <div className={`flex flex-col gap-4 md:flex-row md:items-end md:gap-6 ${mode === "cards" ? "-mx-4 border-t border-line px-4 pt-4" : ""}`}>
+          <div className="min-w-0 flex-1">
+            <UsageMeters sample={usage === undefined ? null : usage ?? { measured: false, cpu: zero, memory: zero, disk: zero }} />
           </div>
-        ) : (
-          <p className="text-muted">{usage?.measured ? usageText(usage.cpu, usage.memory, usage.disk) : text("common.noMeasure")}</p>
-        )
+          {servers.length > 0 ? <p className="text-[13px] text-muted md:max-w-[240px] md:text-right">{clusterBill(servers)}</p> : null}
+        </div>
       )}
-      {servers.length > 0 ? <p className="text-muted">{clusterBill(servers)}</p> : null}
-      {servers.length > 0 ? (
-        <p>
-          <Link to={`/historique?cluster=${cluster.id}`} className="text-muted underline">{text("nav.history")}</Link>
-        </p>
-      ) : null}
       {cluster.origin === "imported" ? (
         <ArgoList id={cluster.id} />
       ) : servers.length > 0 ? (
-        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {servers.map((server) => (
-            <li key={server.id} className="min-w-0">
-              <ServerCard
-                compact
-                server={server}
-                controlPlane={server.controlPlane}
-                usageLoading={usage === undefined}
-                usage={usage?.servers.find((row) => row.id === server.id)}
-                draggable={drag?.canDrag(server)}
-                lifted={drag?.id === server.id}
-                onDragStart={drag ? (event) => drag.onDragStart(event, server) : undefined}
-                onDragEnd={drag?.onDragEnd}
-              />
-            </li>
-          ))}
-        </ul>
+        <ServerTable
+          flush={mode === "cards"}
+          servers={servers}
+          usage={usage ?? undefined}
+          usageLoading={usage === undefined}
+          pods={pods}
+          drag={drag}
+        />
       ) : (
         <p className="text-muted">{text("cluster.noServer")}</p>
       )}
@@ -597,4 +611,202 @@ function membersOf(servers: Server[], clusterId: string) {
     return members.sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
   }
   return members.slice().reverse();
+}
+
+const zero = { used: 0, total: 0 };
+
+function pageNote(servers: Server[]) {
+  const live = servers.filter((server) => liveServer(server)).length;
+  const totals = new Map<string, number>();
+  for (const server of servers) {
+    const hourly = hourlyRate(server);
+    if (!hourly) continue;
+    const unit = server.plan?.currency === "USD" || server.cost?.currency === "USD" ? "$" : "€";
+    totals.set(unit, (totals.get(unit) ?? 0) + hourly);
+  }
+  const cost = [...totals.entries()].map(([unit, hourly]) => text("overview.perMonth", { amount: `${money(hourly * 730)} ${unit}` }));
+  return [text("server.inService", { count: live }), ...cost].join(" · ");
+}
+
+function clusterLine(servers: Server[]) {
+  const hourly = servers.reduce((sum, server) => sum + hourlyRate(server), 0);
+  const unit = servers.some((server) => server.plan?.currency === "USD") ? "$" : "€";
+  const count = servers.length === 1 ? text("server.count1") : text("server.countN", { count: servers.length });
+  return [text("cluster.kind"), count, hourly ? text("overview.perHour", { amount: `${money(hourly)} ${unit}` }) : ""].filter(Boolean).join(" · ");
+}
+
+// PilotNotice warns when a cluster has a single server that drives it:
+// should it fall, the apps keep running but nothing deploys any more.
+function PilotNotice({ clusters, servers }: { clusters: Cluster[]; servers: Server[] }) {
+  const lonely = clusters.filter((cluster) => {
+    if (cluster.origin === "imported") return false;
+    const members = servers.filter((server) => server.clusterId === cluster.id);
+    return members.length > 1 && members.filter((server) => server.controlPlane).length === 1;
+  });
+  if (lonely.length === 0) return null;
+  return (
+    <section aria-label={text("overview.attention")} className="mb-8 flex flex-col gap-1 rounded-md border border-line bg-surface px-4 py-3">
+      {lonely.map((cluster) => {
+        const pilot = servers.find((server) => server.clusterId === cluster.id && server.controlPlane);
+        return (
+          <p key={cluster.id} className="flex items-start gap-2">
+            <Icon icon={AlertTriangle} className="mt-1 shrink-0 text-warn" />
+            <span>
+              <span className="text-warn">{text("overview.attention")} · </span>
+              {text("cluster.onePilot", { server: pilot?.name ?? "", cluster: cluster.name })}
+              <span className="block text-[13px] text-muted">{text("cluster.onePilotHint")}</span>
+            </span>
+          </p>
+        );
+      })}
+    </section>
+  );
+}
+
+type DragProps = {
+  id: string | null;
+  canDrag: (server: Server) => boolean;
+  onDragStart: (event: DragEvent, server: Server) => void;
+  onDragEnd: () => void;
+};
+
+// ServerTable lists servers as rows: name and address, place, size, load and
+// what runs there. A row can be dragged to another cluster.
+// ServerTable lists servers with their place, size and load. flush lays it
+// in the card that holds it, from edge to edge under a line.
+function ServerTable({
+  servers,
+  usage,
+  usageLoading,
+  pods,
+  drag,
+  flush = false,
+}: {
+  flush?: boolean;
+  servers: Server[];
+  usage?: ClusterUsage;
+  usageLoading?: boolean;
+  pods: Map<string, string[]>;
+  drag?: DragProps;
+}) {
+  const grid = "md:grid md:grid-cols-[minmax(0,1.4fr)_minmax(0,0.9fr)_minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,0.8fr)] md:items-center md:gap-4";
+  return (
+    <div className={flush ? "-mx-4 -mb-4 mt-1 overflow-hidden rounded-b-md border-t border-line" : "overflow-hidden rounded-md border border-line bg-surface"}>
+      <div aria-hidden className={`hidden border-b border-line px-4 py-2 text-[12px] text-muted ${grid}`}>
+        <span>{text("server.col.name")}</span>
+        <span>{text("server.col.place")}</span>
+        <span>{text("server.col.size")}</span>
+        <span>{text("server.col.load")}</span>
+        <span>{text("server.col.pods")}</span>
+      </div>
+      <ul>
+        {servers.map((server) => (
+          <ServerLine
+            key={server.id}
+            server={server}
+            grid={grid}
+            usage={usage?.servers.find((row) => row.id === server.id)}
+            usageLoading={usageLoading}
+            apps={pods.get(server.id) ?? []}
+            drag={drag}
+          />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ServerLine({
+  server,
+  grid,
+  usage,
+  usageLoading,
+  apps,
+  drag,
+}: {
+  server: Server;
+  grid: string;
+  usage?: ServerUsage;
+  usageLoading?: boolean;
+  apps: string[];
+  drag?: DragProps;
+}) {
+  const removal = removalOf(useDestructions(), "server", server.id);
+  const update = useUpdate("server", server.id);
+  const dragged = useRef(false);
+  const draggable = drag?.canDrag(server) ?? false;
+  const place = placeLabel(server.plan?.location) || placeLabel(server.place);
+  const distinct = [...new Set(apps.filter(Boolean))];
+  return (
+    <li
+      className={`card-link flex flex-col gap-1 border-t border-line px-4 py-3 first:border-t-0 ${grid} ${draggable ? "cursor-grab active:cursor-grabbing" : ""} ${drag?.id === server.id ? "opacity-50" : ""}`}
+      draggable={draggable || undefined}
+      onDragStart={(event) => {
+        dragged.current = true;
+        drag?.onDragStart(event, server);
+      }}
+      onDragEnd={() => {
+        drag?.onDragEnd();
+        window.setTimeout(() => {
+          dragged.current = false;
+        }, 0);
+      }}
+    >
+      <span className="flex min-w-0 flex-col">
+        <span className="flex flex-wrap items-center gap-2">
+          <HealthDot status={serverState(server)} />
+          <Link
+            to={`/serveurs/${server.id}`}
+            onClick={(event) => {
+              if (dragged.current) event.preventDefault();
+            }}
+            className={`font-medium text-ink ${focus}`}
+          >
+            {server.name}
+          </Link>
+          {server.controlPlane ? <span className="rounded border border-line px-1.5 text-[12px] text-muted">{text("server.pilot")}</span> : null}
+          {update ? <UpdateBadge item={update} /> : null}
+        </span>
+        {server.address ? <span className="pl-4 font-mono text-[12px] text-muted">{server.address}</span> : null}
+        {removal ? <RemovalNotice job={removal} /> : null}
+      </span>
+      <span className="text-[13px] text-muted md:text-[15px] md:text-ink">{place || "—"}</span>
+      <span className="flex flex-col text-[13px]">
+        {server.plan ? (
+          <>
+            <span className="hidden md:inline">{server.plan.name}</span>
+            <span className="text-muted">{machineLine("", server.plan.vcpu, server.plan.memoryMb, server.plan.gpus, server.plan.gpu).replace(/^ · /, "")}</span>
+          </>
+        ) : (
+          <span className="text-muted">{statusLabel(serverState(server)).text}</span>
+        )}
+      </span>
+      <span className="flex flex-col gap-1">
+        {usageLoading ? <Skeleton className="h-3 w-28" /> : usage?.measured ? (
+          <>
+            <MiniBar label={text("common.cpu")} gauge={usage.cpu} />
+            <MiniBar label={text("common.ram")} gauge={usage.memory} />
+          </>
+        ) : usage ? (
+          <span className="text-[13px] text-faint">{text("common.noMeasure")}</span>
+        ) : null}
+      </span>
+      <span className="truncate text-[13px] text-muted" title={distinct.join(", ")}>
+        {apps.length > 0 ? (apps.length === 1 ? `1 pod · ${distinct[0]}` : `${apps.length} pods`) : ""}
+      </span>
+    </li>
+  );
+}
+
+function MiniBar({ label, gauge }: { label: string; gauge: Gauge }) {
+  const ratio = gauge.total > 0 ? Math.max(0, Math.min(1, gauge.used / gauge.total)) : 0;
+  return (
+    <span className="flex items-center gap-2 text-[12px] text-muted" title={`${label} ${Math.round(ratio * 100)} %`}>
+      <span className="w-8">{label}</span>
+      <span className="h-1.5 w-20 overflow-hidden rounded-full bg-line" role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(ratio * 100)}>
+        <span className={`block h-full rounded-full ${ratio >= 0.9 ? "bg-bad" : ratio >= 0.75 ? "bg-warn" : "bg-ink"}`} style={{ width: `${ratio * 100}%` }} />
+      </span>
+      <span>{Math.round(ratio * 100)} %</span>
+    </span>
+  );
 }

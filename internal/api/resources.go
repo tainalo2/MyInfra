@@ -1101,6 +1101,8 @@ type serviceView struct {
 	Replicas  int    `json:"replicas"`
 	// Exposed are the ports open to the Internet, such as 21116/udp.
 	Exposed []string `json:"exposed,omitempty"`
+	// DependsOn names the services this one needs: the plan draws them.
+	DependsOn []string `json:"dependsOn,omitempty"`
 }
 
 func logoImages(app store.Application) []string {
@@ -1178,6 +1180,7 @@ func toApp(app store.Application) appView {
 	for _, svc := range app.Services {
 		item := serviceView{
 			Name: svc.Name, Image: svc.Image, Published: svc.Published, Disk: svc.Disk, Replicas: svc.Replicas,
+			DependsOn: svc.Spec.DependsOn,
 		}
 		for _, port := range spec.Exposed(svc.Spec) {
 			item.Exposed = append(item.Exposed, publicKey(port))

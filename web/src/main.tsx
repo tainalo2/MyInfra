@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter } from "react-router-dom";
+import { RouterProvider, createBrowserRouter } from "react-router-dom";
 import { App } from "./App";
 import { detectLang, setLang } from "./i18n";
 import { SessionProvider } from "./session";
@@ -9,13 +9,15 @@ import "./index.css";
 
 setLang(detectLang());
 
+// The routes stay in App; a data router is what lets a page hold a navigation
+// back, to offer saving first.
+const router = createBrowserRouter([{ path: "*", element: <App /> }]);
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider>
       <SessionProvider>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
+        <RouterProvider router={router} />
       </SessionProvider>
     </ThemeProvider>
   </StrictMode>,

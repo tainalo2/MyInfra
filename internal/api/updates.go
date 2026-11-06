@@ -14,8 +14,8 @@ import (
 	"myinfra/internal/store"
 )
 
-// How often each kind of update is looked for. Nothing is applied: a person
-// sees what is available and chooses when.
+// How often each kind of update is looked for. Nothing is applied unless a
+// person chose to, now or each night for what passes without interruption.
 const (
 	appsEvery    = 6 * time.Hour
 	myinfraEvery = 6 * time.Hour
@@ -49,6 +49,7 @@ func (a *API) Updates(ctx context.Context) {
 			// A job whose runner stopped, after an error of MyInfra itself, goes on.
 			a.resumeUpdateJobs()
 			a.checkDue(ctx, false)
+			a.nightly(ctx)
 		}
 	}
 }
@@ -203,30 +204,30 @@ type updateView struct {
 	CheckedAt time.Time       `json:"checkedAt"`
 }
 
-func (a *API) listUpdates(w http.ResponseWriter, r *http.Request) {
-	owner := ownerID(r.Context())
-	rows, err := a.Store.Updates(r.Context(), owner)
+// updateList is what can be updated now, named, and without the targets
+// gone or out of reach since the check.
+func (a *API) updateList(ctx context.Context, owner string) ([]updateView, error) {
+	rows, err := a.Store.Updates(ctx, owner)
 	if err != nil {
-		a.mapErr(w, err)
-		return
+		return nil, err
 	}
 	names := map[string]string{}
-	if apps, err := a.Store.ListApplications(r.Context(), owner); err == nil {
+	if apps, err := a.Store.ListApplications(ctx, owner); err == nil {
 		for _, app := range apps {
 			names["app:"+app.ID] = app.Name
 		}
 	}
-	if servers, err := a.Store.ListServers(r.Context(), owner); err == nil {
+	if servers, err := a.Store.ListServers(ctx, owner); err == nil {
 		for _, server := range servers {
 			names["server:"+server.ID] = server.Name
 		}
 	}
-	if packages, err := a.Store.ListPackages(r.Context(), owner); err == nil {
+	if packages, err := a.Store.ListPackages(ctx, owner); err == nil {
 		for _, p := range packages {
 			names["library:package:"+p.ID] = p.Name
 		}
 	}
-	if templates, err := a.Store.ListTemplates(r.Context(), owner); err == nil {
+	if templates, err := a.Store.ListTemplates(ctx, owner); err == nil {
 		for _, t := range templates {
 			names["library:template:"+t.ID] = t.Name
 		}
@@ -257,6 +258,15 @@ func (a *API) listUpdates(w http.ResponseWriter, r *http.Request) {
 		}
 		return out[i].Name < out[j].Name
 	})
+	return out, nil
+}
+
+func (a *API) listUpdates(w http.ResponseWriter, r *http.Request) {
+	out, err := a.updateList(r.Context(), ownerID(r.Context()))
+	if err != nil {
+		a.mapErr(w, err)
+		return
+	}
 	updates.mu.Lock()
 	var last time.Time
 	for _, at := range updates.last {

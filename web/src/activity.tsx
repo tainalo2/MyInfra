@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useId, useMemo, useState, type Re
 import { Link, useLocation } from "react-router-dom";
 import { ArrowRightLeft, LifeBuoy, PowerOff } from "lucide-react";
 import { currentLocale, text, type MsgKey } from "./i18n";
-import { Sheet } from "./kit";
+import { Sheet, StatusBadge } from "./kit";
 import { useI18n } from "./lang";
 import { usePoll } from "./poll";
 import { useSession } from "./session";
@@ -81,8 +81,9 @@ function since(op: Operation) {
 }
 
 // BusyIndicator is the red mark of the header while this copy, on the
-// person's computer, drives machines: switching it off would cut them.
-export function BusyIndicator() {
+// person's computer, drives machines: switching it off would cut them. wide
+// fills the menu's column, its details opening to the right side.
+export function BusyIndicator({ wide = false }: { wide?: boolean }) {
   useI18n();
   const { activity } = useActivity();
   const [open, setOpen] = useState(false);
@@ -97,9 +98,9 @@ export function BusyIndicator() {
         onBlur={() => setOpen(false)}
         aria-describedby={tipId}
         aria-expanded={open}
-        className={`inline-flex items-center gap-2 rounded-full border border-bad px-2.5 py-1 text-[12px] text-bad ${focus}`}
+        className={`inline-flex items-center border border-bad text-bad ${wide ? "w-full gap-3 rounded-md px-3 py-1.5 text-[13px]" : "gap-2 rounded-full px-2.5 py-1 text-[12px]"} ${focus}`}
       >
-        <span className="relative inline-flex size-2.5">
+        <span className={`relative inline-flex size-2.5 ${wide ? "mx-[3px]" : ""}`}>
           <span className="absolute inline-flex size-full animate-ping rounded-full bg-bad opacity-60" aria-hidden />
           <span className="relative inline-flex size-2.5 rounded-full bg-bad" aria-hidden />
         </span>
@@ -109,7 +110,7 @@ export function BusyIndicator() {
       <div
         id={tipId}
         role="tooltip"
-        className={`absolute right-0 top-full z-50 mt-2 w-72 rounded-md border border-line bg-surface p-3 text-[13px] shadow-sm ${open ? "block" : "hidden"}`}
+        className={`absolute ${wide ? "left-0" : "right-0"} top-full z-50 mt-2 w-72 rounded-md border border-line bg-surface p-3 text-[13px] shadow-sm ${open ? "block" : "hidden"}`}
       >
         <p className="mb-2 font-medium text-bad">{text("activity.keepOnTitle")}</p>
         <p className="mb-2 text-muted">{text("activity.keepOnText")}</p>
@@ -214,22 +215,23 @@ export function RunningList() {
   const ops = activity?.operations ?? [];
   if (ops.length === 0) return null;
   return (
-    <section className="mb-10">
-      <h2 className="mb-3 text-lg">{text("activity.running")}</h2>
-      <ul className="flex flex-col">
+    <section className="mb-8">
+      <h2 className="mb-3">{text("activity.running")}</h2>
+      <ul className="flex flex-col gap-3">
         {ops.map((op) => (
-          <li key={op.kind + op.id} className="flex items-center justify-between gap-4 border-t border-line py-3">
-            <span className="flex items-center gap-3">
-              <span className="inline-block size-2 animate-pulse rounded-full bg-warn" aria-hidden />
-              {op.to ? (
-                <Link to={op.to} className="underline-offset-2 hover:underline">
-                  {opLabel(op)}
-                </Link>
-              ) : (
-                opLabel(op)
-              )}
+          <li key={op.kind + op.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-md border border-line bg-surface px-4 py-3">
+            <span className="flex min-w-0 flex-col">
+              <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                {opLabel(op)}
+                <StatusBadge status="deploying" />
+              </span>
+              {op.since ? <span className="text-[13px] text-muted">{text("activity.startedAt", { time: since(op) })}</span> : null}
             </span>
-            <span className="text-[13px] text-faint">{since(op)}</span>
+            {op.to ? (
+              <Link to={op.to} className={`text-link ${focus}`}>
+                {text("activity.follow.short")}
+              </Link>
+            ) : null}
           </li>
         ))}
       </ul>

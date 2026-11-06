@@ -58,7 +58,7 @@ export function Copies() {
 
   return (
     <>
-      <PageTitle title={text("copy.title")} icon={Waypoints} />
+      <PageTitle inTree title={text("copy.title")} icon={Waypoints} />
       <p className="mb-4 max-w-xl text-muted">
         {text("ui.lesCopiesQuiPartagentLaMeme")}
       </p>

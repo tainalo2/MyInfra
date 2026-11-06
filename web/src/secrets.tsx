@@ -70,6 +70,7 @@ export function Secrets() {
   return (
     <>
       <PageTitle
+        inTree
         title={text("nav.secrets")}
         icon={Shield}
         action={
@@ -209,7 +210,7 @@ export function SecretPage() {
 
   return (
     <div className="max-w-[720px]">
-      <PageTitle title={secret.name} icon={Shield} />
+      <PageTitle inTree title={secret.name} icon={Shield} />
       <p className="text-muted">{text("secret.hidden")}</p>
       {error ? (
         <div className="mt-6">
@@ -328,7 +329,7 @@ export function AppSecretLinks({ appId }: { appId: string }) {
   const granted = (rows ?? []).filter((row) => row.apps.some((app) => app.id === appId));
 
   return (
-    <section className="mt-10">
+    <section className="mt-8">
       <SectionTitle>{text("nav.secrets")}</SectionTitle>
       {rows === null ? (
         <p className="mt-4 text-muted">{text("secret.loading")}</p>

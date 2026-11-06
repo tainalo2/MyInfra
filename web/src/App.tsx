@@ -29,7 +29,6 @@ const Secrets = page(() => import("./secrets"), "Secrets");
 const SecretPage = page(() => import("./secrets"), "SecretPage");
 const Providers = page(() => import("./accounts"), "Providers");
 const Dns = page(() => import("./accounts"), "Dns");
-const Registries = page(() => import("./accounts"), "Registries");
 const Images = page(() => import("./localimages"), "Images");
 const Clusters = page(() => import("./clusters"), "Clusters");
 const Account = page(() => import("./account"), "Account");
@@ -37,14 +36,15 @@ const Transfer = page(() => import("./transfer"), "Transfer");
 const TransferFollow = page(() => import("./transfer"), "TransferFollow");
 const Copies = page(() => import("./copies"), "Copies");
 const UpdatesPage = page(() => import("./updates"), "UpdatesPage");
-const DnsRecords = page(() => import("./dnsrecords"), "DnsRecords");
 const SettingsPage = page(() => import("./settings"), "SettingsPage");
+const MorePage = page(() => import("./mobilenav"), "MorePage");
 const Templates = page(() => import("./templates"), "Templates");
 const TemplateEditor = page(() => import("./templates"), "TemplateEditor");
 const TemplateLaunch = page(() => import("./templates"), "TemplateLaunch");
 const TemplateRunPage = page(() => import("./templates"), "TemplateRunPage");
 const Packages = page(() => import("./packages"), "Packages");
 const PackageEditor = page(() => import("./packages"), "PackageEditor");
+const PackageNew = page(() => import("./packages"), "PackageNew");
 const AppServices = page(() => import("./packages"), "AppServices");
 const DestructionPage = page(() => import("./destructions"), "DestructionPage");
 const DestructionsPage = page(() => import("./destructions"), "DestructionsPage");
@@ -272,10 +272,10 @@ export function App() {
         <Route path="/secrets/:id" element={<SecretPage />} />
         <Route path="/providers" element={<Providers />} />
         <Route path="/dns" element={<Dns />} />
-        <Route path="/dns/enregistrements" element={<DnsRecords />} />
+        <Route path="/dns/enregistrements" element={<Navigate to="/dns#adresses" replace />} />
         {/* Building from a Git repository does not exist yet: its access page waits for it. */}
         <Route path="/git" element={<Navigate to="/reglages" replace />} />
-        <Route path="/registres" element={<Registries />} />
+        <Route path="/registres" element={<Navigate to="/images" replace />} />
         <Route path="/images" element={<Images />} />
         <Route path="/serveurs" element={<Navigate to="/clusters" replace />} />
         <Route path="/serveurs/:id" element={<ServerPage />} />
@@ -294,7 +294,7 @@ export function App() {
         <Route path="/templates/:id" element={<TemplateEditor />} />
         <Route path="/templates/:id/deploy" element={<RequireDeploy><TemplateLaunch /></RequireDeploy>} />
         <Route path="/applications/paquets" element={<Packages />} />
-        <Route path="/applications/paquets/nouveau" element={<RequireDeploy><PackageEditor /></RequireDeploy>} />
+        <Route path="/applications/paquets/nouveau" element={<RequireDeploy><PackageNew /></RequireDeploy>} />
         <Route path="/applications/paquets/:id" element={<PackageEditor />} />
         <Route path="/paquets/*" element={<Navigate to="/applications/paquets" replace />} />
         <Route path="/compte" element={<Account />} />
@@ -304,6 +304,7 @@ export function App() {
         <Route path="/copies" element={<RequireAdmin><Copies /></RequireAdmin>} />
         <Route path="/mises-a-jour" element={<UpdatesPage />} />
         <Route path="/reglages" element={<SettingsPage />} />
+        <Route path="/plus" element={<MorePage />} />
       </Route>
     </Routes>
     </Suspense>

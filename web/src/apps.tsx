@@ -3,9 +3,10 @@ import { ConfirmDialog, Sheet, Spinner, StatusBadge, Steps, appHealth, useToast 
 import { usePoll } from "./poll";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ChevronDown, ChevronUp, Copy, ExternalLink, Plus, Trash2 } from "lucide-react";
-import { api, type AppRuntime, type AppService, type Application, type CatalogueCard, type CatalogueVersions, type Cluster, type Destruction, type DnsZone, type PackageRow, type Server, fillAddress, followsAddress } from "./api";
+import { api, type AppRuntime, type AppService, type Application, type CatalogueCard, type CatalogueVersions, type Cluster, type Destruction, type DnsZone, type PackageRow, type PodRuntime, type Server, fillAddress, followsAddress } from "./api";
+import { PlanPanel, appPlan, serviceOfPod } from "./plan";
 import { localizeCard } from "./catalogue-copy";
-import { knownMessage, text } from "./i18n";
+import { knownMessage, text, type MsgKey } from "./i18n";
 import { Code } from "./code-lazy";
 import { AppLogo } from "./app-logo";
 import { CatalogueBrowser } from "./catalogue";
@@ -29,6 +30,51 @@ type RedundancyPreview = {
   nodes: number;
   storageNodes: number;
 };
+
+const sources: { key: string; label: MsgKey; hint: MsgKey }[] = [
+  { key: "catalogue", label: "common.catalogue", hint: "source.catalogueHint" },
+  { key: "image", label: "source.myImage", hint: "source.imageHint" },
+  { key: "package", label: "package.source", hint: "source.packageHint" },
+];
+
+// SourceChoice picks where a new application comes from: three cards for the
+// usual ways, and the rarer ones below.
+function SourceChoice({ value, onChange }: { value: string; onChange: (next: string) => void }) {
+  const other = !sources.some((item) => item.key === value);
+  return (
+    <div className="flex flex-col gap-2">
+      <div role="radiogroup" aria-label={text("field.source")} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {sources.map((item) => {
+          const on = item.key === value;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => onChange(item.key)}
+              className={`flex flex-col gap-1 rounded-md border bg-surface p-4 text-left ${on ? "border-ink shadow-[inset_0_0_0_1px_var(--color-ink)]" : "border-line"} ${focus}`}
+            >
+              <span className="flex items-center justify-between gap-2">
+                {text(item.label)}
+                <span aria-hidden className={`size-4 rounded-full border ${on ? "border-ink bg-[radial-gradient(circle,var(--color-ink)_0_3px,var(--color-surface)_3.5px)]" : "border-line"}`} />
+              </span>
+              <span className="text-[13px] text-muted">{text(item.hint)}</span>
+            </button>
+          );
+        })}
+      </div>
+      <label className="flex items-center gap-2 self-start text-[13px] text-muted">
+        {text("source.other")}
+        <select value={other ? value : ""} onChange={(event) => event.target.value && onChange(event.target.value)} className={`rounded-md border border-line bg-surface px-2 py-1 ${focus}`}>
+          <option value="">—</option>
+          <option value="git">{text("common.git")}</option>
+          <option value="template">{text("common.template")}</option>
+        </select>
+      </label>
+    </div>
+  );
+}
 
 export function NewApp({ onCancel }: { onCancel?: () => void }) {
   const navigate = useNavigate();
@@ -259,8 +305,8 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
   return (
     <>
       <PageTitle
+        inTree
         title={text("crumb.newApp")}
-        icon={Plus}
         action={
           onCancel ? (
             <TextButton type="button" onClick={onCancel}>
@@ -269,7 +315,8 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
           ) : null
         }
       />
-      <form onSubmit={onSubmit} className="flex max-w-[720px] flex-col gap-6">
+      <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
+      <form onSubmit={onSubmit} className="flex min-w-0 max-w-[720px] flex-1 flex-col gap-6">
         <Steps
           steps={[
             {
@@ -277,22 +324,14 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
               ready: picked,
               content: (
                 <>
-                  <Field label={text("field.source")}>
-                    <Select
-                      value={sourceKind}
-                      onChange={(e) => {
-                        setSourceKind(e.target.value);
-                        setArticle(null);
-                        setChosenPackage(null);
-                      }}
-                    >
-                      <option value="catalogue">{text("common.catalogue")}</option>
-                      <option value="package">{text("package.source")}</option>
-                      <option value="image">{text("common.image")}</option>
-                      <option value="git">{text("common.git")}</option>
-                      <option value="template">{text("common.template")}</option>
-                    </Select>
-                  </Field>
+                  <SourceChoice
+                    value={sourceKind}
+                    onChange={(next) => {
+                      setSourceKind(next);
+                      setArticle(null);
+                      setChosenPackage(null);
+                    }}
+                  />
                   {sourceKind === "catalogue" ? (
                     article ? (
                       <>
@@ -408,7 +447,7 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
                           <LocalImagePicker value={source} onPick={setSource} />
                           <p className="text-faint">
                             {text("images.sourceHint")}{" "}
-                            <Link to="/registres" className="text-ink underline">
+                            <Link to="/images" className="text-ink underline">
                               {text("nav.registries")}
                             </Link>
                             {" · "}
@@ -626,6 +665,29 @@ export function NewApp({ onCancel }: { onCancel?: () => void }) {
           }
         />
       </form>
+      {picked ? (
+        <aside aria-label={text("newApp.recap")} className="flex flex-col gap-3 rounded-md border border-line bg-surface p-4 lg:sticky lg:top-4 lg:w-[300px] lg:shrink-0">
+          <h2>{text("newApp.recap")}</h2>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[13px]">
+            {(
+              [
+                [text("dnsrec.col.app"), sourceKind === "catalogue" && article ? `${article.name} ${tag}` : sourceKind === "package" && chosenPackage ? chosenPackage.name : source || "—"],
+                [text("field.name"), name || "—"],
+                [text("dnsrec.col.name"), names.filter((item) => item.subdomain.trim()).map((item) => `${item.subdomain}.${item.zone}`).join(", ") || "—"],
+                [text("newApp.where"), destination === "server" ? servers.find((server) => server.id === serverId)?.name ?? "—" : clusters.find((cluster) => cluster.id === clusterId)?.name ?? "—"],
+                [text("redundancy.copies"), String(destination === "cluster" ? copies : 1)],
+              ] as [string, string][]
+            ).map(([label, value]) => (
+              <div key={label} className="contents">
+                <dt className="text-muted">{label}</dt>
+                <dd className="min-w-0 break-words">{value}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="text-[12px] text-muted">{text("newApp.noPurchase")}</p>
+        </aside>
+      ) : null}
+      </div>
     </>
   );
 }
@@ -666,6 +728,53 @@ function PackageChoice({ onSelect }: { onSelect: (row: PackageRow) => void }) {
   );
 }
 
+// PlanDetail says what the chosen element of the plan is, under the plan:
+// a service's pods, the addresses behind the proxy, a disk's service.
+function PlanDetail({ app, pods, selected }: { app: Application; pods: PodRuntime[]; selected: string | null }) {
+  if (!selected) return null;
+  const services = app.services ?? [];
+  if (selected.startsWith("svc:")) {
+    const name = selected.slice(4);
+    const service = services.find((svc) => svc.name === name);
+    const mine = pods.filter((pod) => serviceOfPod(services, pod.name) === name);
+    return (
+      <div className="mb-8 flex flex-col gap-3 rounded-md border border-line bg-surface p-4">
+        {service ? <p className="break-all font-mono text-[13px] text-muted">{service.image.replace(/@sha256:[a-f0-9]+$/, "")}</p> : null}
+        {(service?.exposed ?? []).length > 0 ? <p className="text-[13px] text-warn">{text("plan.link.direct")} · {(service?.exposed ?? []).join(", ")}</p> : null}
+        <ul className="flex flex-col">
+          {mine.map((pod) => {
+            const state = podHealth(pod);
+            return (
+              <li key={pod.name} className="flex flex-wrap items-baseline justify-between gap-x-4 border-t border-line py-2 first:border-t-0">
+                <span className="break-all font-mono text-[13px]">{pod.name}</span>
+                <span className="text-[13px] text-muted">
+                  {pod.server} · <span className={state.tone}>{state.text}</span>
+                </span>
+              </li>
+            );
+          })}
+          {mine.length === 0 ? <li className="text-muted">{text("common.noPod")}</li> : null}
+        </ul>
+      </div>
+    );
+  }
+  if (selected === "proxy" || selected === "internet") {
+    const hosts = (app.domains ?? []).filter((domain) => domain.kind === "custom" || domain.kind === "default");
+    return (
+      <ul className="mb-8 flex flex-col rounded-md border border-line bg-surface p-4">
+        {hosts.map((domain) => (
+          <li key={domain.hostname} className="flex flex-wrap items-baseline justify-between gap-x-4 border-t border-line py-2 first:border-t-0">
+            <span className="break-all font-mono text-[13px]">{domain.hostname}</span>
+            <StatusBadge status={domain.status} />
+          </li>
+        ))}
+        {hosts.length === 0 ? <li className="text-muted">{text("names.none")}</li> : null}
+      </ul>
+    );
+  }
+  return null;
+}
+
 export function ApplicationPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -676,9 +785,10 @@ export function ApplicationPage() {
   const runtimePoll = usePoll<AppRuntime>(id ? `/api/applications/${id}/runtime` : null, 8000);
   const runtime = runtimePoll.data ?? (runtimePoll.error ? emptyRuntime : null);
   const [copied, setCopied] = useState("");
-  const [confirm, setConfirm] = useState<"" | "delete" | "pause">("");
+  const [confirm, setConfirm] = useState<"" | "delete" | "pause" | "restart">("");
   const [pausing, setPausing] = useState(false);
   const [editingNames, setEditingNames] = useState(false);
+  const [planned, setPlanned] = useState<string | null>(null);
   const { updating, transferring } = useActivity();
   const { canDeploy, canAdmin } = useSession();
 
@@ -746,165 +856,184 @@ export function ApplicationPage() {
   const locked = app.rollout === "updating" || updating(app.serverId, app.clusterId) || transferring;
   const mutable = canDeploy && !app.guarded;
 
+  // The head of the page: the application with its actions on the right,
+  // then its state and where it answers, and its measures beside them on a
+  // wide screen. Below the plan, the settings keep the width of a form.
+  const actions = mutable ? (
+    <div className="flex flex-wrap items-center gap-3">
+      {address ? (
+        <a href={`https://${address}`} target="_blank" rel="noreferrer" className={`inline-flex min-h-11 items-center gap-2 rounded-md bg-ink px-4 py-2 text-canvas sm:min-h-0 ${focus}`}>
+          <Icon icon={ExternalLink} />
+          {text("apps.open")}
+        </a>
+      ) : null}
+      <Button type="button" variant="secondary" onClick={() => (app.paused ? void setPaused(false) : setConfirm("pause"))} disabled={pausing || locked}>
+        {pausing ? <Spinner /> : null}
+        {app.paused ? text("home.resume") : text("apps.pauseAction")}
+      </Button>
+      <ActionsMenu label={text("apps.more")}>
+        {app.sourceKind === "image" && !locked ? <MenuItem onClick={() => navigate(`/applications/${app.id}/services`)}>{text("appServices.edit")}</MenuItem> : null}
+        {!app.paused && !locked ? <MenuItem onClick={() => setConfirm("restart")}>{text("apps.restart")}</MenuItem> : null}
+        <MenuItem onClick={() => void keepAsPackage()}>{text("appServices.keep")}</MenuItem>
+        <MenuItem tone="danger" onClick={() => setConfirm("delete")}>
+          {text("common.delete")}
+        </MenuItem>
+      </ActionsMenu>
+    </div>
+  ) : null;
+
   return (
-    <div className="max-w-[720px]">
-      <PageTitle title={app.name} mark={<AppLogo slug={app.logo ?? ""} name={app.name} size={40} />} />
-      <div className="-mt-3 flex flex-col gap-2 md:-mt-8">
-        <StatusBadge status={health} />
-        {health !== "running" && health !== "paused" && app.runDetail ? <p className="text-muted">{app.runDetail}</p> : null}
-        {address ? (
-          <a href={`https://${address}`} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-2 break-all font-mono text-[13px] underline">
-            {address}
-            <Icon icon={ExternalLink} />
-          </a>
-        ) : null}
-        <p className="break-all text-muted">
-          {app.source.replace(/@sha256:[a-f0-9]+$/, "")} · {where}
-        </p>
+    <div>
+      <PageTitle title={app.name} mark={<AppLogo slug={app.logo ?? ""} name={app.name} size={48} />} action={actions} />
+      <div className="flex flex-col gap-6 md:-mt-3 xl:flex-row xl:items-center xl:justify-between xl:gap-12">
+        <div className="flex min-w-0 flex-col gap-1.5 md:pl-[60px]">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <StatusBadge status={health} />
+            {address ? (
+              <a href={`https://${address}`} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-2 break-all font-mono text-[13px] underline">
+                {address}
+                <Icon icon={ExternalLink} />
+              </a>
+            ) : null}
+          </div>
+          {health !== "running" && health !== "paused" && app.runDetail ? <p className="text-muted">{app.runDetail}</p> : null}
+          <p className="break-all text-muted">
+            {app.source.replace(/@sha256:[a-f0-9]+$/, "")} · {where}
+          </p>
+        </div>
+        <div className="xl:w-[560px] xl:shrink-0">
+          <UsageMeters sample={runtime} />
+        </div>
       </div>
       {mutable ? <UpdateLock locked={locked && !transferring} /> : null}
       {mutable ? <AppUpdateNotice app={app} onStarted={() => void appPoll.reload()} /> : null}
-      {mutable ? (
-        <div className="mt-6 flex flex-wrap items-center gap-3">
-          {address ? (
-            <a href={`https://${address}`} target="_blank" rel="noreferrer" className={`inline-flex min-h-11 items-center gap-2 rounded-md bg-ink px-4 py-2 text-canvas sm:min-h-0 ${focus}`}>
-              <Icon icon={ExternalLink} />
-              {text("apps.open")}
-            </a>
-          ) : null}
-          <Button type="button" variant="secondary" onClick={() => (app.paused ? void setPaused(false) : setConfirm("pause"))} disabled={pausing || locked}>
-            {pausing ? <Spinner /> : null}
-            {app.paused ? text("home.resume") : text("apps.pauseAction")}
-          </Button>
-          <ActionsMenu label={text("apps.more")}>
-            {app.sourceKind === "image" && !locked ? <MenuItem onClick={() => navigate(`/applications/${app.id}/services`)}>{text("appServices.edit")}</MenuItem> : null}
-            <MenuItem onClick={() => void keepAsPackage()}>{text("appServices.keep")}</MenuItem>
-            <MenuItem tone="danger" onClick={() => setConfirm("delete")}>
-              {text("common.delete")}
-            </MenuItem>
-          </ActionsMenu>
-        </div>
+      {(app.services ?? []).length > 0 && !app.guarded ? (
+        <>
+          <div className="mt-8" />
+          <PlanPanel model={appPlan(app, runtime)} label={text("plan.label")} whole={text("plan.whole")} selected={planned} onSelect={setPlanned}>
+            <PlanDetail app={app} pods={pods} selected={planned} />
+          </PlanPanel>
+        </>
       ) : null}
-      <div className="mt-8">
-        <UsageMeters sample={runtime} />
-      </div>
-      <section className="mt-10">
-        <SectionTitle>{text("field.services")}</SectionTitle>
-        {app.guarded ? (
-          <div className="mt-4 flex flex-col gap-3">
-            <p className="text-muted">{text("apps.selfCopies")}</p>
-            {(app.services ?? []).map((service) => (
-              <p key={service.name} className="font-mono text-[13px]">
-                {service.name} · {service.image} · {text(service.replicas === 1 ? "apps.copyOne" : "apps.copyMany", { count: service.replicas || 1 })}
-              </p>
-            ))}
-          </div>
-        ) : app.services && app.services.length > 0 ? (
-          mutable ? <ImageEditor app={app} onChange={setApp} /> : (
-            <ul className="mt-4 flex flex-col gap-2">
-              {app.services.map((service) => (
-                <li key={service.name} className="font-mono text-[13px] text-muted">
-                  {service.name} · {service.image}
+      <div className="max-w-[720px]">
+        <section className="mt-8">
+          <SectionTitle>{text("field.services")}</SectionTitle>
+          {app.guarded ? (
+            <div className="mt-4 flex flex-col gap-3">
+              <p className="text-muted">{text("apps.selfCopies")}</p>
+              {(app.services ?? []).map((service) => (
+                <p key={service.name} className="font-mono text-[13px]">
+                  {service.name} · {service.image} · {text(service.replicas === 1 ? "apps.copyOne" : "apps.copyMany", { count: service.replicas || 1 })}
+                </p>
+              ))}
+            </div>
+          ) : app.services && app.services.length > 0 ? (
+            mutable ? <ImageEditor app={app} onChange={setApp} /> : (
+              <ul className="mt-4 flex flex-col gap-2">
+                {app.services.map((service) => (
+                  <li key={service.name} className="font-mono text-[13px] text-muted">
+                    {service.name} · {service.image}
+                  </li>
+                ))}
+              </ul>
+            )
+          ) : (
+            <p className="mt-4 text-muted">{text("apps.noService")}</p>
+          )}
+        </section>
+        <div className="mt-8">
+          <Fold title={text("apps.instances")} defaultOpen={failing}>
+            <ul className="flex flex-col">
+              {pods.map((pod) => {
+                const state = podHealth(pod);
+                return (
+                  <li key={pod.name} className="border-t border-line py-4">
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+                      <span className="break-all font-mono text-[13px]">{pod.name}</span>
+                      <span className={state.tone}>{state.text}</span>
+                    </div>
+                    <p className="mt-1 text-muted">
+                      {pod.server} · {podCpu(pod.cpu)} · {size(pod.memory)} · {size(pod.disk)}
+                    </p>
+                    <PodActions appId={app.id} name={pod.name} failed={podFailed(pod)} />
+                  </li>
+                );
+              })}
+            </ul>
+            {!runtime ? <LoadingLines lines={2} label={text("apps.instances")} /> : pods.length === 0 ? <p className="text-muted">{runtime.measured ? text("common.noPod") : text("common.noMeasure")}</p> : null}
+          </Fold>
+        </div>
+        {(app.domains && app.domains.length > 0) || mutable ? (
+          <section className="mt-8">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <SectionTitle>{text("apps.addresses")}</SectionTitle>
+              {mutable ? (
+                <TextButton type="button" onClick={() => setEditingNames(true)} disabled={locked}>
+                  {text("names.edit")}
+                </TextButton>
+              ) : null}
+            </div>
+            <ul className="mt-2 flex flex-col">
+              {listedDomains.length === 0 ? (
+                <li className="border-t border-line py-4 text-muted">{text("names.none")}</li>
+              ) : null}
+              {listedDomains.map((domain) => (
+                <li key={domain.hostname} className="border-t border-line py-4">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+                    <span className="flex min-w-0 flex-wrap items-baseline gap-x-3">
+                      <a href={`https://${domain.hostname}`} target="_blank" rel="noreferrer" className="break-all font-mono text-[13px] underline">
+                        {domain.hostname}
+                      </a>
+                      {publics.others.length > 0 ? <span className="text-[13px] text-muted">{domain.service || publics.main}</span> : null}
+                    </span>
+                    <StatusBadge status={domain.status} />
+                  </div>
+                  {domain.detail ? <p className={`mt-2 ${domain.status === "ready" ? "text-muted" : "text-bad"}`}>{domain.detail}</p> : null}
+                  {domain.record ? (
+                    <div className="mt-3 flex flex-wrap items-center gap-4">
+                      <code className="break-all font-mono text-[13px] text-muted">{domain.record}</code>
+                      <IconButton icon={Copy} label={text("common.copy")} onClick={() => copy(domain.record!)} />
+                      {copied === domain.record ? <span className="text-muted">{text("common.copied")}</span> : null}
+                    </div>
+                  ) : null}
+                  {domain.zone ? (
+                    <div className="mt-3">
+                      <Fold title={text("common.advanced")}>
+                        <TofuFiles path={`/api/dns/${domain.hostname}/tofu`} readOnly={!canAdmin} />
+                      </Fold>
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>
-          )
-        ) : (
-          <p className="mt-4 text-muted">{text("apps.noService")}</p>
-        )}
-      </section>
-      <div className="mt-10">
-        <Fold title={text("apps.instances")} defaultOpen={failing}>
-          <ul className="flex flex-col">
-            {pods.map((pod) => {
-              const state = podHealth(pod);
-              return (
-                <li key={pod.name} className="border-t border-line py-4">
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-                    <span className="break-all font-mono text-[13px]">{pod.name}</span>
-                    <span className={state.tone}>{state.text}</span>
-                  </div>
-                  <p className="mt-1 text-muted">
-                    {pod.server} · {podCpu(pod.cpu)} · {size(pod.memory)} · {size(pod.disk)}
-                  </p>
-                  <PodActions appId={app.id} name={pod.name} failed={podFailed(pod)} />
+          </section>
+        ) : null}
+        {exposed.length > 0 ? (
+          <section className="mt-8">
+            <SectionTitle>{text("apps.exposed")}</SectionTitle>
+            <p className="mt-2 text-muted">{text("apps.exposedHint")}</p>
+            <ul className="mt-2 flex flex-col">
+              {exposed.map((item) => (
+                <li key={item.service} className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-t border-line py-4">
+                  <span className="font-mono text-[13px]">{item.ports.join(", ")}</span>
+                  <span className="text-[13px] text-muted">{item.service}</span>
                 </li>
-              );
-            })}
-          </ul>
-          {!runtime ? <LoadingLines lines={2} label={text("apps.instances")} /> : pods.length === 0 ? <p className="text-muted">{runtime.measured ? text("common.noPod") : text("common.noMeasure")}</p> : null}
-        </Fold>
-      </div>
-      {(app.domains && app.domains.length > 0) || mutable ? (
-        <section className="mt-10">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <SectionTitle>{text("apps.addresses")}</SectionTitle>
-            {mutable ? (
-              <TextButton type="button" onClick={() => setEditingNames(true)} disabled={locked}>
-                {text("names.edit")}
-              </TextButton>
-            ) : null}
+              ))}
+            </ul>
+          </section>
+        ) : null}
+        {mutable ? <AppBackups app={app} locked={locked} /> : null}
+        {mutable ? <AppVariables app={app} onSaved={() => void appPoll.reload()} /> : null}
+        {mutable ? <AppSecretLinks appId={app.id} /> : null}
+        {app.guarded && canDeploy ? (
+          <div className="mt-8">
+            <TextButton type="button" tone="danger" onClick={() => setConfirm("delete")}>
+              <Icon icon={Trash2} />
+              {text("common.delete")}
+            </TextButton>
           </div>
-          <ul className="mt-2 flex flex-col">
-            {listedDomains.length === 0 ? (
-              <li className="border-t border-line py-4 text-muted">{text("names.none")}</li>
-            ) : null}
-            {listedDomains.map((domain) => (
-              <li key={domain.hostname} className="border-t border-line py-4">
-                <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-                  <span className="flex min-w-0 flex-wrap items-baseline gap-x-3">
-                    <a href={`https://${domain.hostname}`} target="_blank" rel="noreferrer" className="break-all font-mono text-[13px] underline">
-                      {domain.hostname}
-                    </a>
-                    {publics.others.length > 0 ? <span className="text-[13px] text-muted">{domain.service || publics.main}</span> : null}
-                  </span>
-                  <StatusBadge status={domain.status} />
-                </div>
-                {domain.detail ? <p className={`mt-2 ${domain.status === "ready" ? "text-muted" : "text-bad"}`}>{domain.detail}</p> : null}
-                {domain.record ? (
-                  <div className="mt-3 flex flex-wrap items-center gap-4">
-                    <code className="break-all font-mono text-[13px] text-muted">{domain.record}</code>
-                    <IconButton icon={Copy} label={text("common.copy")} onClick={() => copy(domain.record!)} />
-                    {copied === domain.record ? <span className="text-muted">{text("common.copied")}</span> : null}
-                  </div>
-                ) : null}
-                {domain.zone ? (
-                  <div className="mt-3">
-                    <Fold title={text("common.advanced")}>
-                      <TofuFiles path={`/api/dns/${domain.hostname}/tofu`} readOnly={!canAdmin} />
-                    </Fold>
-                  </div>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-      {exposed.length > 0 ? (
-        <section className="mt-10">
-          <SectionTitle>{text("apps.exposed")}</SectionTitle>
-          <p className="mt-2 text-muted">{text("apps.exposedHint")}</p>
-          <ul className="mt-2 flex flex-col">
-            {exposed.map((item) => (
-              <li key={item.service} className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-t border-line py-4">
-                <span className="font-mono text-[13px]">{item.ports.join(", ")}</span>
-                <span className="text-[13px] text-muted">{item.service}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-      {mutable ? <AppBackups app={app} locked={locked} /> : null}
-      {mutable ? <AppVariables app={app} onSaved={() => void appPoll.reload()} /> : null}
-      {mutable ? <AppSecretLinks appId={app.id} /> : null}
-      {app.guarded && canDeploy ? (
-        <div className="mt-10">
-          <TextButton type="button" tone="danger" onClick={() => setConfirm("delete")}>
-            <Icon icon={Trash2} />
-            {text("common.delete")}
-          </TextButton>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
       {editingNames ? (
         <NamesSheet
           app={app}
@@ -915,6 +1044,21 @@ export function ApplicationPage() {
             toast(text("names.saved", { name: next.name }));
           }}
         />
+      ) : null}
+      {confirm === "restart" ? (
+        <ConfirmDialog
+          title={text("apps.restartTitle", { name: app.name })}
+          confirmLabel={text("apps.restart")}
+          onConfirm={async () => {
+            await api(`/api/applications/${app.id}/restart`, { method: "POST", body: "{}" });
+            toast(text("apps.restarted", { name: app.name }));
+            setConfirm("");
+            void runtimePoll.reload();
+          }}
+          onClose={() => setConfirm("")}
+        >
+          {app.clusterId ? text("apps.restartHintCluster") : text("apps.restartHintMachine")}
+        </ConfirmDialog>
       ) : null}
       {confirm === "pause" ? (
         <ConfirmDialog title={text("apps.pauseTitle", { name: app.name })} confirmLabel={text("apps.pauseAction")} onConfirm={() => setPaused(true)} onClose={() => setConfirm("")}>
@@ -962,7 +1106,7 @@ function AppVariables({ app, onSaved }: { app: Application; onSaved: () => void 
   }
 
   return (
-    <div className="mt-10">
+    <div className="mt-8">
       <Fold title={text("app.variables")}>
         <ul className="flex flex-col">
           {entries.map(([name, value]) => (

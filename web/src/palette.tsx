@@ -21,7 +21,7 @@ const pages: { label: MsgKey; to: string; deployOnly?: boolean; adminOnly?: bool
   { label: "nav.packages", to: "/applications/paquets" },
   { label: "nav.providers", to: "/providers", deployOnly: true },
   { label: "nav.dns", to: "/dns", deployOnly: true },
-  { label: "nav.registries", to: "/registres", deployOnly: true },
+  { label: "registry.sectionTitle", to: "/images", deployOnly: true },
   { label: "nav.images", to: "/images", deployOnly: true },
   { label: "nav.ssh", to: "/cles", deployOnly: true },
   { label: "nav.mcp", to: "/assistants" },
@@ -36,19 +36,32 @@ function clean(value: string) {
   return value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
 
-export function SearchButton() {
+// wide fills the menu's column, like a field.
+export function SearchButton({ compact = false, wide = false }: { compact?: boolean; wide?: boolean }) {
   useI18n();
   const mac = /Mac|iPhone|iPad/.test(navigator.platform);
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={() => window.dispatchEvent(new Event(openEvent))}
+        aria-label={text("palette.open")}
+        className="inline-flex size-10 items-center justify-center rounded-full text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+      >
+        <Search size={22} strokeWidth={1.75} aria-hidden />
+      </button>
+    );
+  }
   return (
     <button
       type="button"
       onClick={() => window.dispatchEvent(new Event(openEvent))}
       aria-label={text("palette.open")}
       aria-keyshortcuts={mac ? "Meta+K" : "Control+K"}
-      className="inline-flex items-center gap-2 rounded-md border border-line px-2 py-1 text-muted focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-focus"
+      className={`inline-flex items-center rounded-md border border-line text-muted focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-focus ${wide ? "w-full gap-3 bg-surface px-3 py-1.5 text-[13px]" : "gap-2 px-2 py-1"}`}
     >
       <Icon icon={Search} />
-      <span className="hidden sm:inline">{text("palette.search")}</span>
+      <span className={wide ? "flex-1 text-left" : "hidden sm:inline"}>{text("palette.search")}</span>
       <kbd className="hidden rounded border border-line px-1 font-sans text-[12px] sm:inline">{mac ? "⌘K" : "Ctrl K"}</kbd>
     </button>
   );

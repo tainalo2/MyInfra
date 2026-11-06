@@ -7,7 +7,8 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <script>
       try {
-        if (localStorage.getItem("myinfra-theme") === "dark") {
+        var theme = localStorage.getItem("myinfra-theme");
+        if (theme === "dark" || (theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches)) {
           document.documentElement.classList.add("dark");
         }
         var lang = localStorage.getItem("myinfra-lang");

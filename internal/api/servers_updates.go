@@ -389,16 +389,25 @@ func (a *API) clusterUpdateImpact(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) writeUpdateImpact(w http.ResponseWriter, r *http.Request, clusterID, serverID string) {
-	owner := ownerID(r.Context())
-	servers, details, err := a.targetServers(r.Context(), owner, clusterID, serverID)
+	view, err := a.updateImpact(r.Context(), ownerID(r.Context()), clusterID, serverID)
 	if err != nil {
 		a.writeJobErr(w, err)
 		return
 	}
-	apps, err := a.detailedApps(r.Context(), owner)
+	writeJSON(w, http.StatusOK, view)
+}
+
+// updateImpact says what updating a server, or a whole cluster, does to the
+// applications: the screen asks it before an update, the nightly patches
+// before applying one.
+func (a *API) updateImpact(ctx context.Context, owner, clusterID, serverID string) (impactView, error) {
+	servers, details, err := a.targetServers(ctx, owner, clusterID, serverID)
 	if err != nil {
-		a.mapErr(w, err)
-		return
+		return impactView{}, err
+	}
+	apps, err := a.detailedApps(ctx, owner)
+	if err != nil {
+		return impactView{}, err
 	}
 	worst := map[string]impactApp{}
 	var order []string
@@ -425,11 +434,11 @@ func (a *API) writeUpdateImpact(w http.ResponseWriter, r *http.Request, clusterI
 			keep(machineImpact(server, apps))
 			continue
 		}
-		sample, measured := a.clusterSample(r.Context(), owner, server.ClusterID)
+		sample, measured := a.clusterSample(ctx, owner, server.ClusterID)
 		keep(nodeImpact(server, apps, sample, measured))
 	}
 	if planes := controlPlanes(servers); len(servers) > 0 && servers[0].ClusterID != "" {
-		all, _ := a.Store.ListServers(r.Context(), owner)
+		all, _ := a.Store.ListServers(ctx, owner)
 		if len(controlPlanes(filterCluster(all, servers[0].ClusterID))) == 1 && len(planes) == 1 {
 			notes = append(notes, "single-plane")
 		}
@@ -444,7 +453,7 @@ func (a *API) writeUpdateImpact(w http.ResponseWriter, r *http.Request, clusterI
 	for _, id := range order {
 		items = append(items, worst[id])
 	}
-	writeJSON(w, http.StatusOK, impactOf(items, notes...))
+	return impactOf(items, notes...), nil
 }
 
 func controlPlanes(servers []store.Server) []store.Server {
