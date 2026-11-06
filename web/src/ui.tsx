@@ -114,7 +114,7 @@ export function ActionsMenu({ label, children }: { label: string; children: Reac
 
   return (
     <div className="relative" ref={root}>
-      <IconButton icon={MoreHorizontal} label={label} aria-expanded={open} aria-haspopup="menu" onClick={toggle} />
+      <IconButton type="button" icon={MoreHorizontal} label={label} aria-expanded={open} aria-haspopup="menu" onClick={toggle} />
       {open ? (
         <div role="menu" onClick={() => setOpen(false)} className={`absolute z-30 mt-2 w-max min-w-48 max-w-[min(20rem,calc(100vw-2rem))] rounded-md border border-line bg-surface p-1 ${alignEnd ? "right-0" : "left-0"}`}>
           {children}

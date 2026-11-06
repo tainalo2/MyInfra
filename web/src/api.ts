@@ -297,6 +297,8 @@ export type AppService = {
   replicas?: number;
   // exposed are the ports open to the Internet, such as 21116/udp.
   exposed?: string[];
+  // dependsOn names the services this one needs.
+  dependsOn?: string[];
 };
 
 export type ArgoApp = { name: string; namespace: string; sync: string; health: string };
@@ -624,7 +626,7 @@ export type PackageService = {
   volumes?: PackageVolume[];
   files?: PackageFile[];
   env?: Record<string, string>;
-  resources?: { cpu?: string; memory?: string };
+  resources?: { cpu?: string; memory?: string; gpu?: number };
   health?: { http?: string; port?: number };
   dependsOn?: string[];
   // noPort is a service that listens on nothing, such as a worker.

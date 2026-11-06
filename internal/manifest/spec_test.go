@@ -284,3 +284,20 @@ func TestRenderReservesAGPU(t *testing.T) {
 		t.Fatal(backed)
 	}
 }
+
+// A port open in both protocols is two ports of one number: each keeps a name
+// of its own in the Service, as Kubernetes wants.
+func TestRenderNamesAPortOfBothProtocolsApart(t *testing.T) {
+	raw := Render(App{
+		ID: specApp,
+		Services: []Service{{Name: "dns", Image: "ghcr.io/acme/dns:1", Listen: 8080, Replicas: 1, Spec: spec.Service{
+			Ports: []spec.Port{{Name: "dns", Port: 53}, {Port: 53, Protocol: "udp"}},
+		}}},
+	})
+	body := string(raw)
+	for _, want := range []string{"- name: dns\n      port: 53\n", "- name: u53\n      port: 53\n      targetPort: 53\n      protocol: UDP\n"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("%q missing:\n%s", want, body)
+		}
+	}
+}

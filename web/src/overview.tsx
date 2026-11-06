@@ -289,30 +289,32 @@ export function Overview() {
     <div className={`flex flex-col gap-4 px-4 pb-4 md:h-full md:gap-3 md:overflow-hidden md:px-6 md:py-4 ${selection && !wide ? "pb-[50vh]" : ""}`}>
       <PageTitleOnly />
       <Figures model={model} loading={data === null} />
-      {empty ? (
-        <section className="flex max-w-[560px] flex-col gap-3 rounded-md border border-line bg-surface p-4">
-          <p>{text("overview.empty")}</p>
-          <Missing />
-          {canDeploy ? (
-            <div className="flex flex-wrap gap-3">
-              <Button type="button" onClick={() => navigate("/clusters")}>{text("overview.newServer")}</Button>
-              <TextButton type="button" onClick={() => navigate("/nouveau")}>{text("home.new")}</TextButton>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
       <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row md:items-stretch">
         <div className="flex min-w-0 flex-col md:min-h-0 md:w-[340px] md:shrink-0 lg:w-[380px]">{panel}</div>
         <section aria-label={mapLabel} className="flex min-w-0 flex-1 flex-col gap-4 md:min-h-0 md:gap-3">
-          <div className="md:hidden">
-            <TextButton type="button" aria-expanded={mapOpen} onClick={() => setMapOpen((open) => !open)}>
-              <Icon icon={MapIcon} />
-              {mapOpen ? text("overview.hideMap") : text("overview.showMap")}
-            </TextButton>
-          </div>
-          <div className={`relative h-[45vh] shrink-0 overflow-hidden rounded-md border border-line md:block md:h-auto md:min-h-0 md:flex-1 ${mapOpen ? "" : "hidden"}`}>
+          {empty ? null : (
+            <div className="md:hidden">
+              <TextButton type="button" aria-expanded={mapOpen} onClick={() => setMapOpen((open) => !open)}>
+                <Icon icon={MapIcon} />
+                {mapOpen ? text("overview.hideMap") : text("overview.showMap")}
+              </TextButton>
+            </div>
+          )}
+          <div className={`relative h-[45vh] shrink-0 overflow-hidden rounded-md border border-line md:block md:h-auto md:min-h-0 md:flex-1 ${mapOpen || empty ? "" : "hidden"}`}>
             <WorldMap sites={sites} frame={frame} inset={inset} fitKey={fitKey} label={mapLabel} onSelect={(key) => select(key ? `lieu:${key}` : null)} />
-            {selection && wide ? null : <Legend mode={mode} />}
+            {empty || (selection && wide) ? null : <Legend mode={mode} />}
+            {empty ? (
+              <div className="absolute left-4 top-4 z-10 flex max-h-[calc(100%-2rem)] w-[420px] max-w-[calc(100%-5rem)] flex-col gap-3 overflow-y-auto rounded-md border border-line bg-surface p-4">
+                <p>{text("overview.empty")}</p>
+                <Missing />
+                {canDeploy ? (
+                  <div className="flex flex-wrap gap-3">
+                    <Button type="button" onClick={() => navigate("/clusters")}>{text("overview.newServer")}</Button>
+                    <TextButton type="button" onClick={() => navigate("/nouveau")}>{text("home.new")}</TextButton>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             {selection && wide ? <div className="absolute left-4 top-4 z-10 w-[420px] max-w-[calc(100%-5rem)]">{card}</div> : null}
           </div>
           <RecentActivity />

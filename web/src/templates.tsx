@@ -1,6 +1,6 @@
-import { FormEvent, useEffect, useRef, useState, type ReactNode } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { LayoutTemplate, Plus, Rocket } from "lucide-react";
+import { FormEvent, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Link, useBlocker, useNavigate, useParams, type BlockerFunction } from "react-router-dom";
+import { LayoutTemplate, Plus, Rocket, Trash2 } from "lucide-react";
 import {
   api,
   peek,
@@ -21,8 +21,8 @@ import { CancelDeployment } from "./deployments";
 import { currentLang, text, knownMessage } from "./i18n";
 import { Code } from "./code-lazy";
 import { OfferFields, OfferStorage, formatPrice } from "./offers";
-import { ConfirmDialog, Sheet, Spinner, StatusBadge, Steps, Tabs, useToast } from "./kit";
-import { PlanPanel, templatePlan } from "./plan";
+import { ConfirmDialog, Sheet, Spinner, StatusBadge, Tabs, useToast, useWide } from "./kit";
+import { ChosenName, PlanPanel, templatePlan, underPlan } from "./plan";
 import { ProgressSteps } from "./progress";
 import { usePoll } from "./poll";
 import { AppLogo } from "./app-logo";
@@ -40,6 +40,7 @@ import {
   Field,
   Fold,
   Icon,
+  IconButton,
   Input,
   LoadingLines,
   MenuItem,
@@ -206,9 +207,57 @@ export function Templates() {
   );
 }
 
+// snapshot is what a template's editor compares to tell whether it changed.
+function snapshot(name: string, body: TemplateBody) {
+  return JSON.stringify({ name, clusterName: body.clusterName ?? "", servers: body.servers ?? [], applications: body.applications ?? [] });
+}
+
+// LeaveDialog holds a navigation back while there is something to save. A
+// failed save keeps it open: leaving then would lose the changes.
+function LeaveDialog({ onSave, onLeave, onClose }: { onSave: () => Promise<unknown>; onLeave: () => void; onClose: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save() {
+    setBusy(true);
+    setError("");
+    try {
+      await onSave();
+      onLeave();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : text("common.error"));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Sheet title={text("template.leaveTitle")} onClose={onClose} busy={busy}>
+      <p className="mb-6 text-muted">{text("template.leaveHint")}</p>
+      {error ? (
+        <div className="mb-6">
+          <ErrorText>{error}</ErrorText>
+        </div>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-4">
+        <Button type="button" onClick={() => void save()} disabled={busy} data-autofocus>
+          {busy ? <Spinner /> : null}
+          {text("common.save")}
+        </Button>
+        <TextButton type="button" tone="danger" onClick={onLeave} disabled={busy}>
+          {text("template.leaveQuit")}
+        </TextButton>
+        <TextButton type="button" onClick={onClose} disabled={busy}>
+          {text("common.cancel")}
+        </TextButton>
+      </div>
+    </Sheet>
+  );
+}
+
 export function TemplateEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { canDeploy } = useSession();
   const [name, setName] = useState("");
   const [body, setBody] = useState<TemplateBody>({ servers: [], applications: [] });
   const [providers, setProviders] = useState<Secret[]>([]);
@@ -217,7 +266,27 @@ export function TemplateEditor() {
   const [error, setError] = useState("");
   const [ready, setReady] = useState(!id);
   const [saving, setSaving] = useState(false);
+  const [picking, setPicking] = useState(false);
+  // The element of the plan whose settings show, and which of its parts.
+  const [chosen, setChosen] = useState<string | null>(null);
+  const [part, setPart] = useState("general");
   const toast = useToast();
+  // Refs, so that a navigation made right after saving sees it at once.
+  const draft = useRef({ name, body });
+  draft.current = { name, body };
+  const savedAs = useRef(snapshot("", {}));
+  // Someone who cannot save has nothing to be offered.
+  const changed = useCallback(() => canDeploy && snapshot(draft.current.name, draft.current.body) !== savedAs.current, [canDeploy]);
+  const blocker = useBlocker(useCallback<BlockerFunction>(({ currentLocation, nextLocation }) => currentLocation.pathname !== nextLocation.pathname && changed(), [changed]));
+
+  // Closing the tab cannot show a page of ours: the browser asks by itself.
+  useEffect(() => {
+    function warn(event: BeforeUnloadEvent) {
+      if (changed()) event.preventDefault();
+    }
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [changed]);
 
   useEffect(() => {
     api<Secret[]>("/api/secrets")
@@ -235,29 +304,38 @@ export function TemplateEditor() {
     if (!id) return;
     api<Template>(`/api/templates/${id}`)
       .then((row) => {
-        setName(row.name);
-        setBody({
+        const next = {
           clusterName: row.body.clusterName ?? "",
           servers: row.body.servers ?? [],
           applications: row.body.applications ?? [],
-        });
+        };
+        setName(row.name);
+        setBody(next);
+        savedAs.current = snapshot(row.name, next);
       })
       .catch((err) => setError(err.message))
       .finally(() => setReady(true));
   }, [id]);
+
+  async function persist() {
+    const sent = snapshot(name, body);
+    const payload = { name, ...body };
+    const saved = id
+      ? await api<Template>(`/api/templates/${id}`, { method: "PUT", body: JSON.stringify(payload) })
+      : await api<Template>("/api/templates", { method: "POST", body: JSON.stringify(payload) });
+    savedAs.current = sent;
+    toast(text("template.saved", { name: saved.name }));
+    return saved;
+  }
 
   async function save(event: FormEvent) {
     event.preventDefault();
     if (saving) return;
     setError("");
     setSaving(true);
-    const payload = { name, ...body };
     try {
-      const saved = id
-        ? await api<Template>(`/api/templates/${id}`, { method: "PUT", body: JSON.stringify(payload) })
-        : await api<Template>("/api/templates", { method: "POST", body: JSON.stringify(payload) });
       // Saving keeps the editor open: deploying is a choice of its own.
-      toast(text("template.saved", { name: saved.name }));
+      const saved = await persist();
       if (!id) navigate(`/templates/${saved.id}`, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : text("common.error"));
@@ -269,131 +347,145 @@ export function TemplateEditor() {
   if (!ready) return <LoadingLines lines={4} />;
   const servers = body.servers ?? [];
   const apps = body.applications ?? [];
-  const [picking, setPicking] = useState(false);
+  // What is left open here is completed at deployment: only a missing name
+  // stops the template from being saved.
+  const model = templatePlan(body, {
+    cluster: body.clusterName ?? "",
+    clusterLater: true,
+    serverReady: (server) => server.name.trim() !== "",
+    appReady: (app) => app.name.trim() !== "",
+  });
+  const picked = model.nodes.find((node) => node.key === chosen);
+  const [kind, raw] = (picked?.key ?? "").split(":");
+  const index = Number(raw);
+  const planes = servers.filter((server) => server.controlPlane).length;
+  const setServer = (at: number, next: TemplateServer) => setBody({ ...body, servers: servers.map((item, i) => (i === at ? next : item)) });
+  const setApp = (at: number, next: TemplateApp) => setBody({ ...body, applications: apps.map((item, i) => (i === at ? next : item)) });
+
+  // A new element is chosen at once, so that its settings open.
+  function open(key: string, tab: string) {
+    setChosen(key);
+    setPart(tab);
+  }
+
+  function addServer() {
+    setBody({ ...body, servers: [...servers, { ...emptyServer(), controlPlane: !servers.some((server) => server.controlPlane) }] });
+    open(`server:${servers.length}`, "machine");
+  }
+
+  function addApp(app: TemplateApp) {
+    setBody({ ...body, applications: [...apps, app] });
+    open(`app:${apps.length}`, "general");
+  }
+
+  function remove() {
+    setChosen(null);
+    if (kind === "server") setBody({ ...body, servers: servers.filter((_, i) => i !== index) });
+    else setBody({ ...body, applications: apps.filter((_, i) => i !== index) });
+  }
+
+  const clusterField = (
+    <Field label={text("cluster.name")}>
+      <Input value={body.clusterName ?? ""} placeholder={text("ui.videPourChoisirUnClusterAu")} onChange={(e) => setBody({ ...body, clusterName: e.target.value })} />
+    </Field>
+  );
 
   return (
     <>
       <PageTitle inTree title={id ? name || "Template" : text("crumb.newTemplate")} icon={LayoutTemplate} />
-      <form onSubmit={save} className="flex max-w-[720px] flex-col gap-8">
-        <Steps
-          steps={[
-            {
-              title: text("steps.cluster"),
-              content: (
-                <>
-                <Field label={text("template.name")}>
-                  <Input value={name} onChange={(e) => setName(e.target.value)} required />
-                </Field>
-                <section className="flex flex-col gap-4">
-                  <div className="hidden md:block">
-                    <SectionTitle>{text("field.cluster")}</SectionTitle>
-                  </div>
-                  <Field label={text("cluster.name")}>
-                    <Input
-                      value={body.clusterName ?? ""}
-                      placeholder={text("ui.videPourChoisirUnClusterAu")}
-                      onChange={(e) => setBody({ ...body, clusterName: e.target.value })}
-                    />
-                  </Field>
-                </section>
-                </>
-              ),
-            },
-            {
-              title: text("steps.servers"),
-              content: (
-                <section className="flex flex-col gap-4">
-                  <div className="hidden md:block">
-                    <SectionTitle>{text("cluster.servers")}</SectionTitle>
-                  </div>
-                  {servers.map((server, index) => (
-                    <div key={index} className="flex flex-col gap-4 rounded-md border border-line p-4">
-                      <MachineFields
-                        server={server}
-                        providers={providers}
-                        keys={keys}
-                        onChange={(next) => setBody({ ...body, servers: servers.map((item, i) => (i === index ? next : item)) })}
-                      />
-                      <TextButton type="button" tone="danger" onClick={() => setBody({ ...body, servers: servers.filter((_, i) => i !== index) })}>
-                        {text("common.remove")}
-                      </TextButton>
-                    </div>
-                  ))}
-                  <div>
-                    <TextButton
-                      type="button"
-                      onClick={() => setBody({ ...body, servers: [...servers, { ...emptyServer(), controlPlane: !servers.some((server) => server.controlPlane) }] })}
-                    >
-                      <Icon icon={Plus} />
-                      {text("ui.ajouterUnServeur")}
-                    </TextButton>
-                  </div>
-                  {servers.length > 0 ? <p className="text-faint">{text("template.planesHint")}</p> : null}
-                  {servers.filter((server) => server.controlPlane).length % 2 === 0 && servers.some((server) => server.controlPlane) ? (
-                    <p className="text-warn">{text("server.evenPlanes")}</p>
-                  ) : null}
-                </section>
-              ),
-            },
-            {
-              title: text("steps.apps"),
-              content: (
-                <section className="flex flex-col gap-4">
-                  <div className="hidden md:block">
-                    <SectionTitle>{text("nav.apps")}</SectionTitle>
-                  </div>
-                  {apps.map((app, index) => (
-                    <div key={index} className="flex flex-col gap-4 rounded-md border border-line p-4">
-                      <AppFields
-                        app={app}
-                        zones={zones}
-                        onChange={(next) => setBody({ ...body, applications: apps.map((item, i) => (i === index ? next : item)) })}
-                      />
-                      <TextButton type="button" tone="danger" onClick={() => setBody({ ...body, applications: apps.filter((_, i) => i !== index) })}>
-                        {text("common.remove")}
-                      </TextButton>
-                    </div>
-                  ))}
-                  <div className="flex flex-wrap gap-6">
-                    <TextButton type="button" onClick={() => setBody({ ...body, applications: [...apps, emptyApp()] })}>
-                      <Icon icon={Plus} />
-                      {text("ui.ajouterUneApplication")}
-                    </TextButton>
-                    <TextButton type="button" onClick={() => setPicking(true)}>
-                      <Icon icon={Plus} />
-                      {text("template.fromPackage")}
-                    </TextButton>
-                  </div>
-                  {picking ? (
-                    <PackagePick
-                      onClose={() => setPicking(false)}
-                      onPick={(pkg) => {
-                        setPicking(false);
-                        const pub = pkg.services.find((service) => service.public) ?? pkg.services[0];
-                        setBody({ ...body, applications: [...apps, { name: pkg.name, sourceKind: "image", source: pub?.image ?? "", replicas: 1, package: pkg, inputs: {} }] });
-                      }}
-                    />
-                  ) : null}
-                </section>
-              ),
-            },
-          ]}
-          error={error ? <ErrorText>{error}</ErrorText> : null}
-          submit={
+      <PlanPanel
+        model={model}
+        adds={
+          canDeploy
+            ? {
+                apps: { label: text("ui.ajouterUneApplication"), onClick: () => addApp(emptyApp()) },
+                machines: { label: text("ui.ajouterUnServeur"), onClick: addServer },
+              }
+            : undefined
+        }
+        label={text("plan.labelTemplate")}
+        whole={text("plan.wholeTemplate")}
+        summary={text("plan.templateSummary", { apps: apps.length, servers: servers.length })}
+        named={false}
+        selected={picked ? picked.key : null}
+        onSelect={(key) => {
+          setChosen(key);
+          setPart("general");
+        }}
+      />
+      <div className="mt-2" />
+      {/* Fields out of sight must not stop the form: the server says what is
+          wrong, and the page shows it. */}
+      <form onSubmit={save} noValidate className="flex flex-col gap-3">
+        <div className={underPlan}>
+          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-line py-1">
+            <div className="min-w-0">
+              {picked ? (
+                <span className="flex min-w-0 items-center gap-3">
+                  <ChosenName node={picked} />
+                  {canDeploy && (kind === "server" || kind === "app") ? <IconButton type="button" icon={Trash2} label={text("common.remove")} onClick={remove} /> : null}
+                </span>
+              ) : null}
+            </div>
+            {canDeploy ? (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <TextButton type="button" onClick={() => setPicking(true)}>
+                  <Icon icon={Plus} />
+                  {text("template.fromPackage")}
+                </TextButton>
+                {id ? (
+                  <Button type="button" variant="secondary" className="sm:py-1!" onClick={() => navigate(`/templates/${id}/deploy`)}>
+                    {text("template.deployment")}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </div>
+        {picked ? (
+          <ElementSettings
+            chosen={picked.key}
+            part={part}
+            onPart={setPart}
+            body={body}
+            setServer={setServer}
+            setApp={setApp}
+            cluster={clusterField}
+            providers={providers}
+            keys={keys}
+            zones={zones}
+          />
+        ) : (
+          <div className="mb-6 flex max-w-[720px] flex-col gap-4">
+            <Field label={text("template.name")}>
+              <Input value={name} onChange={(e) => setName(e.target.value)} required />
+            </Field>
+            {clusterField}
+          </div>
+        )}
+        {kind === "server" ? <p className="max-w-[720px] text-faint">{text("template.planesHint")}</p> : null}
+        {planes > 0 && planes % 2 === 0 ? <p className="max-w-[720px] text-warn">{text("server.evenPlanes")}</p> : null}
+        {error ? <ErrorText>{error}</ErrorText> : null}
+        {canDeploy ? (
+          <div>
             <Button type="submit" disabled={saving}>
               {saving ? <Spinner /> : null}
               {text("common.save")}
             </Button>
-          }
-        />
-        {id ? (
-          <p>
-            <Link to={`/templates/${id}/deploy`} className="text-muted underline">
-              {text("template.deploy")}
-            </Link>
-          </p>
+          </div>
         ) : null}
       </form>
+      {picking ? (
+        <PackagePick
+          onClose={() => setPicking(false)}
+          onPick={(pkg) => {
+            setPicking(false);
+            const pub = pkg.services.find((service) => service.public) ?? pkg.services[0];
+            addApp({ name: pkg.name, sourceKind: "image", source: pub?.image ?? "", replicas: 1, package: pkg, inputs: {} });
+          }}
+        />
+      ) : null}
+      {blocker.state === "blocked" ? <LeaveDialog onSave={persist} onLeave={() => blocker.proceed()} onClose={() => blocker.reset()} /> : null}
     </>
   );
 }
@@ -404,8 +496,7 @@ export function TemplateLaunch() {
   const [template, setTemplate] = useState<Template | null>(null);
   const [body, setBody] = useState<TemplateBody>({});
   const [target, setTarget] = useState("");
-  const [phase, setPhase] = useState<"fill" | "summary">("fill");
-  const [launching, setLaunching] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [providers, setProviders] = useState<Secret[]>([]);
   const [keys, setKeys] = useState<Secret[]>([]);
   const [zones, setZones] = useState<DnsZone[]>([]);
@@ -415,6 +506,7 @@ export function TemplateLaunch() {
   // The element of the plan whose settings show, and which of its parts.
   const [chosen, setChosen] = useState<string | null>(null);
   const [part, setPart] = useState("general");
+  const wide = useWide();
 
   useEffect(() => {
     Promise.all([
@@ -435,26 +527,18 @@ export function TemplateLaunch() {
         setKeys(secrets.filter((secret) => secret.kind === "ssh_key"));
         setZones(nextZones);
         setClusters(nextClusters);
-        if (!hasGaps(next, nextZones) && !needsCluster(next)) setPhase("summary");
       })
       .catch((err) => setError(err.message))
       .finally(() => setReady(true));
   }, [id]);
 
-  async function validate() {
-    if (launching) return;
-    setError("");
-    setLaunching(true);
-    try {
-      const run = await api<TemplateRun>(`/api/templates/${id}/runs`, {
-        method: "POST",
-        body: JSON.stringify({ ...body, targetClusterId: body.clusterName ? "" : target }),
-      });
-      navigate(`/templates/suivis/${run.id}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : text("common.error"));
-      setLaunching(false);
-    }
+  // A failure stays in the dialog that asked for it.
+  async function launch() {
+    const run = await api<TemplateRun>(`/api/templates/${id}/runs`, {
+      method: "POST",
+      body: JSON.stringify({ ...body, targetClusterId: body.clusterName ? "" : target }),
+    });
+    navigate(`/templates/suivis/${run.id}`);
   }
 
   if (!ready) return <LoadingLines lines={4} />;
@@ -473,6 +557,40 @@ export function TemplateLaunch() {
   const canContinue = !missing && (!needsCluster(body) || Boolean(target));
   const setServer = (index: number, next: TemplateServer) => setBody({ ...body, servers: servers.map((item, i) => (i === index ? next : item)) });
   const setApp = (index: number, next: TemplateApp) => setBody({ ...body, applications: apps.map((item, i) => (i === index ? next : item)) });
+  const clusterField = body.clusterName ? (
+    <Field label={text("template.createdCluster")}>
+      <Input value={body.clusterName} onChange={(e) => setBody({ ...body, clusterName: e.target.value })} required />
+    </Field>
+  ) : choices.length === 0 ? (
+    <p className="text-muted">{text("template.noCluster")}</p>
+  ) : (
+    <Field label={text("field.cluster")}>
+      <Select value={target} onChange={(e) => setTarget(e.target.value)} required>
+        <option value="">{text("common.choose")}</option>
+        {choices.map((cluster) => (
+          <option key={cluster.id} value={cluster.id}>
+            {cluster.name}
+          </option>
+        ))}
+      </Select>
+    </Field>
+  );
+
+  const picked = model.nodes.find((node) => node.key === chosen);
+  const settings = picked ? (
+    <ElementSettings
+      chosen={picked.key}
+      part={part}
+      onPart={setPart}
+      body={body}
+      setServer={setServer}
+      setApp={setApp}
+      cluster={clusterField}
+      providers={providers}
+      keys={keys}
+      zones={zones}
+    />
+  ) : null;
 
   return (
     <>
@@ -482,190 +600,142 @@ export function TemplateLaunch() {
           <ErrorText>{error}</ErrorText>
         </div>
       ) : null}
-      <>
-        <PlanPanel
-          model={model}
-          label={text("plan.labelTemplate")}
-          whole={text("plan.wholeTemplate")}
-          summary={text("plan.templateSummary", { apps: apps.length, servers: servers.length })}
-          selected={chosen}
-          onSelect={(key) => {
-            setChosen(key);
-            setPart("general");
-          }}
-        >
-          {chosen ? (
-            <ElementSettings
-              chosen={chosen}
-              part={part}
-              onPart={setPart}
-              body={body}
-              setBody={setBody}
-              setServer={setServer}
-              setApp={setApp}
-              target={target}
-              setTarget={setTarget}
-              choices={choices}
-              providers={providers}
-              keys={keys}
-              zones={zones}
-            />
-          ) : null}
-        </PlanPanel>
-        <div className="mb-8" />
-      </>
-      {chosen ? (
-        <div className="flex max-w-[720px] flex-wrap items-center gap-4">
-          {phase === "fill" ? (
-            <Button
-              type="button"
-              disabled={!canContinue}
-              onClick={() => {
-                setPhase("summary");
-                setChosen(null);
-              }}
-            >
-              {text("auth.continue")}
+      <PlanPanel
+        model={model}
+        label={text("plan.labelTemplate")}
+        whole={text("plan.wholeTemplate")}
+        summary={text("plan.templateSummary", { apps: apps.length, servers: servers.length })}
+        named={false}
+        selected={picked ? picked.key : null}
+        onSelect={(key) => {
+          setChosen(key);
+          setPart("general");
+        }}
+      >
+        {wide ? null : settings}
+      </PlanPanel>
+      <div className="mt-2" />
+      {/* Deploying stays in reach wherever the page is: under the plan on a
+          wide screen, above the tabs on a phone. */}
+      <div className={`${underPlan} max-md:fixed max-md:inset-x-0 max-md:bottom-[calc(4rem+env(safe-area-inset-bottom))] max-md:z-20 max-md:border-t max-md:border-line max-md:bg-canvas max-md:px-4 max-md:py-2`}>
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 md:border-b md:border-line md:py-1">
+          <div className="min-w-0 max-md:hidden">{picked ? <ChosenName node={picked} /> : null}</div>
+          <div className="flex items-center gap-4 max-md:w-full max-md:justify-end">
+            {canContinue ? null : <span className="text-[13px] text-warn">{text("plan.missing")}</span>}
+            <Button type="button" className="sm:py-1!" disabled={!canContinue} onClick={() => setConfirming(true)}>
+              <Icon icon={Rocket} />
+              {text("template.deploy")}
             </Button>
-          ) : (
-            <Button type="button" onClick={() => void validate()} disabled={launching || !canContinue}>
-              {launching ? <Spinner /> : null}
-              {text("ui.valider")}
-            </Button>
-          )}
-          {model.nodes.some((node) => node.status === "warn") ? <span className="text-[13px] text-warn">{text("plan.missing")}</span> : null}
+          </div>
         </div>
-      ) : phase === "fill" ? (
-        <form
-          className="flex max-w-[720px] flex-col gap-8"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (!missing && (body.clusterName || target)) setPhase("summary");
-          }}
-        >
-          <SectionTitle>{text("template.complete")}</SectionTitle>
-          {needsCluster(body) ? (
-            choices.length === 0 ? (
-              <p className="text-muted">{text("template.noCluster")}</p>
-            ) : (
-              <Field label={text("field.cluster")}>
-                <Select value={target} onChange={(e) => setTarget(e.target.value)} required>
-                  <option value="">{text("common.choose")}</option>
-                  {choices.map((cluster) => (
-                    <option key={cluster.id} value={cluster.id}>
-                      {cluster.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-            )
-          ) : null}
-          {servers.map((server, index) =>
-            serverReady(server) ? null : (
-              <div key={index} className="flex flex-col gap-4 rounded-md border border-line p-4">
-                <MachineFields
-                  server={server}
-                  providers={providers}
-                  keys={keys}
-                  onChange={(next) => setBody({ ...body, servers: servers.map((item, i) => (i === index ? next : item)) })}
-                />
-              </div>
-            ),
-          )}
-          {apps.map((app, index) => {
-            const open = (app.names ?? []).some((name) => name.subdomain && !knownZone(name.zone, zones));
-            if (!open) return null;
-            return (
-              <AppFields
-                key={index}
-                app={app}
-                zones={zones}
-                onChange={(next) => setBody({ ...body, applications: apps.map((item, i) => (i === index ? next : item)) })}
-              />
-            );
-          })}
-          <div>
-            <Button type="submit" disabled={missing || (needsCluster(body) && !target)}>
-              {text("auth.continue")}
-            </Button>
-          </div>
-        </form>
-      ) : (
+      </div>
+      <div className="mt-3" />
+      {wide ? settings : null}
+      {picked ? null : (
         <div className="flex max-w-[720px] flex-col gap-8">
-          <SectionTitle>{text("template.summary")}</SectionTitle>
-          {body.clusterName ? (
-            <Field label={text("template.createdCluster")}>
-              <Input value={body.clusterName} onChange={(e) => setBody({ ...body, clusterName: e.target.value })} required />
-            </Field>
-          ) : (
-            <p>{text("field.cluster")} {choices.find((cluster) => cluster.id === target)?.name}</p>
-          )}
-          {servers.map((server, index) => {
-            const marked = servers.some((item) => item.controlPlane);
-            const control = server.controlPlane || (!marked && index === 0 && Boolean(body.clusterName));
-            return (
-            <div key={index} className="flex flex-col gap-2 border-t border-line pt-4">
-              <Field label={control ? text("template.controlServer") : text("template.server")}>
-                <Input
-                  value={server.name}
-                  onChange={(e) => setBody({ ...body, servers: servers.map((item, i) => (i === index ? { ...item, name: e.target.value } : item)) })}
-                  required
-                />
-              </Field>
-              <ServerLine server={server} providers={providers} keys={keys} />
-            </div>
-            );
-          })}
-          {apps.map((app, index) => (
-            <div key={index} className="flex flex-col gap-2 border-t border-line pt-4">
-              <Field label={text("crumb.application")}>
-                <Input
-                  value={app.name}
-                  onChange={(e) =>
-                    setBody({ ...body, applications: apps.map((item, i) => (i === index ? { ...item, name: e.target.value } : item)) })
-                  }
-                  required
-                />
-              </Field>
-              <p className="text-muted">
-                {app.sourceKind === "git" ? text("ui.depot") : text("common.image")} {app.source}
-                {(app.replicas ?? 1) > 1 ? ` · ${text("template.copies", { count: app.replicas ?? 1 })}` : ""}
-              </p>
-              {(app.services ?? []).map((service) => (
-                <p key={service.name} className="text-muted">
-                  {service.name} · {service.image}
-                  {` · ${service.published ? text("template.published") : text("template.internal")}`}
-                  {service.disk ? ` · ${text("template.disk")}` : ""}
-                </p>
+          {missing || needsCluster(body) ? (
+            <>
+              <SectionTitle>{text("template.complete")}</SectionTitle>
+              {needsCluster(body) ? (
+                choices.length === 0 ? (
+                  <p className="text-muted">{text("template.noCluster")}</p>
+                ) : (
+                  <Field label={text("field.cluster")}>
+                    <Select value={target} onChange={(e) => setTarget(e.target.value)} required>
+                      <option value="">{text("common.choose")}</option>
+                      {choices.map((cluster) => (
+                        <option key={cluster.id} value={cluster.id}>
+                          {cluster.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                )
+              ) : null}
+              {servers.map((server, index) =>
+                serverReady(server) ? null : (
+                  <div key={index} className="flex flex-col gap-4 rounded-md border border-line p-4">
+                    <MachineFields server={server} providers={providers} keys={keys} onChange={(next) => setServer(index, next)} />
+                  </div>
+                ),
+              )}
+              {apps.map((app, index) => {
+                const open = (app.names ?? []).some((name) => name.subdomain && !knownZone(name.zone, zones));
+                if (!open) return null;
+                return <AppFields key={index} app={app} zones={zones} onChange={(next) => setApp(index, next)} />;
+              })}
+            </>
+          ) : null}
+          {canContinue ? (
+            <>
+              <SectionTitle>{text("template.summary")}</SectionTitle>
+              {body.clusterName ? (
+                <Field label={text("template.createdCluster")}>
+                  <Input value={body.clusterName} onChange={(e) => setBody({ ...body, clusterName: e.target.value })} required />
+                </Field>
+              ) : null}
+              {servers.map((server, index) => {
+                const marked = servers.some((item) => item.controlPlane);
+                const control = server.controlPlane || (!marked && index === 0 && Boolean(body.clusterName));
+                return (
+                  <div key={index} className="flex flex-col gap-2 border-t border-line pt-4">
+                    <Field label={control ? text("template.controlServer") : text("template.server")}>
+                      <Input value={server.name} onChange={(e) => setServer(index, { ...server, name: e.target.value })} required />
+                    </Field>
+                    <ServerLine server={server} providers={providers} keys={keys} />
+                  </div>
+                );
+              })}
+              {apps.map((app, index) => (
+                <div key={index} className="flex flex-col gap-2 border-t border-line pt-4">
+                  <Field label={text("crumb.application")}>
+                    <Input value={app.name} onChange={(e) => setApp(index, { ...app, name: e.target.value })} required />
+                  </Field>
+                  <p className="text-muted">
+                    {app.sourceKind === "git" ? text("ui.depot") : text("common.image")} {app.source}
+                    {(app.replicas ?? 1) > 1 ? ` · ${text("template.copies", { count: app.replicas ?? 1 })}` : ""}
+                  </p>
+                  {(app.services ?? []).map((service) => (
+                    <p key={service.name} className="text-muted">
+                      {service.name} · {service.image}
+                      {` · ${service.published ? text("template.published") : text("template.internal")}`}
+                      {service.disk ? ` · ${text("template.disk")}` : ""}
+                    </p>
+                  ))}
+                  {(app.names ?? []).map((name, nameIndex) => (
+                    <p key={nameIndex} className="text-muted">
+                      {name.subdomain}.{name.zone}
+                    </p>
+                  ))}
+                </div>
               ))}
-              {(app.names ?? []).map((name, nameIndex) => (
-                <p key={nameIndex} className="text-muted">
-                  {name.subdomain}.{name.zone}
-                </p>
-              ))}
-            </div>
-          ))}
-          <Cost servers={servers} />
-          <ToolInstall
-            ansible={servers.length > 0}
-            tofu={servers.some((server) => {
-              const kind = server.provider || providers.find((item) => item.id === server.providerId)?.provider;
-              return kind === "hetzner" || kind === "scaleway";
-            })}
-          />
-          <div className="flex items-center gap-4">
-            <Button type="button" onClick={() => void validate()} disabled={launching}>
-              {launching ? <Spinner /> : null}
-              {text("ui.valider")}
-            </Button>
-            {missing || needsCluster(body) ? (
-              <TextButton type="button" onClick={() => setPhase("fill")}>
-                {text("ui.retour")}
-              </TextButton>
-            ) : null}
-          </div>
+              <Cost servers={servers} />
+              <ToolInstall
+                ansible={servers.length > 0}
+                tofu={servers.some((server) => {
+                  const kind = server.provider || providers.find((item) => item.id === server.providerId)?.provider;
+                  return kind === "hetzner" || kind === "scaleway";
+                })}
+              />
+            </>
+          ) : null}
         </div>
       )}
+      {/* The bar of a phone sits over the end of the page. */}
+      <div aria-hidden className="h-16 md:hidden" />
+      {confirming ? (
+        <ConfirmDialog title={text("template.deployTitle", { name: template.name })} confirmLabel={text("template.deploy")} onConfirm={launch} onClose={() => setConfirming(false)}>
+          <div className="flex flex-col gap-2">
+            {clusterLabel ? (
+              <p>
+                {text("field.cluster")} {clusterLabel}
+              </p>
+            ) : null}
+            <p>{text("plan.templateSummary", { apps: apps.length, servers: servers.length })}</p>
+            <Cost servers={servers} />
+          </div>
+        </ConfirmDialog>
+      ) : null}
     </>
   );
 }
@@ -677,12 +747,9 @@ function ElementSettings({
   part,
   onPart,
   body,
-  setBody,
   setServer,
   setApp,
-  target,
-  setTarget,
-  choices,
+  cluster,
   providers,
   keys,
   zones,
@@ -691,12 +758,10 @@ function ElementSettings({
   part: string;
   onPart: (part: string) => void;
   body: TemplateBody;
-  setBody: (body: TemplateBody) => void;
   setServer: (index: number, server: TemplateServer) => void;
   setApp: (index: number, app: TemplateApp) => void;
-  target: string;
-  setTarget: (id: string) => void;
-  choices: Cluster[];
+  // cluster is what the page offers for the cluster: naming it or choosing one.
+  cluster: ReactNode;
   providers: Secret[];
   keys: Secret[];
   zones: DnsZone[];
@@ -705,30 +770,7 @@ function ElementSettings({
   const index = Number(raw);
   let parts: { key: string; label: string; body: ReactNode }[] = [];
   if (kind === "cluster") {
-    parts = [
-      {
-        key: "general",
-        label: text("tpl.part.general"),
-        body: body.clusterName ? (
-          <Field label={text("template.createdCluster")}>
-            <Input value={body.clusterName} onChange={(e) => setBody({ ...body, clusterName: e.target.value })} required />
-          </Field>
-        ) : choices.length === 0 ? (
-          <p className="text-muted">{text("template.noCluster")}</p>
-        ) : (
-          <Field label={text("field.cluster")}>
-            <Select value={target} onChange={(e) => setTarget(e.target.value)} required>
-              <option value="">{text("common.choose")}</option>
-              {choices.map((cluster) => (
-                <option key={cluster.id} value={cluster.id}>
-                  {cluster.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        ),
-      },
-    ];
+    parts = [{ key: "general", label: text("tpl.part.general"), body: cluster }];
   } else if (kind === "server") {
     const servers = body.servers ?? [];
     const server = servers[index];

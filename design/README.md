@@ -6,7 +6,7 @@ Le design system de MyInfra et les maquettes des propositions UI/UX. Rien ici n'
 
 - `README.md` : le brand book (ton, couleur, typographie, espace, états, composants, plan, téléphone, iconographie). Commencez par lui.
 - `tokens.json` : les tokens (couleurs claires et sombres, typographie, espacements, rayons, ombres, tailles, opacités).
-- `components/<Nom>/README.md` et `preview.html` : les règles et l'aperçu de chaque composant. Les composants viennent de `web/src/ui.tsx`, `web/src/kit.tsx` et `web/src/mobilenav.tsx` ; `Plan`, `BottomTabs` et `ListRow` décrivent des motifs des propositions, pas encore du code.
+- `components/<Nom>/README.md` et `preview.html` : les règles et l'aperçu de chaque composant. Les composants viennent de `web/src/ui.tsx`, `web/src/kit.tsx` et `web/src/mobilenav.tsx` ; `Plan` vient de `web/src/plan.tsx` ; `BottomTabs` et `ListRow` décrivent des motifs des propositions, pas encore du code.
 - `design-system.json` : l'index du design system.
 
 Non copiés ici, car générés ou tirés de paquets : `components/bundle.js` et `bundle.css` (compilés depuis `web/src`), les polices Geist (`@fontsource-variable/geist` et `geist-mono` 5.2.6) et les logos (`web/public/favicon.svg`, `deploy/macos/icon.png`).

@@ -65,12 +65,12 @@ Les composants sont ceux de l'application, compilés tels quels : `window.MyInfr
 - **Navigation et dialogues** — `Tabs` entre les parties d'un objet, `Fold` pour ce qui sert rarement, `Sheet` pour un formulaire court, `ConfirmDialog` avant toute suppression (avec `phrase` si elle ne se défait pas).
 - **Mise en page** — `PageTitle` (avec l'action principale à droite), `SectionTitle`, `Icon`.
 
-## Plan d'un paquet ou d'une application
+## Plan d'un paquet, d'une application ou d'un modèle
 
-Un plan montre ce qui compose un paquet ou une application déployée et ce qui parle à quoi. Il sert aussi de navigation : choisir un élément ouvre ses réglages juste en dessous, sur la même page.
+Un plan montre ce qui compose un paquet, une application déployée ou un modèle, et ce qui parle à quoi. Il sert aussi de navigation : choisir un élément ouvre ses réglages juste en dessous, sur la même page.
 
-- **Trois bandes** de fond très clair, nommées en `caption` `color-faint` : **Entrée** (Internet, en pastille ronde, et le Proxy), **Services**, **Stockage** (disques et sauvegardes). Une case par élément : icône, nom, une ligne de détail en `small` `color-muted`, et la pastille d'état sur une application déployée.
-- **Six liens**, toujours dans ces styles (filet sans échelle, `vector-effect: non-scaling-stroke`) :
+- **Des bandes** de fond très clair, nommées en `caption` `color-faint`, seulement celles qui ont du contenu : **Entrée** (Internet, en pastille ronde, et le Proxy), **Applications** et **Machines** (sur un modèle), **Services**, **Stockage** (disques et sauvegardes). Une case par élément : icône, nom, une ligne de détail en `small` `color-muted`, et la pastille d'état sur une application déployée.
+- **Sept liens**, toujours dans ces styles (filet sans échelle, `vector-effect: non-scaling-stroke`) :
 
 | Lien | Trait |
 |---|---|
@@ -78,15 +78,19 @@ Un plan montre ce qui compose un paquet ou une application déployée et ce qui 
 | Port ouvert directement | `color-warn`, plein, 2px |
 | Réseau interne | `color-muted`, tirets 6/4, 1,5px |
 | Disque monté | `color-muted`, pointillé 2/3, 2,5px |
-| Redondance (réplication, exemplaires) | `color-ink`, tiret-point 10/3/2/3, 1,5px |
+| Redondance (réplication, exemplaires) | `color-ink`, tiret-point 10/3/2/3, 1,5px ; réservé à la vue par pod, aucun plan n'en trace encore |
 | Sauvegarde | `color-faint`, points 1/5, bouts ronds |
+| Hébergement (une application sur son cluster) | `color-faint`, plein, 1px |
 
+- **Vérité des liens** : un plan ne trace que ce qui est déclaré ; un lien interne vient de `dependsOn`, le proxy n'apparaît que s'il y a un service public. Dans une bande, un lien passe sous les cases entre ses deux bouts, pour ne pas se lire comme deux liens.
+- **Direction** : le plan prend celle qui le rend le moins haut, de haut en bas ou de gauche à droite, de haut en bas si les colonnes sont trop étroites pour les cases ; un bouton la force. De gauche à droite, les étiquettes des liens sont masquées : le tableau Interactions les donne.
 - **Sélection** : l'élément choisi prend une bordure 2px `color-ink` ; ses liens s'épaississent et **défilent** (tirets animés, 1,1s linéaire) ; le reste tombe à `opacity-dimmed`, les liens sans rapport à `opacity-link-dimmed`. Cette animation reste même quand le système demande moins de mouvement : c'est elle qui dit sur quoi on travaille. Seules les transitions de mise en page s'arrêtent alors.
-- **Toujours sous les yeux** : le plan et la tête de l'élément choisi (type, nom, onglets) forment un bloc collant en haut de page. Au défilement (au-delà de 200px, retour sous 40px), le plan se **compacte** : cases réduites au nom, étiquettes des liens masquées, liens toujours tracés. Pas de bouton pour réduire ou agrandir.
+- **Toujours sous les yeux** : le plan et la tête de l'élément choisi (type, nom, onglets) forment un bloc collant en haut de page. Sur un paquet, la tête tient sur une ligne avec Installer ; l'édition se fait dans le formulaire, et Avancé (YAML), Guide et Export sont dans le menu « ⋯ ». En YAML, cette ligne offre le retour à Visuel. Un élément choisi est seul sur la page : pas de carte, son bouton Supprimer suit son titre, et la nav de ses onglets, en petit, reste collée sous ce titre. Une fois collé (24px de défilement au-delà, retour à 4px), le plan se **compacte** sur une seule ligne, ses bandes côte à côte quelle que soit sa direction, retrouvée en revenant en haut : sans en-tête ni légende, cases réduites au nom, une case par bande (l'élément choisi, sinon un élément relié) et le reste empilé derrière elle (« +N »), étiquettes des liens masquées, liens toujours tracés. Pas de bouton pour réduire ou agrandir.
+- **Sans élément choisi**, un paquet ne montre que ses réglages généraux (nom, résumé, catégorie, présentation), puis une nav : **Questions** et **Variables communes**. Une variable commune se règle par des champs, jamais par du texte à rédiger : son nom, son type (texte, oui ou non, mot de passe généré, réponse à une question, adresse, domaine) et le contrôle de ce type. Les problèmes des services restent listés ici, et leur case passe en état d'erreur dans le plan.
 - **Une seule page d'édition** : choisir un élément change les onglets en dessous (service : Général, Réseau, Stockage, Variables, Santé, Ressources, Connexions ; stockage : Taille et redondance, Sauvegardes, Connexions). Un onglet commun aux deux éléments reste ouvert.
-- Le bouton **Ajouter** propose Service ou Stockage ; l'élément apparaît en pointillé dans sa bande tant qu'il n'est pas validé. **Interactions · N** déplie le tableau de tous les liens (De, Vers, Type, Détail, Ouvert à ou Serveur), replié par défaut.
-- Sur une application déployée, le plan est **simplifié** par défaut (une case par service, avec ses copies et ses serveurs en une ligne) ; « Voir tous les pods » montre une colonne par serveur, un pod par case, la réplication et les exemplaires. Cliquer dans le plan hors d'un élément revient à « Toute l'application ».
-- **Pas de plan sur téléphone** : il est masqué sous 720px ; les mêmes éléments s'y lisent en listes.
+- Sur un paquet, chaque bande Services et Stockage porte son bouton **+**, dans son coin, avec son libellé au survol ; la bande reste affichée même vide, et sur téléphone le + est à côté du titre de la liste. L'élément apparaît en pointillé dans sa bande tant qu'il n'est pas validé. **Interactions · N** déplie le tableau de tous les liens (De, Vers, Type, Détail, Ouvert à ou Serveur), replié par défaut.
+- Sur une application déployée, le plan est **simplifié** par défaut (une case par service, avec ses copies et ses serveurs en une ligne) ; « Voir tous les pods » (maquette, pas encore dans le code) montre une colonne par serveur, un pod par case, la réplication et les exemplaires. Cliquer dans le plan hors d'un élément revient à « Toute l'application ».
+- **Pas de plan sur téléphone** : il est masqué sous 768px ; les mêmes éléments s'y lisent en listes.
 
 ## Téléphone
 

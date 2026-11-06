@@ -64,3 +64,21 @@ func TestConvertReadsACompose(t *testing.T) {
 		t.Fatal(bad.Code, bad.Body.String())
 	}
 }
+
+// The plan of an application draws its inner links from what the view says.
+func TestToAppGivesTheDependenciesOfServices(t *testing.T) {
+	view := toApp(store.Application{Services: []store.Service{
+		{Name: "web", Spec: spec.Service{DependsOn: []string{"db"}}},
+		{Name: "db"},
+	}})
+	body, err := json.Marshal(view.Services)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `"dependsOn":["db"]`) {
+		t.Fatalf("dependsOn missing: %s", body)
+	}
+	if strings.Count(string(body), "dependsOn") != 1 {
+		t.Fatalf("a service without dependency says one: %s", body)
+	}
+}

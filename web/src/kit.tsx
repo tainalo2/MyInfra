@@ -316,6 +316,7 @@ export function Tabs<K extends string>({
   onChange,
   label,
   aside,
+  small = false,
 }: {
   tabs: { key: K; label: string; mark?: boolean }[];
   active: K;
@@ -324,6 +325,8 @@ export function Tabs<K extends string>({
   // aside sets actions on the line of the tabs, on the right. On a narrow
   // screen they go above it, the tabs staying on the line.
   aside?: ReactNode;
+  // small is for a nav that stays in sight: it takes less room.
+  small?: boolean;
 }) {
   function onKey(event: React.KeyboardEvent<HTMLDivElement>) {
     if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
@@ -344,7 +347,7 @@ export function Tabs<K extends string>({
           aria-selected={tab.key === active}
           tabIndex={tab.key === active ? 0 : -1}
           onClick={() => onChange(tab.key)}
-          className={`-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 ${
+          className={`-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 ${small ? "px-2.5 py-1 text-[13px]" : "px-3 py-2"} ${
             tab.key === active ? "border-ink text-ink" : "border-transparent text-muted hover:text-ink"
           } focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus`}
         >
@@ -358,7 +361,7 @@ export function Tabs<K extends string>({
   return (
     <div className="flex flex-wrap-reverse items-end justify-between gap-x-6 gap-y-2 border-b border-line">
       {list}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pb-1.5">{aside}</div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 self-center py-1">{aside}</div>
     </div>
   );
 }
