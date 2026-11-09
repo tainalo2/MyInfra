@@ -499,3 +499,19 @@ CREATE TABLE IF NOT EXISTS auto_updates (
     hour integer NOT NULL DEFAULT 3 CHECK (hour >= 0 AND hour < 24),
     last_run timestamptz
 );
+
+CREATE TABLE IF NOT EXISTS template_stagings (
+    id text PRIMARY KEY,
+    owner_id text NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    kind text NOT NULL CHECK (kind IN ('template', 'package')),
+    target_id text NOT NULL DEFAULT '',
+    name text NOT NULL DEFAULT '',
+    body jsonb NOT NULL DEFAULT '{}'::jsonb,
+    patches jsonb NOT NULL DEFAULT '[]'::jsonb,
+    context text NOT NULL DEFAULT '',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    last_accessed_at timestamptz NOT NULL DEFAULT now(),
+    expires_at timestamptz NOT NULL
+);
+CREATE INDEX IF NOT EXISTS template_stagings_owner ON template_stagings (owner_id);
+CREATE INDEX IF NOT EXISTS template_stagings_expires ON template_stagings (expires_at);
