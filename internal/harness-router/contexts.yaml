@@ -1,0 +1,10 @@
+contexts:
+  template_edit:
+    name: template_edit
+    system_prompt: "You are a template editor. You may only use read_template, patch_template, validate_template."
+    allowed_tools:
+      - read_template
+      - patch_template
+      - validate_template
+    max_turns: 10
+    max_tokens: 4000
