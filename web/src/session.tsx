@@ -11,6 +11,8 @@ export type UserAccount = {
   login: string;
   role: UserRole;
   totp: boolean;
+  /** Permission distinct from the role: the assistant may commit to the template repository. */
+  write_templates?: boolean;
 };
 
 type SessionState = {
@@ -19,6 +21,10 @@ type SessionState = {
   totp: boolean;
   canDeploy: boolean;
   canAdmin: boolean;
+  /** May open a new assistant turn (chat, patch proposals): deploy or admin. */
+  canChat: boolean;
+  /** May ask the Commit Gateway to write: admin, or the explicit "write templates" permission. */
+  canWriteTemplates: boolean;
   refresh: () => Promise<void>;
   clear: () => void;
 };
@@ -29,6 +35,8 @@ const SessionContext = createContext<SessionState>({
   totp: false,
   canDeploy: false,
   canAdmin: false,
+  canChat: false,
+  canWriteTemplates: false,
   refresh: async () => undefined,
   clear: () => undefined,
 });
@@ -42,25 +50,30 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<UserRole | null>(null);
   const [login, setLogin] = useState("");
   const [totp, setTotp] = useState(false);
+  const [writeTemplates, setWriteTemplates] = useState(false);
 
   const refresh = useCallback(async () => {
-    const session = await api<{ role?: string; login?: string; totp?: boolean }>("/api/session");
+    const session = await api<{ role?: string; login?: string; totp?: boolean; write_templates?: boolean }>("/api/session");
     setRole(normalizeRole(session.role));
     setLogin(session.login ?? "");
     setTotp(Boolean(session.totp));
+    setWriteTemplates(Boolean(session.write_templates));
   }, []);
 
   const clear = useCallback(() => {
     setRole(null);
     setLogin("");
     setTotp(false);
+    setWriteTemplates(false);
   }, []);
 
   const value = useMemo(() => {
     const canAdmin = role === "admin";
     const canDeploy = canAdmin || role === "deploy";
-    return { role, login, totp, canDeploy, canAdmin, refresh, clear };
-  }, [role, login, totp, refresh, clear]);
+    const canChat = canDeploy;
+    const canWriteTemplates = canAdmin || (canDeploy && writeTemplates);
+    return { role, login, totp, canDeploy, canAdmin, canChat, canWriteTemplates, refresh, clear };
+  }, [role, login, totp, writeTemplates, refresh, clear]);
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

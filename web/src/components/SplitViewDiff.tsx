@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useSession } from '../session';
 
 export type HunkStatus = 'pending' | 'selected' | 'rejected' | 'committed';
 
@@ -26,6 +27,10 @@ export interface StagingState {
 const API_BASE = '/api/diff';
 
 export function SplitViewDiff() {
+  // The server decides (403 on /api/diff/commit); the UI only hides what
+  // the account may not do. Without "write templates" (or admin), the
+  // "Appliquer" button is absent, not disabled.
+  const { canWriteTemplates, canChat } = useSession();
   const [hunks, setHunks] = useState<Hunk[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [streaming, setStreaming] = useState(false);
@@ -97,6 +102,10 @@ export function SplitViewDiff() {
   };
 
   const apply = async () => {
+    if (!canWriteTemplates) {
+      setMessage('Droits insuffisants.');
+      return;
+    }
     const selected = hunks.filter((h) => h.status === 'selected' && !h.committed);
     if (selected.length === 0) {
       setMessage('No hunks selected');
@@ -109,6 +118,10 @@ export function SplitViewDiff() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, hunkIds: selected.map((h) => h.id) }),
       });
+      if (res.status === 403) {
+        setMessage('Droits insuffisants.');
+        return;
+      }
       if (!res.ok) throw new Error(await res.text());
       const committedIds: string[] = await res.json();
       setHunks((prev) =>
@@ -133,10 +146,12 @@ export function SplitViewDiff() {
   return (
     <div className="split-view-diff">
       <div className="toolbar">
-        <button onClick={startStream} disabled={streaming}>Start diff stream</button>
-        <button onClick={apply} disabled={applying || !hunks.some((h) => h.status === 'selected')}>
-          Appliquer / Commit
-        </button>
+        {canChat ? <button onClick={startStream} disabled={streaming}>Start diff stream</button> : null}
+        {canWriteTemplates ? (
+          <button onClick={apply} disabled={applying || !hunks.some((h) => h.status === 'selected')}>
+            Appliquer / Commit
+          </button>
+        ) : null}
         <button onClick={refetchStaging}>Recharger staging</button>
         <span className="msg">{message}</span>
       </div>

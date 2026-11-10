@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react';
 import { TokenBudgetBanner } from './TokenBudgetBanner';
+import { useSession } from '../session';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
-/** Assistant chat scoped to a functional context. The whole pane hides behind one flag (/api/assistant/status). */
+/**
+ * Assistant chat scoped to a functional context. The whole pane hides behind one flag (/api/assistant/status).
+ * A read-only account sees the pane in consultation mode: the history stays, the form that would open a new
+ * turn with the provider is absent. The server refuses that turn anyway (403 on /api/assistant/chat).
+ */
 export function AssistantPane({ context = 'template_edit' }: { context?: string }) {
+  const { canChat } = useSession();
   const [enabled, setEnabled] = useState(false);
   const [providers, setProviders] = useState<string[]>([]);
   const [provider, setProvider] = useState('');
@@ -28,7 +34,7 @@ export function AssistantPane({ context = 'template_edit' }: { context?: string 
   if (!enabled) return null;
 
   async function send() {
-    if (!input.trim() || busy || !model) return;
+    if (!canChat || !input.trim() || busy || !model) return;
     const next = [...msgs, { role: 'user' as const, content: input }];
     setMsgs(next);
     setInput('');
@@ -40,7 +46,9 @@ export function AssistantPane({ context = 'template_edit' }: { context?: string 
         body: JSON.stringify({ session, provider, model, context, messages: next }),
       });
       const d = await r.json();
-      const text = d.assistant_unavailable ? 'Assistant indisponible (clé manquante).' : d.text ?? d.error ?? '';
+      const text = r.status === 403
+        ? 'Droits insuffisants.'
+        : d.assistant_unavailable ? 'Assistant indisponible (clé manquante).' : d.text ?? d.error ?? '';
       setMsgs([...next, { role: 'assistant', content: text }]);
     } finally {
       setBusy(false);
@@ -59,10 +67,14 @@ export function AssistantPane({ context = 'template_edit' }: { context?: string 
       <ul className="flex-1 overflow-auto p-2">
         {msgs.map((m, i) => <li key={i}><b>{m.role}</b> {m.content}</li>)}
       </ul>
-      <form className="flex gap-2 p-2" onSubmit={(e) => { e.preventDefault(); void send(); }}>
-        <input className="flex-1" value={input} onChange={(e) => setInput(e.target.value)} />
-        <button disabled={busy}>Envoyer</button>
-      </form>
+      {canChat ? (
+        <form className="flex gap-2 p-2" onSubmit={(e) => { e.preventDefault(); void send(); }}>
+          <input className="flex-1" value={input} onChange={(e) => setInput(e.target.value)} />
+          <button disabled={busy}>Envoyer</button>
+        </form>
+      ) : (
+        <p className="p-2 text-[13px] text-muted">Mode consultation : votre rôle ne permet pas de solliciter l’assistant.</p>
+      )}
     </aside>
   );
 }

@@ -82,6 +82,20 @@ export function UsersPage() {
     }
   }
 
+  // The "write templates" permission is granted apart from the role; the
+  // server (admin only) is the one that records it.
+  async function setWriteTemplates(row: UserAccount, allowed: boolean) {
+    try {
+      const updated = await api<UserAccount>(`/api/users/${row.id}/permissions`, {
+        method: "PUT",
+        body: JSON.stringify({ write_templates: allowed }),
+      });
+      setRows((current) => current?.map((item) => (item.id === row.id ? { ...item, ...updated } : item)) ?? current);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : text("common.error"));
+    }
+  }
+
   const showTable = rows && rows.length > 0;
 
   return (
@@ -147,6 +161,7 @@ export function UsersPage() {
                 <th scope="col" className="px-4 py-3 font-medium">{text("auth.login")}</th>
                 <th scope="col" className="px-4 py-3 font-medium">{text("users.role")}</th>
                 <th scope="col" className="px-4 py-3 font-medium">{text("auth.totp")}</th>
+                <th scope="col" className="px-4 py-3 font-medium" title={text("users.writeTemplatesHint")}>{text("users.writeTemplates")}</th>
                 <th scope="col" className="w-14 px-4 py-3">
                   <span className="sr-only">{text("common.delete")}</span>
                 </th>
@@ -164,6 +179,19 @@ export function UsersPage() {
                       <Icon icon={row.totp ? ShieldCheck : ShieldOff} className={row.totp ? "text-ok" : undefined} />
                       {row.totp ? text("users.totpOn") : text("users.totpOff")}
                     </span>
+                  </td>
+                  <td className="px-4 py-3.5">
+                    {row.role === "admin" ? (
+                      <span className="text-[13px] text-muted">—</span>
+                    ) : (
+                      <input
+                        type="checkbox"
+                        aria-label={text("users.writeTemplates")}
+                        title={text("users.writeTemplatesHint")}
+                        checked={Boolean(row.write_templates)}
+                        onChange={(e) => void setWriteTemplates(row, e.target.checked)}
+                      />
+                    )}
                   </td>
                   <td className="px-4 py-3.5 text-right">
                     <IconButton icon={Trash2} label={text("common.delete")} className="text-bad" onClick={() => setRemove(row)} />
