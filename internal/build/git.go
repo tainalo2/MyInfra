@@ -88,8 +88,8 @@ func RemoteScript(spec Spec, cloneURL, tag string) string {
 	return fmt.Sprintf(`set -eu
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
-git clone --depth 1 --branch '%s' '%s' "$tmpdir/src"
+git clone --depth 1 --branch '%s' '%s' "$tmpdir/src" 1>&2
 cd "$tmpdir/src/%s"
-docker build -f '%s' -t '%s' .
+docker build -f '%s' -t '%s' . 1>&2
 docker save '%s'`, branch, cloneURL, ctx, df, tag, tag)
 }

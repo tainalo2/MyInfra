@@ -17,4 +17,8 @@ func TestParseGitSource(t *testing.T) {
 	if !strings.Contains(clone, "x-access-token") {
 		t.Fatal(clone)
 	}
+	script := RemoteScript(spec, clone, "tag")
+	if !strings.Contains(script, "1>&2") {
+		t.Fatalf("build output must be redirected to stderr so docker save stdout stays clean: %s", script)
+	}
 }
