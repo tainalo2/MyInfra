@@ -11,14 +11,19 @@ import (
 	"sync/atomic"
 	"time"
 
+	"myinfra/internal/assistant"
 	"myinfra/internal/box"
 	"myinfra/internal/store"
 	"myinfra/internal/verify"
 )
 
 type API struct {
-	Store        *store.Store
-	Box          *box.Box
+	Store *store.Store
+	Box   *box.Box
+	// Assistant answers under /api/assistant; nil mounts nothing. Built
+	// around the BYOK master key, a key of its own: without one it answers
+	// as unavailable.
+	Assistant    *assistant.Service
 	Verify       verify.Client
 	PublicURL    string
 	AppsDomain   string

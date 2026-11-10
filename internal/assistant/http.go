@@ -3,12 +3,16 @@ package assistant
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	harness "myinfra/internal/harness-router"
 )
 
 // Service wires keys, pricing, providers, router and meter behind HTTP.
+//
+// Keys is nil when no BYOK master key is configured: the routes answer
+// assistant_unavailable and MyInfra serves everything else as usual.
 type Service struct {
 	Keys      *KeyStore
 	Pricing   *Pricing
@@ -16,6 +20,46 @@ type Service struct {
 	Router    *harness.Router
 	Providers map[string]Provider
 }
+
+// New builds the service around the BYOK master key. With a nil master the
+// assistant is off: the service still answers, as unavailable. With a
+// previous master, the sealed entries the current master does not open are
+// sealed again with it.
+func New(master, previous []byte, sealed map[string]string) (*Service, error) {
+	p := DefaultPricing()
+	s := &Service{
+		Pricing:   p,
+		Meter:     NewMeter(p),
+		Router:    harness.NewRouter(harness.DefaultConfig()),
+		Providers: map[string]Provider{"claude": Claude{}, "codex": OpenAI{}},
+	}
+	if master == nil {
+		return s, nil
+	}
+	keys, err := NewKeyStore(master)
+	if err != nil {
+		return nil, err
+	}
+	keys.Import(sealed)
+	if previous != nil {
+		rekeyed, lost, err := keys.Rekey(previous)
+		if err != nil {
+			return nil, err
+		}
+		if len(rekeyed) > 0 {
+			slog.Info("clés BYOK rechiffrées avec la nouvelle clé maîtresse", "providers", rekeyed)
+		}
+		if len(lost) > 0 {
+			slog.Warn("clés BYOK illisibles avec l'ancienne et la nouvelle clé maîtresse, à saisir de nouveau", "providers", lost)
+		}
+	}
+	s.Keys = keys
+	return s, nil
+}
+
+// Available tells whether provider keys can be kept: a BYOK master key is
+// configured.
+func (s *Service) Available() bool { return s != nil && s.Keys != nil }
 
 // Register mounts routes on mux under /api/assistant. Wrap auth outside if needed.
 func (s *Service) Register(mux *http.ServeMux, wrap func(http.HandlerFunc) http.HandlerFunc) {
@@ -26,10 +70,7 @@ func (s *Service) Register(mux *http.ServeMux, wrap func(http.HandlerFunc) http.
 	mux.HandleFunc("GET /api/assistant/pricing", wrap(func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, s.Pricing.List()) }))
 	mux.HandleFunc("PUT /api/assistant/pricing", wrap(s.setPrice))
 	mux.HandleFunc("PUT /api/assistant/keys/{provider}", wrap(s.setKey))
-	mux.HandleFunc("DELETE /api/assistant/keys/{provider}", wrap(func(w http.ResponseWriter, r *http.Request) {
-		s.Keys.Delete(r.PathValue("provider"))
-		w.WriteHeader(204)
-	}))
+	mux.HandleFunc("DELETE /api/assistant/keys/{provider}", wrap(s.deleteKey))
 	mux.HandleFunc("GET /api/assistant/usage", wrap(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, s.Meter.Get(r.URL.Query().Get("session")))
 	}))
@@ -43,7 +84,13 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	json.NewEncoder(w).Encode(v)
 }
 
+const noMasterKey = "assistant unavailable: no BYOK master key configured"
+
 func (s *Service) status(w http.ResponseWriter, r *http.Request) {
+	if !s.Available() {
+		writeJSON(w, 200, map[string]any{"enabled": false, "providers": []string{}, "assistant_unavailable": true, "reason": "no_master_key"})
+		return
+	}
 	ps := s.Keys.List()
 	writeJSON(w, 200, map[string]any{"enabled": len(ps) > 0, "providers": ps})
 }
@@ -59,6 +106,10 @@ func (s *Service) setPrice(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) setKey(w http.ResponseWriter, r *http.Request) {
+	if !s.Available() {
+		writeJSON(w, 503, map[string]string{"error": noMasterKey})
+		return
+	}
 	var b struct {
 		Key string `json:"key"`
 	}
@@ -66,6 +117,15 @@ func (s *Service) setKey(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]string{"error": "invalid key"})
 		return
 	}
+	w.WriteHeader(204)
+}
+
+func (s *Service) deleteKey(w http.ResponseWriter, r *http.Request) {
+	if !s.Available() {
+		writeJSON(w, 503, map[string]string{"error": noMasterKey})
+		return
+	}
+	s.Keys.Delete(r.PathValue("provider"))
 	w.WriteHeader(204)
 }
 
@@ -104,6 +164,10 @@ func (s *Service) chat(w http.ResponseWriter, r *http.Request) {
 	var q chatReq
 	if json.NewDecoder(r.Body).Decode(&q) != nil || q.Session == "" {
 		writeJSON(w, 400, map[string]string{"error": "invalid request"})
+		return
+	}
+	if !s.Available() {
+		writeJSON(w, 200, map[string]any{"assistant_unavailable": true, "reason": "no_master_key"})
 		return
 	}
 	prov, ok := s.Providers[q.Provider]

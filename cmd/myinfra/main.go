@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"myinfra/internal/api"
+	"myinfra/internal/assistant"
 	"myinfra/internal/boot"
 	"myinfra/internal/box"
 	"myinfra/internal/library"
@@ -85,6 +86,15 @@ func serve() bool {
 	if err != nil {
 		fatal("coffre", "err", err)
 	}
+	// The assistant has a master key of its own, for the users' provider
+	// keys. Missing or unreadable, it is off: MyInfra serves without it.
+	helper, err := assistant.New(byokKeys(rt))
+	if err != nil {
+		slog.Warn("assistant désactivé", "err", err)
+		helper, _ = assistant.New(nil, nil, nil)
+	} else if !helper.Available() {
+		slog.Warn("assistant désactivé : clé maîtresse BYOK absente ou illisible (MYINFRA_BYOK_MASTER_KEY)")
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), shutdownSignals()...)
 	defer stop()
@@ -104,8 +114,9 @@ func serve() bool {
 	}
 	addr := listenAddr()
 	app := &api.API{
-		Store: db,
-		Box:   seal,
+		Store:     db,
+		Box:       seal,
+		Assistant: helper,
 		Verify: verify.Client{
 			AllowTest: os.Getenv("MYINFRA_DEV") == "1",
 		},
@@ -231,6 +242,23 @@ func masterKey() ([]byte, error) {
 		return nil, errString("MYINFRA_MASTER_KEY doit être 32 octets en base64")
 	}
 	return key, nil
+}
+
+// byokKeys resolves the BYOK master key, and the one it replaces. A local
+// copy keeps it in its folder, next to master.key; a server copy takes it
+// from MYINFRA_BYOK_MASTER_KEY only. The sealed entries come with the
+// store once provider keys are kept in the database.
+func byokKeys(rt *boot.Runtime) (master, previous []byte, sealed map[string]string) {
+	home := ""
+	if rt.Local {
+		home, _ = boot.Home()
+	}
+	keys, err := boot.BYOKMaster(home)
+	if err != nil {
+		slog.Warn("clé maîtresse BYOK illisible, assistant désactivé", "err", err)
+		return nil, nil, nil
+	}
+	return keys.Current, keys.Previous, nil
 }
 
 // fatal logs the error and ends the process. Opened by a double click, it

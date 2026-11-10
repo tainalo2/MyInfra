@@ -218,6 +218,9 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("POST /api/tools/{name}", a.deployAuth(a.installTool))
 
 	mux.HandleFunc("GET /api/secrets", a.auth(a.listSecrets))
+	if a.Assistant != nil {
+		a.Assistant.Register(mux, a.auth)
+	}
 	mux.HandleFunc("POST /api/secrets/ssh-keys", a.adminAuth(a.steady(a.generateSSHKey)))
 	mux.HandleFunc("POST /api/secrets/ssh-keys/import", a.adminAuth(a.steady(a.importSSHKey)))
 	mux.HandleFunc("GET /api/secrets/{id}/private", a.adminAuth(a.downloadSSHKey))

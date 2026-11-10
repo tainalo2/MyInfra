@@ -135,6 +135,8 @@ The image is `ghcr.io/tainalo2/myinfra`, for `linux/amd64` and `linux/arm64`.
 | --- | --- |
 | `DATABASE_URL` | Use an external PostgreSQL instead of the embedded one. Then `MYINFRA_MASTER_KEY` is required. |
 | `MYINFRA_MASTER_KEY` | 32 random bytes, base64. Seals every secret. Never stored in the database. |
+| `MYINFRA_BYOK_MASTER_KEY` | 32 random bytes, base64. Seals the users' own AI provider keys (BYOK), independently of `MYINFRA_MASTER_KEY`. Missing: the assistant is off, everything else runs. See [docs/BYOK_MASTER_KEY.md](docs/BYOK_MASTER_KEY.md). |
+| `MYINFRA_BYOK_MASTER_KEY_PREVIOUS` | The BYOK key being replaced during a rotation; stored keys are re-sealed at startup. |
 | `MYINFRA_ADDR` | Listen address, `:8080` by default. |
 | `MYINFRA_PUBLIC_URL` | The address machines and browsers use to reach MyInfra. |
 | `MYINFRA_ACME_EMAIL` | The Let's Encrypt account address. |
