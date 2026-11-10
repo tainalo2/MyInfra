@@ -17,6 +17,10 @@ WHERE NOT u.onboarded
 ALTER TABLE users ADD COLUMN IF NOT EXISTS login text NOT NULL DEFAULT '';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT 'admin';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret text NOT NULL DEFAULT '';
+-- Permission distincte du role : l assistant IA ne peut ecrire dans le
+-- depot de modeles (commit) que si elle est accordee explicitement.
+-- Le role deploy ne l a pas par defaut, le role admin n en a pas besoin.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS write_templates boolean NOT NULL DEFAULT false;
 UPDATE users SET login = left(id, 12) WHERE login = '';
 CREATE UNIQUE INDEX IF NOT EXISTS users_login_unique ON users (lower(login)) WHERE login <> '';
 

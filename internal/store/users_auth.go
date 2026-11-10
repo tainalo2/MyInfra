@@ -20,13 +20,16 @@ type UserAccount struct {
 	Role         string
 	PasswordHash string
 	TOTPSecret   string
+	// WriteTemplates lets the assistant commit to the live template
+	// repository. Granted explicitly; never implied by RoleDeploy.
+	WriteTemplates bool
 }
 
 func (s *Store) UserAccount(ctx context.Context, id string) (UserAccount, error) {
 	var row UserAccount
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, login, role, password_hash, totp_secret FROM users WHERE id = $1`, id).
-		Scan(&row.ID, &row.Login, &row.Role, &row.PasswordHash, &row.TOTPSecret)
+		SELECT id, login, role, password_hash, totp_secret, write_templates FROM users WHERE id = $1`, id).
+		Scan(&row.ID, &row.Login, &row.Role, &row.PasswordHash, &row.TOTPSecret, &row.WriteTemplates)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return row, ErrNotFound
 	}
@@ -37,8 +40,8 @@ func (s *Store) UserByLogin(ctx context.Context, login string) (UserAccount, err
 	login = strings.TrimSpace(strings.ToLower(login))
 	var row UserAccount
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, login, role, password_hash, totp_secret FROM users WHERE lower(login) = $1`, login).
-		Scan(&row.ID, &row.Login, &row.Role, &row.PasswordHash, &row.TOTPSecret)
+		SELECT id, login, role, password_hash, totp_secret, write_templates FROM users WHERE lower(login) = $1`, login).
+		Scan(&row.ID, &row.Login, &row.Role, &row.PasswordHash, &row.TOTPSecret, &row.WriteTemplates)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return row, ErrNotFound
 	}
@@ -46,7 +49,7 @@ func (s *Store) UserByLogin(ctx context.Context, login string) (UserAccount, err
 }
 
 func (s *Store) ListUserAccounts(ctx context.Context) ([]UserAccount, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id, login, role, password_hash, totp_secret FROM users ORDER BY created_at`)
+	rows, err := s.pool.Query(ctx, `SELECT id, login, role, password_hash, totp_secret, write_templates FROM users ORDER BY created_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +57,7 @@ func (s *Store) ListUserAccounts(ctx context.Context) ([]UserAccount, error) {
 	var out []UserAccount
 	for rows.Next() {
 		var row UserAccount
-		if err := rows.Scan(&row.ID, &row.Login, &row.Role, &row.PasswordHash, &row.TOTPSecret); err != nil {
+		if err := rows.Scan(&row.ID, &row.Login, &row.Role, &row.PasswordHash, &row.TOTPSecret, &row.WriteTemplates); err != nil {
 			return nil, err
 		}
 		out = append(out, row)
@@ -103,6 +106,18 @@ func (s *Store) UpdateUserLogin(ctx context.Context, userID, login string) error
 
 func (s *Store) SetUserTOTP(ctx context.Context, userID, secret string) error {
 	tag, err := s.pool.Exec(ctx, `UPDATE users SET totp_secret = $2 WHERE id = $1`, userID, secret)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetUserWriteTemplates grants or revokes the "write templates" permission.
+func (s *Store) SetUserWriteTemplates(ctx context.Context, userID string, allowed bool) error {
+	tag, err := s.pool.Exec(ctx, `UPDATE users SET write_templates = $2 WHERE id = $1`, userID, allowed)
 	if err != nil {
 		return err
 	}
