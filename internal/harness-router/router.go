@@ -1,25 +1,45 @@
 package harness
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
 
+// Roles the router knows. They mirror the account roles of MyInfra: a
+// read-only account may consult the assistant's past work but never opens
+// a new turn with a provider, so the router refuses before any network.
+const (
+	RoleAdmin  = "admin"
+	RoleDeploy = "deploy"
+	RoleRead   = "read"
+)
+
+// ErrReadOnly is returned by Route when the role may not start a turn.
+var ErrReadOnly = errors.New("harness: read-only role may not call the assistant")
+
+// CanChat tells whether a role may open an assistant turn (chat, patch
+// proposals). An empty role is unknown and refused: the caller must say.
+func CanChat(role string) bool {
+	return role == RoleAdmin || role == RoleDeploy
+}
+
 // RouteRequest is the input to the router.
 type RouteRequest struct {
-	User             string `json:"user"`
+	User              string `json:"user"`
+	Role              string `json:"role,omitempty"` // empty => refused
 	FunctionalContext string `json:"functional_context"`
-	ProviderKey      string `json:"provider_key,omitempty"` // empty => unavailable
+	ProviderKey       string `json:"provider_key,omitempty"` // empty => unavailable
 }
 
 // RouteResult is returned by Route.
 type RouteResult struct {
-	AssistantUnavailable bool            `json:"assistant_unavailable"`
-	Profile              ContextProfile  `json:"profile,omitempty"`
-	AllowedTools         []string        `json:"allowed_tools,omitempty"`
-	SystemPrompt         string          `json:"system_prompt,omitempty"`
-	MaxTurns             int             `json:"max_turns,omitempty"`
-	MaxTokens            int             `json:"max_tokens,omitempty"`
+	AssistantUnavailable bool           `json:"assistant_unavailable"`
+	Profile              ContextProfile `json:"profile,omitempty"`
+	AllowedTools         []string       `json:"allowed_tools,omitempty"`
+	SystemPrompt         string         `json:"system_prompt,omitempty"`
+	MaxTurns             int            `json:"max_turns,omitempty"`
+	MaxTokens            int            `json:"max_tokens,omitempty"`
 	// ProviderAdapter is the interface handle placeholder; real execution
 	// is delegated to the Provider Adapter (separate ticket).
 	ProviderAdapter interface{} `json:"-"`
@@ -35,6 +55,10 @@ func NewRouter(cfg *Config) *Router { return &Router{Config: cfg} }
 // Route loads the appropriate context profile. If no provider key is configured,
 // returns assistant_unavailable:true immediately without any network call.
 func (r *Router) Route(req RouteRequest) (RouteResult, error) {
+	// Authorization first: a read-only role never reaches a provider.
+	if !CanChat(req.Role) {
+		return RouteResult{}, ErrReadOnly
+	}
 	// Check provider key first — immediate, no network.
 	if req.ProviderKey == "" {
 		return RouteResult{AssistantUnavailable: true}, nil

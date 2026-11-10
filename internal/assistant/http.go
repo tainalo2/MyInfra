@@ -2,6 +2,7 @@ package assistant
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -166,6 +167,12 @@ func (s *Service) chat(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]string{"error": "invalid request"})
 		return
 	}
+	// Authorization is checked here too, before the provider lookup: a
+	// read-only role never opens a turn, whatever the UI showed.
+	if role := RoleOf(r.Context()); !CanChat(role) {
+		writeJSON(w, 403, map[string]string{"error": "Droits insuffisants."})
+		return
+	}
 	if !s.Available() {
 		writeJSON(w, 200, map[string]any{"assistant_unavailable": true, "reason": "no_master_key"})
 		return
@@ -176,8 +183,12 @@ func (s *Service) chat(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"assistant_unavailable": true})
 		return
 	}
-	route, err := s.Router.Route(harness.RouteRequest{FunctionalContext: q.Context, ProviderKey: key})
+	route, err := s.Router.Route(harness.RouteRequest{Role: RoleOf(r.Context()), FunctionalContext: q.Context, ProviderKey: key})
 	if err != nil {
+		if errors.Is(err, harness.ErrReadOnly) {
+			writeJSON(w, 403, map[string]string{"error": "Droits insuffisants."})
+			return
+		}
 		writeJSON(w, 400, map[string]string{"error": err.Error()})
 		return
 	}

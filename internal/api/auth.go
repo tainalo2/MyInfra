@@ -195,6 +195,7 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("GET /api/users", a.requireRole(store.RoleAdmin)(a.listUsers))
 	mux.HandleFunc("POST /api/users", a.requireRole(store.RoleAdmin)(a.steady(a.createUser)))
 	mux.HandleFunc("DELETE /api/users/{id}", a.requireRole(store.RoleAdmin)(a.steady(a.deleteUser)))
+	mux.HandleFunc("PUT /api/users/{id}/permissions", a.requireRole(store.RoleAdmin)(a.steady(a.setUserPermissions)))
 	mux.HandleFunc("PATCH /api/account", a.auth(a.steady(a.updateAccount)))
 	mux.HandleFunc("POST /api/account/totp", a.auth(a.steady(a.prepareTOTP)))
 	mux.HandleFunc("PUT /api/account/totp", a.auth(a.steady(a.confirmTOTP)))
@@ -219,8 +220,9 @@ func (a *API) routes() http.Handler {
 
 	mux.HandleFunc("GET /api/secrets", a.auth(a.listSecrets))
 	if a.Assistant != nil {
-		a.Assistant.Register(mux, a.auth)
+		a.Assistant.Register(mux, a.assistantAuth)
 	}
+	a.diffRoutes(mux)
 	mux.HandleFunc("POST /api/secrets/ssh-keys", a.adminAuth(a.steady(a.generateSSHKey)))
 	mux.HandleFunc("POST /api/secrets/ssh-keys/import", a.adminAuth(a.steady(a.importSSHKey)))
 	mux.HandleFunc("GET /api/secrets/{id}/private", a.adminAuth(a.downloadSSHKey))
@@ -723,6 +725,8 @@ func (a *API) session(w http.ResponseWriter, r *http.Request) {
 		"role":  account.Role,
 		"login": account.Login,
 		"totp":  account.TOTPSecret != "",
+		// Permission distincte du rôle, accordée par un admin.
+		"write_templates": account.WriteTemplates,
 	})
 }
 

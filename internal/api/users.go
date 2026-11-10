@@ -11,10 +11,11 @@ import (
 )
 
 type userView struct {
-	ID    string `json:"id"`
-	Login string `json:"login"`
-	Role  string `json:"role"`
-	TOTP  bool   `json:"totp"`
+	ID             string `json:"id"`
+	Login          string `json:"login"`
+	Role           string `json:"role"`
+	TOTP           bool   `json:"totp"`
+	WriteTemplates bool   `json:"write_templates"`
 }
 
 func (a *API) listUsers(w http.ResponseWriter, r *http.Request) {
@@ -25,9 +26,32 @@ func (a *API) listUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]userView, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, userView{ID: row.ID, Login: row.Login, Role: row.Role, TOTP: row.TOTPSecret != ""})
+		out = append(out, userView{ID: row.ID, Login: row.Login, Role: row.Role, TOTP: row.TOTPSecret != "", WriteTemplates: row.WriteTemplates})
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// setUserPermissions grants or revokes the explicit "write templates"
+// permission. Admin only; the role itself is not changed here.
+func (a *API) setUserPermissions(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		WriteTemplates *bool `json:"write_templates"`
+	}
+	if err := readJSON(w, r, &body); err != nil || body.WriteTemplates == nil {
+		writeError(w, http.StatusBadRequest, "Requête illisible.")
+		return
+	}
+	id := r.PathValue("id")
+	if err := a.Store.SetUserWriteTemplates(r.Context(), id, *body.WriteTemplates); err != nil {
+		a.mapErr(w, err)
+		return
+	}
+	row, err := a.Store.UserAccount(r.Context(), id)
+	if err != nil {
+		a.mapErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, userView{ID: row.ID, Login: row.Login, Role: row.Role, TOTP: row.TOTPSecret != "", WriteTemplates: row.WriteTemplates})
 }
 
 func (a *API) createUser(w http.ResponseWriter, r *http.Request) {

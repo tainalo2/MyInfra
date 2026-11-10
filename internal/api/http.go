@@ -13,6 +13,7 @@ import (
 
 	"myinfra/internal/assistant"
 	"myinfra/internal/box"
+	"myinfra/internal/commit"
 	"myinfra/internal/store"
 	"myinfra/internal/verify"
 )
@@ -23,7 +24,10 @@ type API struct {
 	// Assistant answers under /api/assistant; nil mounts nothing. Built
 	// around the BYOK master key, a key of its own: without one it answers
 	// as unavailable.
-	Assistant    *assistant.Service
+	Assistant *assistant.Service
+	// Commit writes the assistant's chosen patches to the live template
+	// repository; nil refuses every commit with 503, after the right check.
+	Commit       *commit.Gateway
 	Verify       verify.Client
 	PublicURL    string
 	AppsDomain   string
