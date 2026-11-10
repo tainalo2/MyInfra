@@ -66,7 +66,7 @@ func TestUnavailableNoKey(t *testing.T) {
 	cfg, _ := ParseConfig([]byte(testConfig))
 	r := NewRouter(cfg)
 	start := time.Now()
-	res, err := r.Route(RouteRequest{User: "u", FunctionalContext: "template_edit", ProviderKey: ""})
+	res, err := r.Route(RouteRequest{User: "u", Role: RoleDeploy, FunctionalContext: "template_edit", ProviderKey: ""})
 	elapsed := time.Since(start)
 	if err != nil {
 		t.Fatal(err)
@@ -92,5 +92,24 @@ func TestLoadConfigFile(t *testing.T) {
 	}
 	if _, err := cfg.Get("template_edit"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A read-only role, or no role at all, is refused before the provider key
+// is even looked at: no profile, no network.
+func TestRouteRefusesReadOnlyRole(t *testing.T) {
+	cfg, _ := ParseConfig([]byte(testConfig))
+	r := NewRouter(cfg)
+	for _, role := range []string{RoleRead, "", "bogus"} {
+		_, err := r.Route(RouteRequest{User: "u", Role: role, FunctionalContext: "template_edit", ProviderKey: "sk-live"})
+		if err != ErrReadOnly {
+			t.Fatalf("role %q: err=%v, want ErrReadOnly", role, err)
+		}
+	}
+	for _, role := range []string{RoleDeploy, RoleAdmin} {
+		res, err := r.Route(RouteRequest{User: "u", Role: role, FunctionalContext: "template_edit", ProviderKey: "sk-live"})
+		if err != nil || res.AssistantUnavailable {
+			t.Fatalf("role %q: err=%v res=%+v", role, err, res)
+		}
 	}
 }

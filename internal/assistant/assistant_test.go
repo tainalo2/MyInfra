@@ -57,7 +57,7 @@ func TestChatUpdatesMeterAndNoKey(t *testing.T) {
 	defer up.Close()
 	s := newSvc(t, up.URL, "")
 	mux := http.NewServeMux()
-	s.Register(mux, nil)
+	s.Register(mux, AsRole(harness.RoleDeploy))
 	post := func(path, body string) *httptest.ResponseRecorder {
 		rr := httptest.NewRecorder()
 		mux.ServeHTTP(rr, httptest.NewRequest("POST", path, strings.NewReader(body)))
@@ -81,5 +81,38 @@ func TestChatUpdatesMeterAndNoKey(t *testing.T) {
 	}
 	if _, err := (Claude{up.URL}).Complete(context.Background(), "m", "", nil, "bad"); err == nil || strings.Contains(err.Error(), "bad\"") {
 		t.Fatalf("err %v", err)
+	}
+}
+
+// A read-only role, or a route mounted without any role, never reaches the
+// provider: 403 at the service, before the key lookup and the network.
+func TestChatRefusesReadOnlyRoleBeforeProvider(t *testing.T) {
+	hits := 0
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.Write([]byte(`{"content":[{"text":"hi"}],"usage":{"input_tokens":1,"output_tokens":1}}`))
+	}))
+	defer up.Close()
+	s := newSvc(t, up.URL, "")
+	s.Keys.Set("claude", "k")
+	chat := `{"session":"a","provider":"claude","model":"claude-sonnet","context":"template_edit","messages":[{"role":"user","content":"x"}]}`
+	for _, wrap := range []func(http.HandlerFunc) http.HandlerFunc{nil, AsRole(harness.RoleRead)} {
+		mux := http.NewServeMux()
+		s.Register(mux, wrap)
+		rr := httptest.NewRecorder()
+		mux.ServeHTTP(rr, httptest.NewRequest("POST", "/api/assistant/chat", strings.NewReader(chat)))
+		if rr.Code != 403 {
+			t.Fatalf("chat %d %s", rr.Code, rr.Body.String())
+		}
+	}
+	if hits != 0 {
+		t.Fatalf("provider called %d times for refused turns", hits)
+	}
+	mux := http.NewServeMux()
+	s.Register(mux, AsRole(harness.RoleAdmin))
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, httptest.NewRequest("POST", "/api/assistant/chat", strings.NewReader(chat)))
+	if rr.Code != 200 || hits != 1 {
+		t.Fatalf("admin chat %d hits=%d", rr.Code, hits)
 	}
 }

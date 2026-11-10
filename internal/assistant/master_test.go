@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	harness "myinfra/internal/harness-router"
 )
 
 func TestRekeyReopensWithPreviousMaster(t *testing.T) {
@@ -82,7 +84,7 @@ func TestServiceWithoutMasterKeyIsUnavailable(t *testing.T) {
 		t.Fatal("sans clé, indisponible")
 	}
 	mux := http.NewServeMux()
-	svc.Register(mux, nil)
+	svc.Register(mux, AsRole(harness.RoleDeploy))
 	call := func(method, path, body string) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, httptest.NewRequest(method, path, strings.NewReader(body)))
