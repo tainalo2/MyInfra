@@ -653,9 +653,9 @@ export function ServerCard({
             : formatPrice(server.plan.hourly, true, server.plan.currency)}
           {placeLabel(server.plan.location) ? ` · ${placeLabel(server.plan.location)}` : ""}
         </p>
-      ) : (
+      ) : server.status !== "linked" ? (
         <code className="block break-all font-mono text-[13px] text-muted">{server.joinCommand}</code>
-      )}
+      ) : null}
     </Link>
     {removal ? <div className="px-4 pb-4"><RemovalNotice job={removal} /></div> : null}
     </div>
@@ -753,7 +753,7 @@ export function ServerPage() {
   const [retrying, setRetrying] = useState(false);
   const [copied, setCopied] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const [part, setPart] = useState<"history" | "pods" | "advanced">("history");
+  const [part, setPart] = useState<"history" | "pods" | "settings" | "advanced">("history");
   const serverPoll = usePoll<Server>(id ? `/api/servers/${id}` : null, 10000);
   const { updating, transferring } = useActivity();
   const server = serverPoll.data;
@@ -830,8 +830,13 @@ export function ServerPage() {
     [text("server.uptime"), exploitation(server.createdAt, now)],
   ];
 
+  // A machine added by hand is described by the person: its provider says
+  // nothing of it.
+  const settable = !server.providerId && canDeploy;
+  // The command has done its work once the machine has joined.
+  const enrolled = server.status === "linked";
   // Pods exist once the server runs: until then, the history shows.
-  const shownPart = part === "pods" && !linked ? "history" : part;
+  const shownPart = (part === "pods" && !linked) || (part === "settings" && !settable) ? "history" : part;
   const terminal =
     linked && canDeploy ? (
       <Link to={`/serveurs/${server.id}/terminal`} className={`inline-flex min-h-11 items-center gap-2 rounded-md border border-line bg-surface px-4 py-2 sm:min-h-0 ${focus}`}>
@@ -899,20 +904,9 @@ export function ServerPage() {
           ))}
         </dl>
       )}
-      {!server.providerId && canDeploy ? (
-        <div className="mt-6 max-w-[720px]">
-          <ServerPlace
-            server={server}
-            onSaved={setServer}
-            onError={(message) => setError(message)}
-          />
-          <ServerHosting server={server} onSaved={setServer} />
-          <ServerSSHUser server={server} onSaved={setServer} />
-        </div>
-      ) : null}
-      <ReachNotice server={server} onChecked={setServer} onRemove={() => setConfirm(true)} />
+      <ReachNotice server={server} onChecked={setServer} onRemove={() => setConfirm(true)} reinstallable={settable} />
       <ServerFacts serverId={server.id} />
-      {!server.plan && server.joinCommand ? (
+      {!server.plan && server.joinCommand && !enrolled ? (
         <div className="mt-6 flex max-w-[720px] items-start gap-4">
           <code className="min-w-0 flex-1 break-all font-mono text-[13px] text-muted">{server.joinCommand}</code>
           <IconButton
@@ -974,6 +968,7 @@ export function ServerPage() {
           tabs={[
             { key: "history", label: text("nav.history") },
             ...(linked ? [{ key: "pods" as const, label: text("apps.instances") }] : []),
+            ...(settable ? [{ key: "settings" as const, label: text("nav.settings") }] : []),
             { key: "advanced", label: text("common.advanced") },
           ]}
         />
@@ -1008,6 +1003,14 @@ export function ServerPage() {
             )
           ) : null}
           {shownPart === "advanced" ? <TofuFiles path={`/api/servers/${server.id}/tofu`} /> : null}
+          {/* Mounted while hidden: what is being typed survives another tab. */}
+          {settable ? (
+            <div hidden={shownPart !== "settings"} className="max-w-[720px]">
+              <ServerPlace server={server} onSaved={setServer} onError={(message) => setError(message)} />
+              <ServerHosting server={server} onSaved={setServer} />
+              <ServerSSHUser server={server} onSaved={setServer} />
+            </div>
+          ) : null}
         </div>
       </section>
       </div>
@@ -1125,9 +1128,10 @@ function ServerPlace({ server, onSaved, onError }: { server: Server; onSaved: (s
   );
 }
 
-function ReachNotice({ server, onChecked, onRemove }: { server: Server; onChecked: (server: Server) => void; onRemove: () => void }) {
+function ReachNotice({ server, onChecked, onRemove, reinstallable }: { server: Server; onChecked: (server: Server) => void; onRemove: () => void; reinstallable: boolean }) {
   useI18n();
   const [checking, setChecking] = useState(false);
+  const [reinstalling, setReinstalling] = useState(false);
   const [error, setError] = useState("");
   if (!server.reach) return null;
   const gone = server.reach === "gone";
@@ -1142,6 +1146,19 @@ function ReachNotice({ server, onChecked, onRemove }: { server: Server; onChecke
       setError(err instanceof Error ? err.message : text("common.error"));
     } finally {
       setChecking(false);
+    }
+  }
+
+  // The server goes back to waiting for its command, which the page then shows.
+  async function reinstall() {
+    setReinstalling(true);
+    setError("");
+    try {
+      onChecked(await api<Server>(`/api/servers/${server.id}/reinstall`, { method: "POST" }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : text("common.error"));
+    } finally {
+      setReinstalling(false);
     }
   }
 
@@ -1160,6 +1177,7 @@ function ReachNotice({ server, onChecked, onRemove }: { server: Server; onChecke
           {server.providerError ? text("reach.providerError", { error: knownMessage(server.providerError) }) : text("reach.providerPresent", { provider, at: when(server.providerCheckedAt) })}
         </p>
       ) : null}
+      {!gone && reinstallable ? <p className="text-muted">{text("reach.reinstallHint")}</p> : null}
       {error ? <ErrorText>{error}</ErrorText> : null}
       <div className="flex flex-wrap gap-3">
         {gone ? (
@@ -1172,6 +1190,12 @@ function ReachNotice({ server, onChecked, onRemove }: { server: Server; onChecke
           {checking ? <Spinner /> : <Icon icon={RotateCcw} />}
           {text("reach.check")}
         </Button>
+        {!gone && reinstallable ? (
+          <Button type="button" variant="secondary" onClick={() => void reinstall()} disabled={reinstalling}>
+            {reinstalling ? <Spinner /> : <Icon icon={SquareTerminal} />}
+            {text("reach.reinstall")}
+          </Button>
+        ) : null}
       </div>
     </div>
   );

@@ -262,6 +262,7 @@ func (a *API) routes() http.Handler {
 	mux.HandleFunc("GET /api/servers/{id}/runtime", a.auth(a.serverRuntime))
 	mux.HandleFunc("GET /api/servers/{id}/terminal", a.deployAuth(a.serverTerminal))
 	mux.HandleFunc("POST /api/servers/{id}/deploy", a.deployAuth(a.serverSteady(a.retryDeploy)))
+	mux.HandleFunc("POST /api/servers/{id}/reinstall", a.deployAuth(a.serverSteady(a.reinstallServer)))
 	mux.HandleFunc("DELETE /api/servers/{id}", a.deployAuth(a.steady(a.deleteServer)))
 	mux.HandleFunc("GET /api/deployments", a.auth(a.listDeployments))
 	mux.HandleFunc("POST /api/deployments/cancel", a.deployAuth(a.cancelDeployment))

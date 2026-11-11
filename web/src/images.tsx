@@ -51,7 +51,7 @@ export function ImageEditor({ app, onChange }: { app: Application; onChange: (ne
   }
 
   return (
-    <div className="mt-4 flex flex-col gap-4">
+    <div className="flex flex-col gap-4">
       {app.rollout === "updating" ? <p className="text-warn">{text("ui.miseAJourEnCoursSi")}</p> : null}
       {app.rollout === "rolled_back" && app.rolloutDetail ? <p className="text-bad">{app.rolloutDetail}</p> : null}
       {updates.length > 0 && app.rollout !== "updating" ? (
@@ -77,7 +77,7 @@ export function ImageEditor({ app, onChange }: { app: Application; onChange: (ne
         {services.map((service) => {
           const release = releases.find((item) => item.name === service.name);
           return (
-            <li key={service.name} className="border-t border-line py-4">
+            <li key={service.name} className="border-t border-line py-4 first:border-t-0 first:pt-0">
               <div className="flex items-baseline justify-between gap-6">
                 <span>{service.name}</span>
                 <span className="text-muted">
