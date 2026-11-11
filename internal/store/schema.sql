@@ -519,3 +519,12 @@ CREATE TABLE IF NOT EXISTS template_stagings (
 );
 CREATE INDEX IF NOT EXISTS template_stagings_owner ON template_stagings (owner_id);
 CREATE INDEX IF NOT EXISTS template_stagings_expires ON template_stagings (expires_at);
+
+-- Clés BYOK des fournisseurs de l assistant, scellées par la clé maîtresse
+-- BYOK : base64(nonce || AES-256-GCM(clé)), nom du fournisseur en données
+-- associées. La chaîne est gardée telle que KeyStore.Export la donne.
+CREATE TABLE IF NOT EXISTS assistant_keys (
+    provider text PRIMARY KEY,
+    sealed text NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now()
+);

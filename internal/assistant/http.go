@@ -1,6 +1,7 @@
 package assistant
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,6 +21,19 @@ type Service struct {
 	Meter     *Meter
 	Router    *harness.Router
 	Providers map[string]Provider
+
+	// repo keeps the sealed keys at rest; nil keeps them in memory only.
+	repo KeyRepo
+	// rekeyed lists the providers New sealed again with the current master:
+	// Persist writes them back, or the rotation would be done at each start
+	// and the previous master could never be retired.
+	rekeyed []string
+}
+
+// KeyRepo keeps the sealed provider keys, in the exact form Export gives.
+type KeyRepo interface {
+	PutAssistantKey(ctx context.Context, provider, sealed string) error
+	DeleteAssistantKey(ctx context.Context, provider string) error
 }
 
 // New builds the service around the BYOK master key. With a nil master the
@@ -47,6 +61,7 @@ func New(master, previous []byte, sealed map[string]string) (*Service, error) {
 		if err != nil {
 			return nil, err
 		}
+		s.rekeyed = rekeyed
 		if len(rekeyed) > 0 {
 			slog.Info("clés BYOK rechiffrées avec la nouvelle clé maîtresse", "providers", rekeyed)
 		}
@@ -61,6 +76,23 @@ func New(master, previous []byte, sealed map[string]string) (*Service, error) {
 // Available tells whether provider keys can be kept: a BYOK master key is
 // configured.
 func (s *Service) Available() bool { return s != nil && s.Keys != nil }
+
+// Persist keeps the keys in repo from now on, and writes back the entries
+// New sealed again with the current master.
+func (s *Service) Persist(ctx context.Context, repo KeyRepo) error {
+	if !s.Available() || repo == nil {
+		return nil
+	}
+	s.repo = repo
+	sealed := s.Keys.Export()
+	for _, provider := range s.rekeyed {
+		if err := repo.PutAssistantKey(ctx, provider, sealed[provider]); err != nil {
+			return fmt.Errorf("clé BYOK %s rechiffrée non enregistrée : %w", provider, err)
+		}
+	}
+	s.rekeyed = nil
+	return nil
+}
 
 // Register mounts routes on mux under /api/assistant. Wrap auth outside if needed.
 func (s *Service) Register(mux *http.ServeMux, wrap func(http.HandlerFunc) http.HandlerFunc) {
@@ -118,6 +150,14 @@ func (s *Service) setKey(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]string{"error": "invalid key"})
 		return
 	}
+	if s.repo != nil {
+		provider := r.PathValue("provider")
+		if err := s.repo.PutAssistantKey(r.Context(), provider, s.Keys.Export()[provider]); err != nil {
+			slog.Error("clé BYOK non enregistrée", "provider", provider, "err", err)
+			writeJSON(w, 500, map[string]string{"error": "key not saved"})
+			return
+		}
+	}
 	w.WriteHeader(204)
 }
 
@@ -126,7 +166,15 @@ func (s *Service) deleteKey(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 503, map[string]string{"error": noMasterKey})
 		return
 	}
-	s.Keys.Delete(r.PathValue("provider"))
+	provider := r.PathValue("provider")
+	if s.repo != nil {
+		if err := s.repo.DeleteAssistantKey(r.Context(), provider); err != nil {
+			slog.Error("clé BYOK non supprimée", "provider", provider, "err", err)
+			writeJSON(w, 500, map[string]string{"error": "key not deleted"})
+			return
+		}
+	}
+	s.Keys.Delete(provider)
 	w.WriteHeader(204)
 }
 

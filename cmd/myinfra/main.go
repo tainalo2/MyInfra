@@ -86,15 +86,6 @@ func serve() bool {
 	if err != nil {
 		fatal("coffre", "err", err)
 	}
-	// The assistant has a master key of its own, for the users' provider
-	// keys. Missing or unreadable, it is off: MyInfra serves without it.
-	helper, err := assistant.New(byokKeys(rt))
-	if err != nil {
-		slog.Warn("assistant désactivé", "err", err)
-		helper, _ = assistant.New(nil, nil, nil)
-	} else if !helper.Available() {
-		slog.Warn("assistant désactivé : clé maîtresse BYOK absente ou illisible (MYINFRA_BYOK_MASTER_KEY)")
-	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), shutdownSignals()...)
 	defer stop()
@@ -104,6 +95,18 @@ func serve() bool {
 		fatal("base", "err", err)
 	}
 	defer db.Close()
+
+	// The assistant has a master key of its own, for the users' provider
+	// keys. Missing or unreadable, it is off: MyInfra serves without it.
+	helper, err := assistant.New(byokKeys(ctx, rt, db))
+	if err != nil {
+		slog.Warn("assistant désactivé", "err", err)
+		helper, _ = assistant.New(nil, nil, nil)
+	} else if !helper.Available() {
+		slog.Warn("assistant désactivé : clé maîtresse BYOK absente ou illisible (MYINFRA_BYOK_MASTER_KEY)")
+	} else if err := helper.Persist(ctx, db); err != nil {
+		slog.Warn("clés BYOK rechiffrées non enregistrées, rotation refaite au prochain démarrage", "err", err)
+	}
 
 	publicURL := os.Getenv("MYINFRA_PUBLIC_URL")
 	if publicURL == "" {
@@ -246,9 +249,9 @@ func masterKey() ([]byte, error) {
 
 // byokKeys resolves the BYOK master key, and the one it replaces. A local
 // copy keeps it in its folder, next to master.key; a server copy takes it
-// from MYINFRA_BYOK_MASTER_KEY only. The sealed entries come with the
-// store once provider keys are kept in the database.
-func byokKeys(rt *boot.Runtime) (master, previous []byte, sealed map[string]string) {
+// from MYINFRA_BYOK_MASTER_KEY only. The sealed entries are those kept in
+// the database, as KeyStore.Export gave them.
+func byokKeys(ctx context.Context, rt *boot.Runtime, db *store.Store) (master, previous []byte, sealed map[string]string) {
 	home := ""
 	if rt.Local {
 		home, _ = boot.Home()
@@ -258,7 +261,15 @@ func byokKeys(rt *boot.Runtime) (master, previous []byte, sealed map[string]stri
 		slog.Warn("clé maîtresse BYOK illisible, assistant désactivé", "err", err)
 		return nil, nil, nil
 	}
-	return keys.Current, keys.Previous, nil
+	if db == nil {
+		return keys.Current, keys.Previous, nil
+	}
+	sealed, err = db.AssistantKeys(ctx)
+	if err != nil {
+		slog.Warn("clés BYOK enregistrées illisibles", "err", err)
+		sealed = nil
+	}
+	return keys.Current, keys.Previous, sealed
 }
 
 // fatal logs the error and ends the process. Opened by a double click, it

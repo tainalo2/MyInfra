@@ -76,11 +76,14 @@ forme à l'identique : c'est ce que lit `Rekey`. Ce format est figé avant la
 v0.1.0 ; le changer après imposerait un rechiffrement de toutes les clés
 stockées.
 
-## Limite connue
+## Persistance
 
-À ce jour les entrées scellées vivent en mémoire (`KeyStore`) : elles sont
-perdues au redémarrage, et la rotation au démarrage ne s'applique qu'aux
-entrées que la persistance fournira. La persistance en base (table dédiée,
-entrées au format ci-dessus, chargées via `Import` au démarrage) est un
-ticket de suite ; le contrat de clé, de rotation et de mode dégradé décrit
-ici ne change pas avec elle.
+Les entrées scellées sont gardées dans la table `assistant_keys`
+(`provider`, `sealed`, `updated_at`), telles que `KeyStore.Export` les donne.
+Au démarrage elles sont chargées via `Import` ; si
+`MYINFRA_BYOK_MASTER_KEY_PREVIOUS` est posée, `Rekey` les rechiffre et les
+entrées rechiffrées sont **réécrites en base** aussitôt. Une fois ce
+démarrage passé, la variable `…_PREVIOUS` peut être retirée. Chaque saisie
+ou suppression d'une clé par l'interface est écrite en base avant de
+répondre (500 si l'écriture échoue ; une suppression non écrite garde la
+clé).
