@@ -85,6 +85,22 @@ func (s *Store) MarkReach(ctx context.Context, id string, answered bool) error {
 	return err
 }
 
+// ReopenServer takes a linked machine back to waiting for its command, with
+// its steps to do again: what was seen of it no longer holds.
+func (s *Store) ReopenServer(ctx context.Context, ownerID, id string, steps []byte) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE servers SET status = 'pending', deploy = $3
+		WHERE id = $1 AND owner_id = $2 AND status = 'linked'`, id, ownerID, string(steps))
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	_, err = s.pool.Exec(ctx, `DELETE FROM server_health WHERE server_id = $1`, id)
+	return err
+}
+
 // MarkProvider records what the provider said of a server: present, gone,
 // or, with a problem, nothing new.
 func (s *Store) MarkProvider(ctx context.Context, id, state, problem string) error {

@@ -1,10 +1,10 @@
-import { FormEvent, useEffect, useState } from "react";
-import { ConfirmDialog, Sheet, Spinner, StatusBadge, Steps, appHealth, useToast } from "./kit";
+import { FormEvent, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ConfirmDialog, Sheet, Spinner, StatusBadge, Steps, Tabs, appHealth, useToast, useWide } from "./kit";
 import { usePoll } from "./poll";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ChevronDown, ChevronUp, Copy, ExternalLink, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy, ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
 import { api, type AppRuntime, type AppService, type Application, type CatalogueCard, type CatalogueVersions, type Cluster, type Destruction, type DnsZone, type PackageRow, type PodRuntime, type Server, fillAddress, followsAddress } from "./api";
-import { PlanPanel, appPlan, serviceOfPod } from "./plan";
+import { ChosenName, PlanLinks, PlanPanel, appPlan, serviceOfPod, underPlan } from "./plan";
 import { localizeCard } from "./catalogue-copy";
 import { knownMessage, text, type MsgKey } from "./i18n";
 import { Code } from "./code-lazy";
@@ -19,11 +19,10 @@ import { useSession } from "./session";
 import { AppSecretLinks } from "./secrets";
 import { PodActions } from "./pods";
 import { LocalImagePicker } from "./localimages";
-import { NameList, namesOf, publicServices, type AppName } from "./names";
+import { NameList, NameRow, namesOf, publicServices, type AppName } from "./names";
 import { ImageOrigin } from "./registries";
-import { TofuFiles } from "./tofu";
 import { AppBackups } from "./backups";
-import { ActionsMenu, Button, ErrorText, Field, Fold, Group, Icon, IconButton, Input, LoadingLines, MenuItem, PageTitle, SectionTitle, Select, TextButton, focus, podFailed, podHealth, statusLabel, useTrail } from "./ui";
+import { ActionsMenu, Button, ErrorText, Field, Group, Icon, IconButton, Input, LoadingLines, MenuItem, PageTitle, Select, TextButton, focus, podFailed, podHealth, statusLabel, useTrail } from "./ui";
 
 type RedundancyPreview = {
   plan: { scaled: string[]; failover: string[]; database: string[]; alone: string[] };
@@ -775,6 +774,259 @@ function PlanDetail({ app, pods, selected }: { app: Application; pods: PodRuntim
   return null;
 }
 
+// AppPart is what one tab of the application shows.
+function AppPart({ on, children }: { on: boolean; children: ReactNode }) {
+  return (
+    <div role="tabpanel" hidden={!on}>
+      {children}
+    </div>
+  );
+}
+
+function AppPods({ appId, pods, runtime }: { appId: string; pods: PodRuntime[]; runtime: AppRuntime | null }) {
+  if (!runtime) return <LoadingLines lines={2} label={text("apps.instances")} />;
+  if (pods.length === 0) return <p className="text-muted">{runtime.measured ? text("common.noPod") : text("common.noMeasure")}</p>;
+  return (
+    <ul className="flex flex-col">
+      {pods.map((pod) => {
+        const state = podHealth(pod);
+        return (
+          <li key={pod.name} className="border-t border-line py-4 first:border-t-0 first:pt-0">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+              <span className="break-all font-mono text-[13px]">{pod.name}</span>
+              <span className={state.tone}>{state.text}</span>
+            </div>
+            <p className="mt-1 text-muted">
+              {pod.server} · {podCpu(pod.cpu)} · {size(pod.memory)} · {size(pod.disk)}
+            </p>
+            <PodActions appId={appId} name={pod.name} failed={podFailed(pod)} />
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+const sameName = (a: AppName, b: AppName) => a.subdomain === b.subdomain && a.zone === b.zone && (a.service ?? "") === (b.service ?? "");
+const hostOf = (name: AppName) => (name.subdomain ? `${name.subdomain}.${name.zone}` : name.zone);
+
+// NameEditor adds or changes one address, in its place in the list. The server
+// takes the whole list and drops what is missing from it: every other address
+// goes with it as it is.
+function NameEditor({
+  app,
+  from,
+  service,
+  zones,
+  services,
+  locked,
+  onClose,
+  onSaved,
+}: {
+  app: Application;
+  // from is the address being changed; without it, a new one.
+  from?: AppName;
+  // service is what a new address leads to: the one the page is showing.
+  service?: string;
+  zones: DnsZone[];
+  services: ReturnType<typeof publicServices>;
+  locked: boolean;
+  onClose: () => void;
+  onSaved: (app: Application) => void;
+}) {
+  const [name, setName] = useState<AppName>(() => from ?? { subdomain: "", zone: zones[0]?.name ?? "", ...(service ? { service } : {}) });
+  const [removing, setRemoving] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const list = namesOf(app.domains);
+  const index = from ? list.findIndex((item) => sameName(item, from)) : list.length;
+  const named = name.zone !== "" && (name.subdomain.trim() !== "" || from?.subdomain === "");
+  const moved = Boolean(from) && hostOf(name) !== hostOf(from!);
+
+  async function send(names: AppName[]) {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      onSaved(await api<Application>(`/api/applications/${app.id}/names`, { method: "PUT", body: JSON.stringify({ names }) }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : text("common.error"));
+      setBusy(false);
+    }
+  }
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!named || locked) return;
+    void send(from ? list.map((item) => (sameName(item, from) ? name : item)) : [...list, name]);
+  }
+
+  return (
+    <form
+      onSubmit={submit}
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && !busy) onClose();
+      }}
+      className="flex flex-col gap-3"
+    >
+      {removing ? (
+        <p className="text-warn">{text("names.removing", { names: hostOf(from!) })}</p>
+      ) : (
+        <>
+          <NameRow item={name} index={index} zones={zones} onChange={(next) => setName((current) => ({ ...current, ...next }))} services={services} autoFocus />
+          {moved ? <p className="text-warn">{text("names.removing", { names: hostOf(from!) })}</p> : null}
+          <p className="text-[13px] text-faint">{text("names.hint")}</p>
+        </>
+      )}
+      {error ? <ErrorText>{error}</ErrorText> : null}
+      <div className="flex flex-wrap items-center gap-4">
+        {removing ? (
+          <Button type="button" variant="danger" disabled={busy || locked} onClick={() => void send(list.filter((item) => !sameName(item, from!)))}>
+            {busy ? <Spinner /> : null}
+            {text("common.remove")}
+          </Button>
+        ) : (
+          <Button type="submit" disabled={busy || locked || !named || (from ? sameName(name, from) : false)}>
+            {busy ? <Spinner /> : null}
+            {text("common.save")}
+          </Button>
+        )}
+        <TextButton type="button" onClick={() => (removing ? setRemoving(false) : onClose())} disabled={busy}>
+          {text("common.cancel")}
+        </TextButton>
+        {from && !removing ? (
+          <span className="ml-auto">
+            <TextButton type="button" tone="danger" onClick={() => setRemoving(true)} disabled={busy}>
+              <Icon icon={Trash2} />
+              {text("common.remove")}
+            </TextButton>
+          </span>
+        ) : null}
+      </div>
+    </form>
+  );
+}
+
+function AppAddresses({
+  app,
+  domains,
+  publics,
+  service,
+  editable,
+  locked,
+  onSaved,
+}: {
+  app: Application;
+  domains: NonNullable<Application["domains"]>;
+  publics: ReturnType<typeof publicServices>;
+  service?: string;
+  editable: boolean;
+  locked: boolean;
+  onSaved: (app: Application) => void;
+}) {
+  const [copied, setCopied] = useState("");
+  // The address being changed, by its hostname; "" is a new one.
+  const [editing, setEditing] = useState<string | null>(null);
+  const [zones, setZones] = useState<DnsZone[] | null>(null);
+  const [zonesError, setZonesError] = useState("");
+
+  async function copy(record: string) {
+    await navigator.clipboard.writeText(record);
+    setCopied(record);
+  }
+
+  function edit(hostname: string) {
+    setEditing(hostname);
+    if (zones) return;
+    api<DnsZone[]>("/api/dns/zones")
+      .then(setZones)
+      .catch((err) => {
+        setZones([]);
+        setZonesError(err instanceof Error ? err.message : text("common.error"));
+      });
+  }
+
+  function editor(from?: AppName) {
+    if (zonesError) return <ErrorText>{zonesError}</ErrorText>;
+    if (zones === null) return <LoadingLines lines={2} label={text("apps.domains")} />;
+    if (zones.length === 0) {
+      return (
+        <div className="flex flex-wrap items-center gap-4">
+          <p className="text-muted">
+            {text("apps.noDomain")}{" "}
+            <Link to="/dns" className="text-ink underline">
+              {text("apps.linkDns")}
+            </Link>
+          </p>
+          <TextButton type="button" onClick={() => setEditing(null)}>
+            {text("common.cancel")}
+          </TextButton>
+        </div>
+      );
+    }
+    return (
+      <NameEditor
+        key={editing}
+        app={app}
+        from={from}
+        service={service}
+        zones={zones}
+        services={publicServices(app.services, app.domains)}
+        locked={locked}
+        onClose={() => setEditing(null)}
+        onSaved={(next) => {
+          setEditing(null);
+          onSaved(next);
+        }}
+      />
+    );
+  }
+
+  return (
+    <>
+      {editable ? (
+        <div className="mb-2 flex justify-end">
+          <IconButton type="button" icon={Plus} label={text("field.addName")} onClick={() => edit("")} disabled={locked} />
+        </div>
+      ) : null}
+      <ul className="flex flex-col">
+        {domains.length === 0 && editing !== "" ? <li className="py-4 text-muted first:pt-0">{text("names.none")}</li> : null}
+        {domains.map((domain) => (
+          <li key={domain.hostname} className="border-t border-line py-4 first:border-t-0 first:pt-0">
+            {editing === domain.hostname ? (
+              editor(namesOf([domain])[0])
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1">
+                  <span className="flex min-w-0 flex-wrap items-baseline gap-x-3">
+                    <a href={`https://${domain.hostname}`} target="_blank" rel="noreferrer" className="break-all font-mono text-[13px] underline">
+                      {domain.hostname}
+                    </a>
+                    {publics.others.length > 0 ? <span className="text-[13px] text-muted">{domain.service || publics.main}</span> : null}
+                  </span>
+                  <span className="flex items-center gap-4">
+                    <StatusBadge status={domain.status} />
+                    {editable && domain.kind === "custom" ? <IconButton type="button" icon={Pencil} label={`${text("names.edit")} ${domain.hostname}`} onClick={() => edit(domain.hostname)} disabled={locked} /> : null}
+                  </span>
+                </div>
+                {domain.detail ? <p className={`mt-2 ${domain.status === "ready" ? "text-muted" : "text-bad"}`}>{domain.detail}</p> : null}
+                {domain.record ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-4">
+                    <code className="break-all font-mono text-[13px] text-muted">{domain.record}</code>
+                    <IconButton icon={Copy} label={text("common.copy")} onClick={() => copy(domain.record!)} />
+                    {copied === domain.record ? <span className="text-muted">{text("common.copied")}</span> : null}
+                  </div>
+                ) : null}
+              </>
+            )}
+          </li>
+        ))}
+        {editing === "" ? <li className="border-t border-line py-4 first:border-t-0 first:pt-0">{editor()}</li> : null}
+      </ul>
+    </>
+  );
+}
+
 export function ApplicationPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -784,13 +1036,16 @@ export function ApplicationPage() {
   const setApp = appPoll.setData;
   const runtimePoll = usePoll<AppRuntime>(id ? `/api/applications/${id}/runtime` : null, 8000);
   const runtime = runtimePoll.data ?? (runtimePoll.error ? emptyRuntime : null);
-  const [copied, setCopied] = useState("");
   const [confirm, setConfirm] = useState<"" | "delete" | "pause" | "restart">("");
   const [pausing, setPausing] = useState(false);
-  const [editingNames, setEditingNames] = useState(false);
   const [planned, setPlanned] = useState<string | null>(null);
+  // The part asked for; until then the page chooses, pods first if one fails.
+  const [part, setPart] = useState<string | null>(null);
+  const wide = useWide();
+  const nav = useRef<HTMLDivElement>(null);
+  const panels = useRef<HTMLDivElement>(null);
   const { updating, transferring } = useActivity();
-  const { canDeploy, canAdmin } = useSession();
+  const { canDeploy } = useSession();
 
   // A new version is followed closely until it answers.
   useEffect(() => {
@@ -799,10 +1054,13 @@ export function ApplicationPage() {
     return () => window.clearInterval(timer);
   }, [app?.rollout, appPoll.reload]);
 
-  async function copy(record: string) {
-    await navigator.clipboard.writeText(record);
-    setCopied(record);
-  }
+  // Another part starts at its top, right under the nav, however far the one
+  // before was scrolled.
+  useLayoutEffect(() => {
+    if (!nav.current || !panels.current) return;
+    const past = nav.current.getBoundingClientRect().bottom - panels.current.getBoundingClientRect().top;
+    if (past > 0) nav.current.closest("main")?.scrollBy({ top: -past });
+  }, [part, planned]);
 
   if (appPoll.error && !app) return <ErrorText>{appPoll.error}</ErrorText>;
   if (!app) return <LoadingLines lines={4} />;
@@ -855,19 +1113,59 @@ export function ApplicationPage() {
   // once it is over; it can still be removed.
   const locked = app.rollout === "updating" || updating(app.serverId, app.clusterId) || transferring;
   const mutable = canDeploy && !app.guarded;
+  const planShown = (app.services ?? []).length > 0 && !app.guarded;
+  const model = appPlan(app, runtime);
+  // On a phone, the chosen element opens in its row of the list.
+  const element = (wide && planShown && model.nodes.find((node) => node.key === planned)) || null;
+  const serviceName = element?.kind === "service" ? element.key.slice(4) : "";
+  const entry = element?.kind === "internet" || element?.kind === "proxy";
+  const shownPods = serviceName ? pods.filter((pod) => serviceOfPod(app.services ?? [], pod.name) === serviceName) : pods;
+  const shownDomains = entry
+    ? (app.domains ?? []).filter((domain) => domain.kind === "custom" || domain.kind === "default")
+    : serviceName
+      ? listedDomains.filter((domain) => (domain.service || publics.main) === serviceName)
+      : listedDomains;
+  const shownExposed = serviceName ? exposed.filter((item) => item.service === serviceName) : exposed;
+  const podsPart = { key: "pods", label: `${text("apps.instances")} · ${shownPods.length}`, mark: shownPods.some((pod) => podFailed(pod)) };
+  const addressesPart = { key: "addresses", label: text("apps.addresses") };
+  const exposedPart = { key: "exposed", label: text("apps.exposed") };
+  const backupsPart = { key: "backups", label: text("backup.title") };
+  const linksPart = { key: "links", label: text("plan.part.links") };
+  // The parts of the page follow the element chosen in the plan, as in a
+  // template; without one, those of the whole application.
+  const parts: { key: string; label: string; mark?: boolean }[] = !element
+    ? [
+        { key: "services", label: text("field.services") },
+        podsPart,
+        ...((app.domains ?? []).length > 0 || mutable ? [addressesPart] : []),
+        ...(exposed.length > 0 ? [exposedPart] : []),
+        ...(mutable ? [backupsPart, { key: "variables", label: text("app.variables") }, { key: "secrets", label: text("nav.secrets") }] : []),
+      ]
+    : serviceName
+      ? [podsPart, ...(shownDomains.length > 0 ? [addressesPart] : []), ...(shownExposed.length > 0 ? [exposedPart] : []), linksPart]
+      : entry
+        ? [addressesPart, ...(element.kind === "internet" && exposed.length > 0 ? [exposedPart] : []), linksPart]
+        : element.kind === "backup" && mutable
+          ? [backupsPart, linksPart]
+          : [linksPart];
+  // A part common to two elements stays open from one to the other.
+  const wanted = part ?? (failing ? "pods" : "services");
+  const shown = (parts.find((item) => item.key === wanted) ?? parts[0]).key;
 
-  // The head of the page: the application with its actions on the right,
-  // then its state and where it answers, and its measures beside them on a
-  // wide screen. Below the plan, the settings keep the width of a form.
+  // The head of the page: the state of the application and where it answers,
+  // its measures beside them on a wide screen. The menu names it. Its actions
+  // sit on the line of the nav, in sight while the page scrolls; a phone keeps
+  // them under its title, the nav staying low. Below the plan, the settings
+  // keep the width of a form.
   const actions = mutable ? (
-    <div className="flex flex-wrap items-center gap-3">
+    <div className="flex shrink-0 flex-wrap items-center gap-3 md:flex-nowrap">
       {address ? (
-        <a href={`https://${address}`} target="_blank" rel="noreferrer" className={`inline-flex min-h-11 items-center gap-2 rounded-md bg-ink px-4 py-2 text-canvas sm:min-h-0 ${focus}`}>
+        <a href={`https://${address}`} target="_blank" rel="noreferrer" className={`inline-flex min-h-11 items-center gap-2 rounded-md bg-ink px-4 py-2 text-canvas sm:min-h-0 sm:py-1 ${focus}`}>
           <Icon icon={ExternalLink} />
           {text("apps.open")}
         </a>
       ) : null}
-      <Button type="button" variant="secondary" onClick={() => (app.paused ? void setPaused(false) : setConfirm("pause"))} disabled={pausing || locked}>
+      <Button type="button" variant="secondary" className="sm:py-1!" onClick={() => (app.paused ? void setPaused(false) : setConfirm("pause"))} disabled={pausing || locked}>
         {pausing ? <Spinner /> : null}
         {app.paused ? text("home.resume") : text("apps.pauseAction")}
       </Button>
@@ -884,9 +1182,9 @@ export function ApplicationPage() {
 
   return (
     <div>
-      <PageTitle title={app.name} mark={<AppLogo slug={app.logo ?? ""} name={app.name} size={48} />} action={actions} />
-      <div className="flex flex-col gap-6 md:-mt-3 xl:flex-row xl:items-center xl:justify-between xl:gap-12">
-        <div className="flex min-w-0 flex-col gap-1.5 md:pl-[60px]">
+      <PageTitle inTree title={app.name} mark={<AppLogo slug={app.logo ?? ""} name={app.name} size={48} />} action={wide ? undefined : actions} />
+      <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between xl:gap-12">
+        <div className="flex min-w-0 flex-col gap-1.5">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <StatusBadge status={health} />
             {address ? (
@@ -907,19 +1205,40 @@ export function ApplicationPage() {
       </div>
       {mutable ? <UpdateLock locked={locked && !transferring} /> : null}
       {mutable ? <AppUpdateNotice app={app} onStarted={() => void appPoll.reload()} /> : null}
-      {(app.services ?? []).length > 0 && !app.guarded ? (
-        <>
-          <div className="mt-8" />
-          <PlanPanel model={appPlan(app, runtime)} label={text("plan.label")} whole={text("plan.whole")} selected={planned} onSelect={setPlanned}>
-            <PlanDetail app={app} pods={pods} selected={planned} />
-          </PlanPanel>
-        </>
+      <div className="mt-8" />
+      {planShown ? (
+        <PlanPanel model={model} label={text("plan.label")} whole={text("plan.whole")} named={false} selected={planned} onSelect={setPlanned}>
+          {wide ? null : <PlanDetail app={app} pods={pods} selected={planned} />}
+        </PlanPanel>
       ) : null}
-      <div className="max-w-[720px]">
-        <section className="mt-8">
-          <SectionTitle>{text("field.services")}</SectionTitle>
+      {/* On a phone the plan is a list: the nav stays under the top bar. */}
+      <div ref={nav} className={`${underPlan} mt-2 max-md:sticky max-md:top-12 max-md:z-[9] max-md:bg-canvas`}>
+        {element && parts.length > 1 ? (
+          <div className="py-1">
+            <ChosenName node={element} />
+          </div>
+        ) : null}
+        <div className="flex items-end gap-4 border-b border-line">
+          <div className="-mb-px min-w-0 flex-1">
+            {parts.length > 1 ? (
+              <Tabs label={text("tpl.part.parts")} active={shown} onChange={setPart} small={wide} tabs={parts} />
+            ) : element ? (
+              <div className="py-1">
+                <ChosenName node={element} />
+              </div>
+            ) : null}
+          </div>
+          {wide && actions ? <div className="pb-1">{actions}</div> : null}
+        </div>
+      </div>
+      {/* However short a part, the page keeps its height under the nav: the
+          plan stays folded and the nav in its place from one part to another. */}
+      <div ref={panels} className="mt-4 max-w-[720px] md:min-h-[calc(100dvh-var(--plan-bottom,0px)-5rem)]">
+        {/* A part that holds work under way stays mounted: an image or an
+            address being typed, a restore being sent. */}
+        <AppPart on={shown === "services"}>
           {app.guarded ? (
-            <div className="mt-4 flex flex-col gap-3">
+            <div className="flex flex-col gap-3">
               <p className="text-muted">{text("apps.selfCopies")}</p>
               {(app.services ?? []).map((service) => (
                 <p key={service.name} className="font-mono text-[13px]">
@@ -929,7 +1248,7 @@ export function ApplicationPage() {
             </div>
           ) : app.services && app.services.length > 0 ? (
             mutable ? <ImageEditor app={app} onChange={setApp} /> : (
-              <ul className="mt-4 flex flex-col gap-2">
+              <ul className="flex flex-col gap-2">
                 {app.services.map((service) => (
                   <li key={service.name} className="font-mono text-[13px] text-muted">
                     {service.name} · {service.image}
@@ -938,93 +1257,64 @@ export function ApplicationPage() {
               </ul>
             )
           ) : (
-            <p className="mt-4 text-muted">{text("apps.noService")}</p>
+            <p className="text-muted">{text("apps.noService")}</p>
           )}
-        </section>
-        <div className="mt-8">
-          <Fold title={text("apps.instances")} defaultOpen={failing}>
-            <ul className="flex flex-col">
-              {pods.map((pod) => {
-                const state = podHealth(pod);
-                return (
-                  <li key={pod.name} className="border-t border-line py-4">
-                    <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-                      <span className="break-all font-mono text-[13px]">{pod.name}</span>
-                      <span className={state.tone}>{state.text}</span>
-                    </div>
-                    <p className="mt-1 text-muted">
-                      {pod.server} · {podCpu(pod.cpu)} · {size(pod.memory)} · {size(pod.disk)}
-                    </p>
-                    <PodActions appId={app.id} name={pod.name} failed={podFailed(pod)} />
-                  </li>
-                );
-              })}
-            </ul>
-            {!runtime ? <LoadingLines lines={2} label={text("apps.instances")} /> : pods.length === 0 ? <p className="text-muted">{runtime.measured ? text("common.noPod") : text("common.noMeasure")}</p> : null}
-          </Fold>
-        </div>
-        {(app.domains && app.domains.length > 0) || mutable ? (
-          <section className="mt-8">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <SectionTitle>{text("apps.addresses")}</SectionTitle>
-              {mutable ? (
-                <TextButton type="button" onClick={() => setEditingNames(true)} disabled={locked}>
-                  {text("names.edit")}
-                </TextButton>
-              ) : null}
-            </div>
-            <ul className="mt-2 flex flex-col">
-              {listedDomains.length === 0 ? (
-                <li className="border-t border-line py-4 text-muted">{text("names.none")}</li>
-              ) : null}
-              {listedDomains.map((domain) => (
-                <li key={domain.hostname} className="border-t border-line py-4">
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-                    <span className="flex min-w-0 flex-wrap items-baseline gap-x-3">
-                      <a href={`https://${domain.hostname}`} target="_blank" rel="noreferrer" className="break-all font-mono text-[13px] underline">
-                        {domain.hostname}
-                      </a>
-                      {publics.others.length > 0 ? <span className="text-[13px] text-muted">{domain.service || publics.main}</span> : null}
-                    </span>
-                    <StatusBadge status={domain.status} />
-                  </div>
-                  {domain.detail ? <p className={`mt-2 ${domain.status === "ready" ? "text-muted" : "text-bad"}`}>{domain.detail}</p> : null}
-                  {domain.record ? (
-                    <div className="mt-3 flex flex-wrap items-center gap-4">
-                      <code className="break-all font-mono text-[13px] text-muted">{domain.record}</code>
-                      <IconButton icon={Copy} label={text("common.copy")} onClick={() => copy(domain.record!)} />
-                      {copied === domain.record ? <span className="text-muted">{text("common.copied")}</span> : null}
-                    </div>
-                  ) : null}
-                  {domain.zone ? (
-                    <div className="mt-3">
-                      <Fold title={text("common.advanced")}>
-                        <TofuFiles path={`/api/dns/${domain.hostname}/tofu`} readOnly={!canAdmin} />
-                      </Fold>
-                    </div>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          </section>
+        </AppPart>
+        {mutable ? (
+          <AppPart on={shown === "backups"}>
+            <AppBackups app={app} locked={locked} />
+          </AppPart>
         ) : null}
-        {exposed.length > 0 ? (
-          <section className="mt-8">
-            <SectionTitle>{text("apps.exposed")}</SectionTitle>
-            <p className="mt-2 text-muted">{text("apps.exposedHint")}</p>
+        {shown === "pods" ? (
+          <AppPart on>
+            {serviceName ? <p className="mb-3 break-all font-mono text-[13px] text-muted">{(app.services ?? []).find((svc) => svc.name === serviceName)?.image.replace(/@sha256:[a-f0-9]+$/, "")}</p> : null}
+            <AppPods appId={app.id} pods={shownPods} runtime={runtime} />
+          </AppPart>
+        ) : null}
+        {mutable || shown === "addresses" ? (
+          <AppPart on={shown === "addresses"}>
+            <AppAddresses
+              app={app}
+              domains={shownDomains}
+              publics={publics}
+              service={publics.others.includes(serviceName) ? serviceName : undefined}
+              editable={mutable}
+              locked={locked}
+              onSaved={(next) => {
+                setApp(next);
+                toast(text("names.saved", { name: next.name }));
+              }}
+            />
+          </AppPart>
+        ) : null}
+        {shown === "exposed" ? (
+          <AppPart on>
+            <p className="text-muted">{text("apps.exposedHint")}</p>
             <ul className="mt-2 flex flex-col">
-              {exposed.map((item) => (
+              {shownExposed.map((item) => (
                 <li key={item.service} className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-t border-line py-4">
                   <span className="font-mono text-[13px]">{item.ports.join(", ")}</span>
                   <span className="text-[13px] text-muted">{item.service}</span>
                 </li>
               ))}
             </ul>
-          </section>
+          </AppPart>
         ) : null}
-        {mutable ? <AppBackups app={app} locked={locked} /> : null}
-        {mutable ? <AppVariables app={app} onSaved={() => void appPoll.reload()} /> : null}
-        {mutable ? <AppSecretLinks appId={app.id} /> : null}
+        {shown === "variables" ? (
+          <AppPart on>
+            <AppVariables app={app} onSaved={() => void appPoll.reload()} />
+          </AppPart>
+        ) : null}
+        {shown === "secrets" ? (
+          <AppPart on>
+            <AppSecretLinks appId={app.id} />
+          </AppPart>
+        ) : null}
+        {shown === "links" && element ? (
+          <AppPart on>
+            <PlanLinks model={model} chosen={element.key} onSelect={setPlanned} />
+          </AppPart>
+        ) : null}
         {app.guarded && canDeploy ? (
           <div className="mt-8">
             <TextButton type="button" tone="danger" onClick={() => setConfirm("delete")}>
@@ -1034,17 +1324,6 @@ export function ApplicationPage() {
           </div>
         ) : null}
       </div>
-      {editingNames ? (
-        <NamesSheet
-          app={app}
-          onClose={() => setEditingNames(false)}
-          onSaved={(next) => {
-            setApp(next);
-            setEditingNames(false);
-            toast(text("names.saved", { name: next.name }));
-          }}
-        />
-      ) : null}
       {confirm === "restart" ? (
         <ConfirmDialog
           title={text("apps.restartTitle", { name: app.name })}
@@ -1106,35 +1385,33 @@ function AppVariables({ app, onSaved }: { app: Application; onSaved: () => void 
   }
 
   return (
-    <div className="mt-8">
-      <Fold title={text("app.variables")}>
-        <ul className="flex flex-col">
-          {entries.map(([name, value]) => (
-            <li key={name} className="flex flex-wrap items-center justify-between gap-6 border-t border-line py-3">
-              <span className="font-mono text-[13px]">{name}</span>
-              <span className="flex min-w-0 items-center gap-3">
-                <span className="truncate font-mono text-[13px] text-muted" title={followsAddress(value) ? value : undefined}>
-                  {fillAddress(shown[name] ?? value, app.address)}
-                </span>
-                {followsAddress(value) ? <span className="shrink-0 rounded border border-line px-1.5 text-[13px] text-faint">{text("address.follows")}</span> : null}
-                {canAdmin && value === masked && shown[name] === undefined ? (
-                  <TextButton type="button" onClick={() => reveal(name)}>
-                    {text("app.reveal")}
-                  </TextButton>
-                ) : null}
+    <>
+      <ul className="flex flex-col">
+        {entries.map(([name, value]) => (
+          <li key={name} className="flex flex-wrap items-center justify-between gap-6 border-t border-line py-3 first:border-t-0 first:pt-0">
+            <span className="font-mono text-[13px]">{name}</span>
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="truncate font-mono text-[13px] text-muted" title={followsAddress(value) ? value : undefined}>
+                {fillAddress(shown[name] ?? value, app.address)}
               </span>
-            </li>
-          ))}
-        </ul>
-        {entries.length === 0 ? <p className="text-muted">{text("app.noVariables")}</p> : null}
-        {error ? <ErrorText>{error}</ErrorText> : null}
-        <p className="mt-3 text-faint">{text("app.variablesHint")}</p>
-        <div className="mt-4">
-          <Button type="button" variant="secondary" onClick={() => setEditing(true)} disabled={app.rollout === "updating"}>
-            {text("app.editVariables")}
-          </Button>
-        </div>
-      </Fold>
+              {followsAddress(value) ? <span className="shrink-0 rounded border border-line px-1.5 text-[13px] text-faint">{text("address.follows")}</span> : null}
+              {canAdmin && value === masked && shown[name] === undefined ? (
+                <TextButton type="button" onClick={() => reveal(name)}>
+                  {text("app.reveal")}
+                </TextButton>
+              ) : null}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {entries.length === 0 ? <p className="text-muted">{text("app.noVariables")}</p> : null}
+      {error ? <ErrorText>{error}</ErrorText> : null}
+      <p className="mt-3 text-faint">{text("app.variablesHint")}</p>
+      <div className="mt-4">
+        <Button type="button" variant="secondary" onClick={() => setEditing(true)} disabled={app.rollout === "updating"}>
+          {text("app.editVariables")}
+        </Button>
+      </div>
       {editing ? (
         <VariablesSheet
           app={app}
@@ -1145,7 +1422,7 @@ function AppVariables({ app, onSaved }: { app: Application; onSaved: () => void 
           }}
         />
       ) : null}
-    </div>
+    </>
   );
 }
 
@@ -1200,74 +1477,6 @@ function VariablesSheet({ app, onClose, onSaved }: { app: Application; onClose: 
           <Button type="submit" disabled={busy}>
             {busy ? <Spinner /> : null}
             {text("app.saveVariables")}
-          </Button>
-          <TextButton type="button" onClick={onClose} disabled={busy}>
-            {text("common.cancel")}
-          </TextButton>
-        </div>
-      </form>
-    </Sheet>
-  );
-}
-
-// NamesSheet changes the addresses of an application while it runs: the names
-// kept are not touched, a new one answers once its record and certificate are
-// there, a name taken away stops answering.
-function NamesSheet({ app, onClose, onSaved }: { app: Application; onClose: () => void; onSaved: (app: Application) => void }) {
-  const [names, setNames] = useState<AppName[]>(() => namesOf(app.domains));
-  const [zones, setZones] = useState<DnsZone[] | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const before = namesOf(app.domains);
-  const removed = before.filter((old) => !names.some((name) => name.subdomain === old.subdomain && name.zone === old.zone && (name.service ?? "") === (old.service ?? "")));
-
-  useEffect(() => {
-    api<DnsZone[]>("/api/dns/zones")
-      .then(setZones)
-      .catch((err) => {
-        setZones([]);
-        setError(err instanceof Error ? err.message : text("common.error"));
-      });
-  }, []);
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      const kept = names.filter((name) => name.zone !== "" && (name.subdomain.trim() !== "" || before.some((old) => old.zone === name.zone && old.subdomain === "")));
-      onSaved(await api<Application>(`/api/applications/${app.id}/names`, { method: "PUT", body: JSON.stringify({ names: kept }) }));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : text("common.error"));
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Sheet title={text("names.title", { name: app.name })} onClose={onClose} busy={busy} wide>
-      <form onSubmit={submit} className="flex flex-col gap-6">
-        <p className="text-muted">{text("names.hint")}</p>
-        {zones === null ? (
-          <LoadingLines lines={2} label={text("apps.domains")} />
-        ) : zones.length === 0 ? (
-          <p className="text-muted">
-            {text("apps.noDomain")}{" "}
-            <Link to="/dns" className="text-ink underline">
-              {text("apps.linkDns")}
-            </Link>
-          </p>
-        ) : (
-          <NameList names={names} zones={zones} onChange={setNames} services={publicServices(app.services, app.domains)} />
-        )}
-        {removed.length > 0 ? (
-          <p className="text-warn">{text("names.removing", { names: removed.map((name) => (name.subdomain ? `${name.subdomain}.${name.zone}` : name.zone)).join(", ") })}</p>
-        ) : null}
-        {error ? <ErrorText>{error}</ErrorText> : null}
-        <div className="flex flex-wrap items-center gap-4">
-          <Button type="submit" disabled={busy || zones === null}>
-            {busy ? <Spinner /> : null}
-            {text("common.save")}
           </Button>
           <TextButton type="button" onClick={onClose} disabled={busy}>
             {text("common.cancel")}

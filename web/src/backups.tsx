@@ -4,7 +4,7 @@ import { api, type Application } from "./api";
 import { text, type MsgKey } from "./i18n";
 import { Spinner } from "./kit";
 import { useSession } from "./session";
-import { Button, ErrorText, Icon, LoadingLines, SectionTitle } from "./ui";
+import { Button, ErrorText, Icon, LoadingLines } from "./ui";
 
 type BackupSource = { id: string; label: string; available: boolean; restore?: boolean; detail?: string };
 type BackupService = { name: string; sources: BackupSource[] };
@@ -62,20 +62,12 @@ export function AppBackups({ app, locked }: { app: Application; locked?: boolean
     .map((svc) => ({ ...svc, sources: svc.sources ?? [] }))
     .filter((svc) => svc.sources.some((s) => s.available));
   if (!list && !error) return <LoadingLines lines={1} label={text("backup.loading")} />;
-  if (error) {
-    return (
-      <section className="mt-8">
-        <SectionTitle>{text("backup.title")}</SectionTitle>
-        <ErrorText>{error}</ErrorText>
-      </section>
-    );
-  }
-  if (rows.length === 0) return null;
+  if (error) return <ErrorText>{error}</ErrorText>;
+  if (rows.length === 0) return <p className="text-muted">{text("backup.none")}</p>;
 
   return (
-    <section className="mt-8">
-      <SectionTitle>{text("backup.title")}</SectionTitle>
-      <p className="mt-2 text-muted">{text("backup.hint")}</p>
+    <section aria-label={text("backup.title")}>
+      <p className="text-muted">{text("backup.hint")}</p>
       <p className="mt-1 text-[13px] text-faint">{text("backup.restoreHint")}</p>
       {restoreError ? <ErrorText>{restoreError}</ErrorText> : null}
       <input

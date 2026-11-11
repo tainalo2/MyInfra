@@ -100,6 +100,47 @@ func (a *API) retryDeploy(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a.toServer(row))
 }
 
+// reinstallServer takes back a machine added by hand that stopped answering,
+// to install it again. Asked here and not when the command is pasted: a
+// machine reinstalled answers on SSH again, and would no longer show as lost.
+func (a *API) reinstallServer(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	owner := ownerID(ctx)
+	id := r.PathValue("id")
+	row, err := a.Store.Server(ctx, owner, id)
+	if err != nil {
+		a.mapErr(w, err)
+		return
+	}
+	if row.ProviderID != "" {
+		writeError(w, http.StatusConflict, "Seule une machine ajoutée à la main se réinstalle ainsi.")
+		return
+	}
+	if state, _ := a.reachOf(id); row.Status != "linked" || state != "lost" {
+		writeError(w, http.StatusConflict, "Ce serveur répond : il n'y a rien à réinstaller.")
+		return
+	}
+	raw, err := deploy.Encode(stepsFor(false, row.ClusterID))
+	if err != nil {
+		a.mapErr(w, err)
+		return
+	}
+	if err := a.Store.ReopenServer(ctx, owner, id, raw); err != nil {
+		a.mapErr(w, err)
+		return
+	}
+	a.forgetReach(id)
+	// A reinstalled machine shows a new host key.
+	deploy.ForgetHostKey(row.Address)
+	a.noteServer(ctx, owner, id, "deploy.reinstall", "info", "Réinstallation demandée.")
+	row, err = a.Store.Server(ctx, owner, id)
+	if err != nil {
+		a.mapErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a.toServer(row))
+}
+
 func (a *API) runDeploy(owner, id, name, token, providerID, clusterID, clusterName string, keyIDs []string, publicKeys []string, privateKey string, plan catalog.Plan, address, machineID string, steps []deploy.Step) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
 	defer cancel()

@@ -779,6 +779,31 @@ export function ChosenName({ node }: { node: PlanNode }) {
   );
 }
 
+// PlanLinks lists what the chosen element is linked to; a row chooses the
+// element at its other end.
+export function PlanLinks({ model, chosen, onSelect }: { model: PlanModel; chosen: string; onSelect: (key: string) => void }) {
+  const links = model.links.filter((link) => link.from === chosen || link.to === chosen);
+  if (links.length === 0) return <p className="text-muted">{text("plan.noLinks")}</p>;
+  return (
+    <ul className="flex flex-col">
+      {links.map((link, index) => {
+        const other = link.from === chosen ? link.to : link.from;
+        return (
+          <li key={`${other}-${link.kind}-${index}`} className="border-t border-line first:border-t-0">
+            <button type="button" onClick={() => onSelect(other)} className={`flex w-full flex-wrap items-baseline justify-between gap-x-6 gap-y-1 py-3 text-left ${focus}`}>
+              <span className="min-w-0 truncate">{model.nodes.find((node) => node.key === other)?.label ?? other}</span>
+              <span className="flex min-w-0 flex-wrap items-baseline gap-x-3 text-[13px]">
+                {link.label ? <span className="break-all font-mono text-muted">{link.label}</span> : null}
+                <span className={link.kind === "direct" ? "text-warn" : "text-muted"}>{text(linkLabels[link.kind])}</span>
+              </span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 // PlanPanel holds a plan with what goes around it: the whole object, the
 // table of every link, and the head of the chosen element. It stays in sight
 // while the page scrolls, and shrinks to names once it has scrolled away.

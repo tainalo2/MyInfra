@@ -294,6 +294,13 @@ func (a *API) reachOf(serverID string) (string, store.ServerHealth) {
 	return reachState(health), health
 }
 
+// forgetReach drops what this copy saw of a server.
+func (a *API) forgetReach(serverID string) {
+	a.reach.mu.Lock()
+	delete(a.reach.health, serverID)
+	a.reach.mu.Unlock()
+}
+
 func reachState(health store.ServerHealth) string {
 	switch {
 	case health.ProviderState == "gone":

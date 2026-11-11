@@ -329,14 +329,13 @@ export function AppSecretLinks({ appId }: { appId: string }) {
   const granted = (rows ?? []).filter((row) => row.apps.some((app) => app.id === appId));
 
   return (
-    <section className="mt-8">
-      <SectionTitle>{text("nav.secrets")}</SectionTitle>
+    <section aria-label={text("nav.secrets")}>
       {rows === null ? (
-        <p className="mt-4 text-muted">{text("secret.loading")}</p>
+        <p className="text-muted">{text("secret.loading")}</p>
       ) : granted.length === 0 ? (
-        <p className="mt-4 text-muted">{text("secret.noneGranted")}</p>
+        <p className="text-muted">{text("secret.noneGranted")}</p>
       ) : (
-        <ul className="mt-4 flex flex-col gap-2">
+        <ul className="flex flex-col gap-2">
           {granted.map((row) => (
             <li key={row.id}>
               <Link to={`/secrets/${row.id}`} className="text-ink">

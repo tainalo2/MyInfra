@@ -57,6 +57,154 @@ test.describe("plan", () => {
     await expect(page.getByText("web-abc")).toBeVisible();
   });
 
+  test("the parts of the application stay in sight under the folded plan", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 420 });
+    await open(page);
+    await page.getByRole("tab", { name: /^Pods/ }).click();
+    await page.locator("main").evaluate((item) => item.scrollTo(0, 600));
+    await expect.poll(async () => (await plan(page).boundingBox())!.height).toBeLessThan(60);
+    const nav = page.getByRole("tablist");
+    await expect.poll(async () => (await nav.boundingBox())!.y).toBeLessThan(120);
+    expect((await nav.boundingBox())!.y).toBeGreaterThanOrEqual((await plan(page).boundingBox())!.y + 40);
+  });
+
+  test("no title on a wide screen, and the actions stay on the line of the nav", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 420 });
+    await open(page);
+    await expect(page).toHaveTitle(/^wiki · MyInfra/);
+    const title = await page.getByRole("heading", { level: 1, name: "wiki" }).boundingBox();
+    expect(title!.width).toBeLessThanOrEqual(1);
+    const pause = page.getByRole("button", { name: "Mettre en pause" });
+    const more = page.getByRole("button", { name: "Plus d'actions" });
+    await page.getByRole("tab", { name: /^Pods/ }).click();
+    await page.locator("main").evaluate((item) => item.scrollTo(0, 600));
+    await expect.poll(async () => (await plan(page).boundingBox())!.height).toBeLessThan(60);
+    const nav = (await page.getByRole("tablist").boundingBox())!;
+    for (const action of [pause, more]) {
+      const box = (await action.boundingBox())!;
+      expect(box.y + box.height / 2).toBeGreaterThan(nav.y);
+      expect(box.y + box.height / 2).toBeLessThan(nav.y + nav.height);
+    }
+  });
+
+  test("a phone keeps the title, and the actions out of the nav", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await open(page);
+    await expect(page.getByRole("heading", { level: 1, name: "wiki" })).toBeVisible();
+    const action = (await page.getByRole("button", { name: "Mettre en pause" }).boundingBox())!;
+    expect(action.y + action.height).toBeLessThan((await page.getByRole("tablist").boundingBox())!.y);
+  });
+
+  test("another part starts at its top, under the nav", async ({ page }) => {
+    const pods = Array.from({ length: 12 }, (_, at) => pod(`web-${at}`));
+    await page.route(`**/api/applications/${app.id}/releases`, (route) => route.fulfill({ json: { services: [] } }));
+    await open(page);
+    await page.route(`**/api/applications/${app.id}/runtime`, (route) => route.fulfill({ json: { ...runtime(), pods } }));
+    await page.reload();
+    await page.setViewportSize({ width: 1280, height: 500 });
+    await page.getByRole("tab", { name: /^Pods/ }).click();
+    await page.locator("main").evaluate((item) => item.scrollTo(0, 900));
+    await expect.poll(async () => (await plan(page).boundingBox())!.height).toBeLessThan(60);
+    await page.getByRole("tab", { name: "Services" }).click();
+    const nav = (await page.getByRole("tablist").boundingBox())!;
+    const first = (await page.getByLabel("Image de web").boundingBox())!;
+    expect(first.y).toBeGreaterThan(nav.y + nav.height);
+    expect(first.y).toBeLessThan(nav.y + nav.height + 120);
+  });
+
+  test("a chosen service brings its own parts, and only what is its own", async ({ page }) => {
+    await open(page);
+    await expect(page.getByRole("tab", { selected: true })).toHaveText("Services");
+    await service(page, "worker").click();
+    await expect(page.getByRole("tab", { selected: true })).toHaveText("Pods · 1");
+    await expect(page.getByText("worker-abc")).toBeVisible();
+    await expect(page.getByText("web-abc")).toHaveCount(0);
+    await page.getByRole("tab", { name: "Connexions" }).click();
+    await expect(page.getByText("Aucune connexion.")).toBeVisible();
+    await service(page, "web").click();
+    await expect(page.getByRole("tab", { selected: true })).toHaveText("Connexions");
+    await page.getByRole("tabpanel").getByRole("button", { name: /^db/ }).click();
+    await expect(plan(page).getByRole("button", { name: /^Service · db/ })).toHaveAttribute("aria-current", "true");
+  });
+
+  test("an image being typed survives a change of part", async ({ page }) => {
+    await open(page);
+    const image = page.getByLabel("Image de web");
+    await image.fill("wiki:2");
+    await page.getByRole("tab", { name: /^Pods/ }).click();
+    await expect(image).toBeHidden();
+    await page.getByRole("tab", { name: "Services" }).click();
+    await expect(image).toHaveValue("wiki:2");
+  });
+
+  test("an address changes in place, and the others go with it", async ({ page }) => {
+    const named = {
+      ...app,
+      domains: [
+        { hostname: "wiki.example.org", kind: "custom", status: "ready", zone: "example.org" },
+        { hostname: "docs.example.org", kind: "custom", status: "ready", zone: "example.org" },
+      ],
+    };
+    const sent: { subdomain: string; zone: string }[][] = [];
+    await page.route("**/api/dns/zones", (route) => route.fulfill({ json: [{ name: "example.org", accountId: "a1", account: "dns", provider: "x" }] }));
+    await open(page);
+    await page.route(`**/api/applications/${app.id}`, (route) => route.fulfill({ json: named }));
+    await page.route(`**/api/applications/${app.id}/names`, (route) => {
+      sent.push(route.request().postDataJSON().names);
+      return route.fulfill({ json: named });
+    });
+    await page.reload();
+    await page.getByRole("tab", { name: "Adresses" }).click();
+
+    await page.getByRole("button", { name: "Modifier wiki.example.org" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Enregistrer" })).toBeDisabled();
+    await page.getByLabel("Sous-domaine 1").fill("kb");
+    await expect(page.getByText("Ne répondra plus : wiki.example.org")).toBeVisible();
+    await page.getByRole("button", { name: "Enregistrer" }).click();
+    await expect.poll(() => sent.length).toBe(1);
+    expect(sent[0]).toEqual([{ subdomain: "kb", zone: "example.org" }, { subdomain: "docs", zone: "example.org" }]);
+
+    await page.getByRole("button", { name: "Ajouter un nom" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Enregistrer" })).toBeDisabled();
+    await page.getByLabel("Sous-domaine 3").fill("new");
+    await page.getByLabel("Sous-domaine 3").press("Enter");
+    await expect.poll(() => sent.length).toBe(2);
+    expect(sent[1]).toHaveLength(3);
+
+    await page.getByRole("button", { name: "Modifier docs.example.org" }).click();
+    await page.getByRole("tabpanel").getByRole("button", { name: "Retirer" }).click();
+    await expect.poll(() => sent.length).toBe(2);
+    await page.getByRole("tabpanel").getByRole("button", { name: "Retirer" }).click();
+    await expect.poll(() => sent.length).toBe(3);
+    expect(sent[2]).toEqual([{ subdomain: "wiki", zone: "example.org" }]);
+  });
+
+  test("an address being typed survives a change of part", async ({ page }) => {
+    await page.route("**/api/dns/zones", (route) => route.fulfill({ json: [{ name: "example.org", accountId: "a1", account: "dns", provider: "x" }] }));
+    await open(page);
+    await page.getByRole("tab", { name: "Adresses" }).click();
+    await page.getByRole("button", { name: "Ajouter un nom" }).click();
+    const field = page.getByRole("textbox", { name: /^Sous-domaine/ });
+    await field.fill("kb");
+    await page.getByRole("tab", { name: "Services" }).click();
+    await page.getByRole("tab", { name: "Adresses" }).click();
+    await expect(field).toHaveValue("kb");
+    await field.press("Escape");
+    await expect(field).toHaveCount(0);
+  });
+
+  test("a failing pod opens the pods, marked", async ({ page }) => {
+    await page.route(`**/api/applications/${app.id}/releases`, (route) => route.fulfill({ json: { services: [] } }));
+    await open(page);
+    await page.route(`**/api/applications/${app.id}/runtime`, (route) => route.fulfill({ json: { ...runtime(), pods: [{ ...pod("web-abc"), reason: "CrashLoopBackOff", ready: false }] } }));
+    await page.reload();
+    const tab = page.getByRole("tab", { name: /^Pods/ });
+    await expect(tab).toHaveAttribute("aria-selected", "true");
+    await expect(tab.getByRole("img")).toBeVisible();
+  });
+
   test("only the links the services declare are drawn inside", async ({ page }) => {
     await open(page);
     await plan(page).getByRole("button", { name: /^Interactions/ }).click();
