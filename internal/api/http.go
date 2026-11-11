@@ -28,6 +28,7 @@ type API struct {
 	// Commit writes the assistant's chosen patches to the live template
 	// repository; nil refuses every commit with 503, after the right check.
 	Commit       *commit.Gateway
+	diffs        diffHub
 	Verify       verify.Client
 	PublicURL    string
 	AppsDomain   string

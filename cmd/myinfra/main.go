@@ -116,10 +116,18 @@ func serve() bool {
 		publicURL = inst.PublicURL
 	}
 	addr := listenAddr()
+	gateway, err := commitGateway(db)
+	if err != nil {
+		fatal("dépôt des modèles", "err", err)
+	}
+	if base := os.Getenv("MYINFRA_DEV_CLAUDE_URL"); base != "" && os.Getenv("MYINFRA_DEV") == "1" {
+		helper.Providers["claude"] = assistant.Claude{BaseURL: base}
+	}
 	app := &api.API{
 		Store:     db,
 		Box:       seal,
 		Assistant: helper,
+		Commit:    gateway,
 		Verify: verify.Client{
 			AllowTest: os.Getenv("MYINFRA_DEV") == "1",
 		},

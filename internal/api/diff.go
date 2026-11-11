@@ -23,6 +23,7 @@ func (a *API) diffRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/diff/staging", a.auth(a.diffStaging))
 	mux.HandleFunc("POST /api/diff/staging", a.deployAuth(a.steady(a.openStaging)))
 	mux.HandleFunc("PUT /api/diff/staging/{id}/patches", a.deployAuth(a.steady(a.patchStaging)))
+	mux.HandleFunc("GET /api/diff/stream", a.auth(a.diffStream))
 	mux.HandleFunc("POST /api/diff/commit", a.auth(a.steady(a.commitStaging)))
 }
 
@@ -145,6 +146,11 @@ func (a *API) openStaging(w http.ResponseWriter, r *http.Request) {
 		a.mapErr(w, err)
 		return
 	}
+	hunks := make([]diffHunk, 0, len(patches))
+	for _, p := range patches {
+		hunks = append(hunks, hunkOf(id, p))
+	}
+	a.announce(userID(r.Context()), hunks, nil)
 	writeJSON(w, http.StatusCreated, map[string]string{"sessionId": id})
 }
 
@@ -171,6 +177,10 @@ func (a *API) patchStaging(w http.ResponseWriter, r *http.Request) {
 	}
 	var patches []commit.Patch
 	_ = json.Unmarshal(row.Patches, &patches)
+	known := map[string]bool{}
+	for _, p := range patches {
+		known[p.ID] = true
+	}
 	patches = append(patches, added...)
 	raw, _ := json.Marshal(patches)
 	if err := a.Store.UpdateStaging(r.Context(), owner, row.ID, row.Body, raw, row.Context); err != nil {
@@ -178,6 +188,11 @@ func (a *API) patchStaging(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	row.Patches = raw
+	hunks := make([]diffHunk, 0, len(added))
+	for _, p := range added {
+		hunks = append(hunks, hunkOf(row.ID, p))
+	}
+	a.announce(owner, hunks, known)
 	writeJSON(w, http.StatusOK, stagingView([]store.Staging{row}))
 }
 

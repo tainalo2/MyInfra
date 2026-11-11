@@ -7,6 +7,7 @@ import { text } from "./i18n";
 import { useI18n } from "./lang";
 import { RequireAdmin, RequireDeploy, SessionGate, useSession } from "./session";
 import { LoginTotpPage, saveTotpChallenge } from "./login-totp";
+import { AssistantPage } from "./assistant-page";
 import { AuthFrame, Button, ErrorText, Field, Icon, Input, LoadingLines, Shell } from "./ui";
 
 type LoginAnswer = { ok?: boolean; totpRequired?: boolean; challenge?: string };
@@ -268,6 +269,7 @@ export function App() {
         <Route path="/applications/:id/terminal/:pod" element={<RequireDeploy><PodTerminal /></RequireDeploy>} />
         <Route path="/cles" element={<Keys />} />
         <Route path="/assistants" element={<McpPage />} />
+        <Route path="/assistant-ia" element={<AssistantPage />} />
         <Route path="/secrets" element={<Secrets />} />
         <Route path="/secrets/:id" element={<SecretPage />} />
         <Route path="/providers" element={<Providers />} />

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { TokenBudgetBanner } from './TokenBudgetBanner';
 import { useSession } from '../session';
+import { patchesFromReply } from './diff-blocks';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
@@ -50,6 +51,17 @@ export function AssistantPane({ context = 'template_edit' }: { context?: string 
         ? 'Droits insuffisants.'
         : d.assistant_unavailable ? 'Assistant indisponible (clé manquante).' : d.text ?? d.error ?? '';
       setMsgs([...next, { role: 'assistant', content: text }]);
+      // A reply carrying ```diff blocks is a patch: it joins the staging,
+      // and the split view (stream) shows the hunks as they land.
+      const patches = patchesFromReply(text);
+      if (patches.length > 0) {
+        const staged = await fetch('/api/diff/staging', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ kind: 'template', name: context, context, patches }),
+        });
+        if (!staged.ok) setMsgs([...next, { role: 'assistant', content: `${text}\n\n(Patch non mis en attente : ${staged.status})` }]);
+      }
     } finally {
       setBusy(false);
     }

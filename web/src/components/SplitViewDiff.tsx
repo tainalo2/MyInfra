@@ -55,11 +55,12 @@ export function SplitViewDiff() {
     refetchStaging();
     return () => {
       esRef.current?.close();
+      esRef.current = null;
     };
   }, [refetchStaging]);
 
   const startStream = useCallback(() => {
-    if (streaming) return;
+    if (esRef.current) return;
     setStreaming(true);
     const es = new EventSource(`${API_BASE}/stream`);
     esRef.current = es;
@@ -74,16 +75,27 @@ export function SplitViewDiff() {
         // ignore malformed
       }
     };
-    es.addEventListener('done', () => {
-      setStreaming(false);
-      es.close();
+    // A hunk replaced by the assistant: same id, new lines, selection reset.
+    es.addEventListener('modified', (ev) => {
+      try {
+        const hunk: Hunk = JSON.parse((ev as MessageEvent).data);
+        setHunks((prev) => prev.map((h) => (h.id === hunk.id && !h.committed ? { ...hunk, status: 'pending', committed: false } : h)));
+      } catch {
+        // ignore malformed
+      }
     });
+    // End of a patch: the stream stays open for the next one.
+    es.addEventListener('done', () => setMessage('Patch reçu'));
     es.onerror = () => {
-      setStreaming(false);
-      es.close();
-      setMessage('Stream ended');
+      // EventSource reconnects by itself.
+      setMessage('Flux interrompu, reconnexion…');
     };
-  }, [streaming]);
+  }, []);
+
+  // The diff shows up live while the assistant answers: no button, no refresh.
+  useEffect(() => {
+    if (canChat) startStream();
+  }, [canChat, startStream]);
 
   const toggle = (id: string) => {
     setHunks((prev) =>
