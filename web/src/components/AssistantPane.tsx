@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { TokenBudgetBanner } from './TokenBudgetBanner';
 import { useSession } from '../session';
+import { useAssistant } from '../assistant-context';
 import { patchesFromReply } from './diff-blocks';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
@@ -9,9 +10,12 @@ type Msg = { role: 'user' | 'assistant'; content: string };
  * Assistant chat scoped to a functional context. The whole pane hides behind one flag (/api/assistant/status).
  * A read-only account sees the pane in consultation mode: the history stays, the form that would open a new
  * turn with the provider is absent. The server refuses that turn anyway (403 on /api/assistant/chat).
+ * 
+ * The context is resolved dynamically by the Harness Router based on the current page/resource.
  */
-export function AssistantPane({ context = 'template_edit' }: { context?: string }) {
+export function AssistantPane() {
   const { canChat } = useSession();
+  const { pageContext } = useAssistant();
   const [enabled, setEnabled] = useState(false);
   const [providers, setProviders] = useState<string[]>([]);
   const [provider, setProvider] = useState('');
@@ -44,7 +48,7 @@ export function AssistantPane({ context = 'template_edit' }: { context?: string 
       const r = await fetch('/api/assistant/chat', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ session, provider, model, context, messages: next }),
+        body: JSON.stringify({ session, provider, model, ...pageContext, messages: next }),
       });
       const d = await r.json();
       const text = r.status === 403
@@ -58,7 +62,7 @@ export function AssistantPane({ context = 'template_edit' }: { context?: string 
         const staged = await fetch('/api/diff/staging', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ kind: 'template', name: context, context, patches }),
+          body: JSON.stringify({ kind: 'template', name: pageContext?.resource_id || 'unknown', ...pageContext, patches }),
         });
         if (!staged.ok) setMsgs([...next, { role: 'assistant', content: `${text}\n\n(Patch non mis en attente : ${staged.status})` }]);
       }

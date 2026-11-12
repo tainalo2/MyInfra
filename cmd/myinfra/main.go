@@ -107,6 +107,11 @@ func serve() bool {
 	} else if err := helper.Persist(ctx, db); err != nil {
 		slog.Warn("clés BYOK rechiffrées non enregistrées, rotation refaite au prochain démarrage", "err", err)
 	}
+	// Set the access verifier to check template ownership
+	helper.AccessVerifier = func(ctx context.Context, userID, templateID string) bool {
+		_, err := db.Template(ctx, userID, templateID)
+		return err == nil
+	}
 
 	publicURL := os.Getenv("MYINFRA_PUBLIC_URL")
 	if publicURL == "" {

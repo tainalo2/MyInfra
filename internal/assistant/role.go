@@ -8,6 +8,7 @@ import (
 )
 
 type roleKey struct{}
+type userKey struct{}
 
 // WithRole marks the request with the role the caller acts with. The API
 // sets it after authentication; the chat handler hands it to the Harness
@@ -16,11 +17,22 @@ func WithRole(ctx context.Context, role string) context.Context {
 	return context.WithValue(ctx, roleKey{}, role)
 }
 
+// WithUser marks the request with the user ID. The API sets it after authentication.
+func WithUser(ctx context.Context, user string) context.Context {
+	return context.WithValue(ctx, userKey{}, user)
+}
+
 // RoleOf is the role set by WithRole, or empty when none was set: the
 // router then refuses, so a route mounted without the API wrap is closed.
 func RoleOf(ctx context.Context) string {
 	role, _ := ctx.Value(roleKey{}).(string)
 	return role
+}
+
+// UserOf is the user ID set by WithUser, or empty when none was set.
+func UserOf(ctx context.Context) string {
+	user, _ := ctx.Value(userKey{}).(string)
+	return user
 }
 
 // CanChat mirrors the router's rule, for callers that want to refuse early.

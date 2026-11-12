@@ -16,9 +16,17 @@ type ContextProfile struct {
 	MaxTokens    int      `yaml:"max_tokens" json:"max_tokens"`
 }
 
-// Config maps functional context name -> profile. Loaded from YAML/JSON config.
+// PageToContextMapping maps a page name to its corresponding context profile.
+type PageToContextMapping struct {
+	Page    string `yaml:"page" json:"page"`
+	Context string `yaml:"context" json:"context"`
+}
+
+// Config maps functional context name -> profile and page -> context.
+// Loaded from YAML/JSON config.
 type Config struct {
 	Contexts map[string]ContextProfile `yaml:"contexts" json:"contexts"`
+	Pages    []PageToContextMapping    `yaml:"pages" json:"pages"`
 }
 
 // LoadConfig reads a YAML config file.
@@ -34,6 +42,9 @@ func LoadConfig(path string) (*Config, error) {
 	if c.Contexts == nil {
 		c.Contexts = map[string]ContextProfile{}
 	}
+	if c.Pages == nil {
+		c.Pages = []PageToContextMapping{}
+	}
 	return &c, nil
 }
 
@@ -45,6 +56,9 @@ func ParseConfig(data []byte) (*Config, error) {
 	}
 	if c.Contexts == nil {
 		c.Contexts = map[string]ContextProfile{}
+	}
+	if c.Pages == nil {
+		c.Pages = []PageToContextMapping{}
 	}
 	return &c, nil
 }
@@ -59,6 +73,17 @@ func (c *Config) Get(name string) (ContextProfile, error) {
 		p.Name = name
 	}
 	return p, nil
+}
+
+// GetContextForPage returns the context profile name for a given page.
+// Falls back to "general" if the page is not found or the mapping is empty.
+func (c *Config) GetContextForPage(page string) string {
+	for _, mapping := range c.Pages {
+		if mapping.Page == page {
+			return mapping.Context
+		}
+	}
+	return "general"
 }
 
 // AllowedSet returns a set of allowed tools for quick lookup.

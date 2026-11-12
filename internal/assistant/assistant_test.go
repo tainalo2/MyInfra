@@ -17,10 +17,15 @@ func newSvc(t *testing.T, claudeURL, openaiURL string) *Service {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg, _ := harness.ParseConfig([]byte("contexts:\n  template_edit:\n    system_prompt: sys\n    allowed_tools: [read_template]\n"))
+	cfg, _ := harness.ParseConfig([]byte("contexts:\n  general:\n    system_prompt: sys\n    allowed_tools: []\n  template_editor:\n    system_prompt: sys\n    allowed_tools: [read_template]\npages:\n  - page: template_editor\n    context: template_editor\n"))
 	p := DefaultPricing()
-	return &Service{Keys: ks, Pricing: p, Meter: NewMeter(p), Router: harness.NewRouter(cfg),
+	s := &Service{Keys: ks, Pricing: p, Meter: NewMeter(p), Router: harness.NewRouter(cfg),
 		Providers: map[string]Provider{"claude": Claude{claudeURL}, "codex": OpenAI{openaiURL}}}
+	// Set a default AccessVerifier that always allows access for tests
+	s.AccessVerifier = func(ctx context.Context, userID, templateID string) bool {
+		return true
+	}
+	return s
 }
 
 func TestKeyStoreEncryptsAndRoundtrips(t *testing.T) {
@@ -63,7 +68,7 @@ func TestChatUpdatesMeterAndNoKey(t *testing.T) {
 		mux.ServeHTTP(rr, httptest.NewRequest("POST", path, strings.NewReader(body)))
 		return rr
 	}
-	chat := `{"session":"a","provider":"claude","model":"claude-sonnet","context":"template_edit","messages":[{"role":"user","content":"x"}]}`
+	chat := `{"session":"a","provider":"claude","model":"claude-sonnet","page":"template_editor","messages":[{"role":"user","content":"x"}]}`
 	if !strings.Contains(post("/api/assistant/chat", chat).Body.String(), "assistant_unavailable") {
 		t.Fatal("expected unavailable without key")
 	}
@@ -95,7 +100,7 @@ func TestChatRefusesReadOnlyRoleBeforeProvider(t *testing.T) {
 	defer up.Close()
 	s := newSvc(t, up.URL, "")
 	s.Keys.Set("claude", "k")
-	chat := `{"session":"a","provider":"claude","model":"claude-sonnet","context":"template_edit","messages":[{"role":"user","content":"x"}]}`
+	chat := `{"session":"a","provider":"claude","model":"claude-sonnet","page":"template_editor","messages":[{"role":"user","content":"x"}]}`
 	for _, wrap := range []func(http.HandlerFunc) http.HandlerFunc{nil, AsRole(harness.RoleRead)} {
 		mux := http.NewServeMux()
 		s.Register(mux, wrap)

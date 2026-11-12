@@ -1,6 +1,13 @@
 contexts:
-  template_edit:
-    name: template_edit
+  general:
+    name: general
+    system_prompt: "You are a helpful assistant. You can answer questions and provide guidance, but cannot modify templates or resources."
+    allowed_tools: []
+    max_turns: 10
+    max_tokens: 4000
+  
+  template_editor:
+    name: template_editor
     system_prompt: "You are a template editor. You may only use read_template, patch_template, validate_template."
     allowed_tools:
       - read_template
@@ -8,3 +15,7 @@ contexts:
       - validate_template
     max_turns: 10
     max_tokens: 4000
+
+pages:
+  - page: template_editor
+    context: template_editor
