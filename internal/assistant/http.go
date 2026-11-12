@@ -77,6 +77,12 @@ func New(master, previous []byte, sealed map[string]string) (*Service, error) {
 // configured.
 func (s *Service) Available() bool { return s != nil && s.Keys != nil }
 
+// SupportsSubscriptionAuth checks whether a provider accepts subscription tokens.
+func (s *Service) SupportsSubscriptionAuth(provider string) bool {
+	prov, ok := s.Providers[provider]
+	return ok && prov.SupportsSubscriptionAuth()
+}
+
 // Persist keeps the keys in repo from now on, and writes back the entries
 // New sealed again with the current master.
 func (s *Service) Persist(ctx context.Context, repo KeyRepo) error {
@@ -101,6 +107,7 @@ func (s *Service) Register(mux *http.ServeMux, wrap func(http.HandlerFunc) http.
 	}
 	mux.HandleFunc("GET /api/assistant/status", wrap(s.status))
 	mux.HandleFunc("GET /api/assistant/pricing", wrap(func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, s.Pricing.List()) }))
+	mux.HandleFunc("GET /api/assistant/providers", wrap(s.listProviders))
 	mux.HandleFunc("PUT /api/assistant/pricing", wrap(s.setPrice))
 	mux.HandleFunc("PUT /api/assistant/keys/{provider}", wrap(s.setKey))
 	mux.HandleFunc("DELETE /api/assistant/keys/{provider}", wrap(s.deleteKey))
@@ -118,6 +125,21 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 }
 
 const noMasterKey = "assistant unavailable: no BYOK master key configured"
+
+func (s *Service) listProviders(w http.ResponseWriter, r *http.Request) {
+	type ProviderCapability struct {
+		Provider              string `json:"provider"`
+		SupportsSubscriptionAuth bool   `json:"supports_subscription_auth"`
+	}
+	caps := make([]ProviderCapability, 0, len(s.Providers))
+	for name, prov := range s.Providers {
+		caps = append(caps, ProviderCapability{
+			Provider:              name,
+			SupportsSubscriptionAuth: prov.SupportsSubscriptionAuth(),
+		})
+	}
+	writeJSON(w, 200, caps)
+}
 
 func (s *Service) status(w http.ResponseWriter, r *http.Request) {
 	if !s.Available() {
@@ -144,14 +166,31 @@ func (s *Service) setKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var b struct {
-		Key string `json:"key"`
+		Key  string `json:"key"`
+		Type string `json:"type"` // "api_key" or "subscription_token"
 	}
-	if json.NewDecoder(r.Body).Decode(&b) != nil || s.Keys.Set(r.PathValue("provider"), b.Key) != nil {
+	if json.NewDecoder(r.Body).Decode(&b) != nil || b.Key == "" {
+		writeJSON(w, 400, map[string]string{"error": "invalid key"})
+		return
+	}
+	provider := r.PathValue("provider")
+	
+	// Validate credential type against provider capability
+	if b.Type == "subscription_token" && !s.SupportsSubscriptionAuth(provider) {
+		writeJSON(w, 403, map[string]string{"error": "subscription_token not supported for this provider"})
+		return
+	}
+	
+	// Default to api_key if not specified (backward compatibility)
+	if b.Type == "" {
+		b.Type = "api_key"
+	}
+	
+	if s.Keys.Set(provider, b.Key) != nil {
 		writeJSON(w, 400, map[string]string{"error": "invalid key"})
 		return
 	}
 	if s.repo != nil {
-		provider := r.PathValue("provider")
 		if err := s.repo.PutAssistantKey(r.Context(), provider, s.Keys.Export()[provider]); err != nil {
 			slog.Error("clé BYOK non enregistrée", "provider", provider, "err", err)
 			writeJSON(w, 500, map[string]string{"error": "key not saved"})

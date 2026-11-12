@@ -30,6 +30,7 @@ type Response struct {
 type Provider interface {
 	Name() string
 	Complete(ctx context.Context, model, system string, msgs []Message, apiKey string) (Response, error)
+	SupportsSubscriptionAuth() bool
 }
 
 var ErrNoKey = errors.New("no_key")
@@ -68,6 +69,8 @@ type Claude struct{ BaseURL string }
 
 func (Claude) Name() string { return "claude" }
 
+func (Claude) SupportsSubscriptionAuth() bool { return false }
+
 func (c Claude) Complete(ctx context.Context, model, system string, msgs []Message, key string) (Response, error) {
 	if key == "" {
 		return Response{}, ErrNoKey
@@ -99,6 +102,8 @@ func (c Claude) Complete(ctx context.Context, model, system string, msgs []Messa
 type OpenAI struct{ BaseURL string }
 
 func (OpenAI) Name() string { return "codex" }
+
+func (OpenAI) SupportsSubscriptionAuth() bool { return true }
 
 func (o OpenAI) Complete(ctx context.Context, model, system string, msgs []Message, key string) (Response, error) {
 	if key == "" {

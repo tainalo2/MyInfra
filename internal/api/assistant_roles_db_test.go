@@ -30,6 +30,7 @@ func (p *countingProvider) Complete(_ context.Context, _, _ string, _ []assistan
 	p.calls.Add(1)
 	return assistant.Response{Text: "ok", Usage: assistant.Usage{InputTokens: 1, OutputTokens: 1}}, nil
 }
+func (p *countingProvider) SupportsSubscriptionAuth() bool { return false }
 
 // disposableRepo is a git repository created for one test, with one commit.
 func disposableRepo(t *testing.T) string {
