@@ -128,13 +128,13 @@ const noMasterKey = "assistant unavailable: no BYOK master key configured"
 
 func (s *Service) listProviders(w http.ResponseWriter, r *http.Request) {
 	type ProviderCapability struct {
-		Provider              string `json:"provider"`
+		Provider                 string `json:"provider"`
 		SupportsSubscriptionAuth bool   `json:"supports_subscription_auth"`
 	}
 	caps := make([]ProviderCapability, 0, len(s.Providers))
 	for name, prov := range s.Providers {
 		caps = append(caps, ProviderCapability{
-			Provider:              name,
+			Provider:                 name,
 			SupportsSubscriptionAuth: prov.SupportsSubscriptionAuth(),
 		})
 	}
@@ -174,18 +174,18 @@ func (s *Service) setKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	provider := r.PathValue("provider")
-	
+
 	// Validate credential type against provider capability
 	if b.Type == "subscription_token" && !s.SupportsSubscriptionAuth(provider) {
 		writeJSON(w, 403, map[string]string{"error": "subscription_token not supported for this provider"})
 		return
 	}
-	
+
 	// Default to api_key if not specified (backward compatibility)
 	if b.Type == "" {
 		b.Type = "api_key"
 	}
-	
+
 	if s.Keys.Set(provider, b.Key) != nil {
 		writeJSON(w, 400, map[string]string{"error": "invalid key"})
 		return

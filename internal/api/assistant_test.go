@@ -69,11 +69,11 @@ func TestProviderCredentialTypeValidation(t *testing.T) {
 	a, _ := leadAPI(t, false, store.CopyRole{})
 	a.Assistant = helper
 	handler := a.Handler()
-	
+
 	setup := httptest.NewRecorder()
 	handler.ServeHTTP(setup, httptest.NewRequest(http.MethodPost, "/api/setup", strings.NewReader(`{"password":"hunter2pass"}`)))
 	admin := setup.Result().Cookies()[0]
-	
+
 	// Test 1: subscription_token for Claude (unsupported) should return 403
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPut, "/api/assistant/keys/claude",
@@ -86,7 +86,7 @@ func TestProviderCredentialTypeValidation(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "not supported") {
 		t.Fatalf("Expected 'not supported' error message, got: %s", rec.Body.String())
 	}
-	
+
 	// Test 2: api_key for Claude (supported) should return 204
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPut, "/api/assistant/keys/claude",
@@ -96,7 +96,7 @@ func TestProviderCredentialTypeValidation(t *testing.T) {
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("Claude api_key expected 204, got %d: %s", rec.Code, rec.Body.String())
 	}
-	
+
 	// Test 3: subscription_token for Codex (supported) should return 204
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPut, "/api/assistant/keys/codex",
@@ -106,7 +106,7 @@ func TestProviderCredentialTypeValidation(t *testing.T) {
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("Codex subscription_token expected 204, got %d: %s", rec.Code, rec.Body.String())
 	}
-	
+
 	// Test 4: api_key for Codex (also supported) should return 204
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPut, "/api/assistant/keys/codex",
@@ -116,7 +116,7 @@ func TestProviderCredentialTypeValidation(t *testing.T) {
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("Codex api_key expected 204, got %d: %s", rec.Code, rec.Body.String())
 	}
-	
+
 	// Test 5: type omitted defaults to api_key (backward compat) - should work for Claude
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPut, "/api/assistant/keys/claude",
@@ -136,20 +136,20 @@ func TestProviderCapabilitiesEndpoint(t *testing.T) {
 	a, _ := leadAPI(t, false, store.CopyRole{})
 	a.Assistant = helper
 	handler := a.Handler()
-	
+
 	setup := httptest.NewRecorder()
 	handler.ServeHTTP(setup, httptest.NewRequest(http.MethodPost, "/api/setup", strings.NewReader(`{"password":"hunter2pass"}`)))
 	admin := setup.Result().Cookies()[0]
-	
+
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/assistant/providers", nil)
 	req.AddCookie(admin)
 	handler.ServeHTTP(rec, req)
-	
+
 	if rec.Code != http.StatusOK {
 		t.Fatalf("providers endpoint expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	
+
 	body := rec.Body.String()
 	// Verify Claude doesn't support subscription auth
 	if !strings.Contains(body, `"provider":"claude"`) || !strings.Contains(body, `"supports_subscription_auth":false`) {
