@@ -37,9 +37,9 @@ const (
 
 // ModelCapability describes a model and its supported reasoning levels.
 type ModelCapability struct {
-	Model              string             `json:"model"`
-	SupportedReasons   []ReasoningEffort  `json:"supported_reasons"`
-	DefaultReason      ReasoningEffort    `json:"default_reason"`
+	Model            string            `json:"model"`
+	SupportedReasons []ReasoningEffort `json:"supported_reasons"`
+	DefaultReason    ReasoningEffort   `json:"default_reason"`
 }
 
 // Provider is the provider-agnostic interface used by the harness.

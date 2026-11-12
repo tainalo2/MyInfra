@@ -250,13 +250,13 @@ func (s *Service) stream(w http.ResponseWriter, r *http.Request) {
 }
 
 type chatReq struct {
-	Session          string        `json:"session"`
-	Provider         string        `json:"provider"`
-	Model            string        `json:"model"`
-	ReasoningEffort  ReasoningEffort `json:"reasoning_effort,omitempty"`
-	Page             string        `json:"page,omitempty"`        // page name for dynamic context resolution
-	ResourceID       string        `json:"resource_id,omitempty"` // resource id for access control
-	Messages         []Message     `json:"messages"`
+	Session         string          `json:"session"`
+	Provider        string          `json:"provider"`
+	Model           string          `json:"model"`
+	ReasoningEffort ReasoningEffort `json:"reasoning_effort,omitempty"`
+	Page            string          `json:"page,omitempty"`        // page name for dynamic context resolution
+	ResourceID      string          `json:"resource_id,omitempty"` // resource id for access control
+	Messages        []Message       `json:"messages"`
 }
 
 func (s *Service) chat(w http.ResponseWriter, r *http.Request) {
