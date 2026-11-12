@@ -26,11 +26,28 @@ type Response struct {
 	Usage Usage
 }
 
+// ReasoningEffort represents the level of reasoning effort for a model.
+type ReasoningEffort string
+
+const (
+	ReasoningLow    ReasoningEffort = "low"
+	ReasoningMedium ReasoningEffort = "medium"
+	ReasoningHigh   ReasoningEffort = "high"
+)
+
+// ModelCapability describes a model and its supported reasoning levels.
+type ModelCapability struct {
+	Model            string            `json:"model"`
+	SupportedReasons []ReasoningEffort `json:"supported_reasons"`
+	DefaultReason    ReasoningEffort   `json:"default_reason"`
+}
+
 // Provider is the provider-agnostic interface used by the harness.
 type Provider interface {
 	Name() string
-	Complete(ctx context.Context, model, system string, msgs []Message, apiKey string) (Response, error)
+	Complete(ctx context.Context, model, system string, msgs []Message, apiKey string, reasoningEffort ReasoningEffort) (Response, error)
 	SupportsSubscriptionAuth() bool
+	ListModels() []ModelCapability
 }
 
 var ErrNoKey = errors.New("no_key")
@@ -71,7 +88,27 @@ func (Claude) Name() string { return "claude" }
 
 func (Claude) SupportsSubscriptionAuth() bool { return false }
 
-func (c Claude) Complete(ctx context.Context, model, system string, msgs []Message, key string) (Response, error) {
+func (Claude) ListModels() []ModelCapability {
+	return []ModelCapability{
+		{
+			Model:            "claude-opus",
+			SupportedReasons: []ReasoningEffort{ReasoningLow, ReasoningMedium, ReasoningHigh},
+			DefaultReason:    ReasoningMedium,
+		},
+		{
+			Model:            "claude-sonnet",
+			SupportedReasons: []ReasoningEffort{ReasoningLow, ReasoningMedium, ReasoningHigh},
+			DefaultReason:    ReasoningMedium,
+		},
+		{
+			Model:            "claude-haiku",
+			SupportedReasons: []ReasoningEffort{ReasoningLow},
+			DefaultReason:    ReasoningLow,
+		},
+	}
+}
+
+func (c Claude) Complete(ctx context.Context, model, system string, msgs []Message, key string, reasoningEffort ReasoningEffort) (Response, error) {
 	if key == "" {
 		return Response{}, ErrNoKey
 	}
@@ -86,8 +123,15 @@ func (c Claude) Complete(ctx context.Context, model, system string, msgs []Messa
 			Out int `json:"output_tokens"`
 		} `json:"usage"`
 	}
-	err := doJSON(ctx, base+"/v1/messages", map[string]string{"x-api-key": key, "anthropic-version": "2023-06-01"},
-		map[string]any{"model": model, "max_tokens": 4096, "system": system, "messages": msgs}, &out, key)
+	req := map[string]any{"model": model, "max_tokens": 4096, "system": system, "messages": msgs}
+	// Add thinking if reasoning is not low
+	if reasoningEffort != ReasoningLow {
+		req["thinking"] = map[string]any{
+			"type":          "enabled",
+			"budget_tokens": map[string]int{"low": 1000, "medium": 5000, "high": 10000}[string(reasoningEffort)],
+		}
+	}
+	err := doJSON(ctx, base+"/v1/messages", map[string]string{"x-api-key": key, "anthropic-version": "2023-06-01"}, req, &out, key)
 	if err != nil {
 		return Response{}, err
 	}
@@ -105,7 +149,22 @@ func (OpenAI) Name() string { return "codex" }
 
 func (OpenAI) SupportsSubscriptionAuth() bool { return true }
 
-func (o OpenAI) Complete(ctx context.Context, model, system string, msgs []Message, key string) (Response, error) {
+func (OpenAI) ListModels() []ModelCapability {
+	return []ModelCapability{
+		{
+			Model:            "gpt-5-codex",
+			SupportedReasons: []ReasoningEffort{ReasoningLow},
+			DefaultReason:    ReasoningLow,
+		},
+		{
+			Model:            "gpt-4-turbo",
+			SupportedReasons: []ReasoningEffort{ReasoningLow},
+			DefaultReason:    ReasoningLow,
+		},
+	}
+}
+
+func (o OpenAI) Complete(ctx context.Context, model, system string, msgs []Message, key string, reasoningEffort ReasoningEffort) (Response, error) {
 	if key == "" {
 		return Response{}, ErrNoKey
 	}

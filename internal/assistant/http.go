@@ -146,11 +146,17 @@ func (s *Service) listProviders(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) status(w http.ResponseWriter, r *http.Request) {
 	if !s.Available() {
-		writeJSON(w, 200, map[string]any{"enabled": false, "providers": []string{}, "assistant_unavailable": true, "reason": "no_master_key"})
+		writeJSON(w, 200, map[string]any{"enabled": false, "providers": []string{}, "models": map[string][]ModelCapability{}, "assistant_unavailable": true, "reason": "no_master_key"})
 		return
 	}
 	ps := s.Keys.List()
-	writeJSON(w, 200, map[string]any{"enabled": len(ps) > 0, "providers": ps})
+	models := make(map[string][]ModelCapability)
+	for _, provider := range ps {
+		if prov, ok := s.Providers[provider]; ok {
+			models[provider] = prov.ListModels()
+		}
+	}
+	writeJSON(w, 200, map[string]any{"enabled": len(ps) > 0, "providers": ps, "models": models})
 }
 
 func (s *Service) setPrice(w http.ResponseWriter, r *http.Request) {
@@ -244,12 +250,13 @@ func (s *Service) stream(w http.ResponseWriter, r *http.Request) {
 }
 
 type chatReq struct {
-	Session    string    `json:"session"`
-	Provider   string    `json:"provider"`
-	Model      string    `json:"model"`
-	Page       string    `json:"page,omitempty"`        // page name for dynamic context resolution
-	ResourceID string    `json:"resource_id,omitempty"` // resource id for access control
-	Messages   []Message `json:"messages"`
+	Session         string          `json:"session"`
+	Provider        string          `json:"provider"`
+	Model           string          `json:"model"`
+	ReasoningEffort ReasoningEffort `json:"reasoning_effort,omitempty"`
+	Page            string          `json:"page,omitempty"`        // page name for dynamic context resolution
+	ResourceID      string          `json:"resource_id,omitempty"` // resource id for access control
+	Messages        []Message       `json:"messages"`
 }
 
 func (s *Service) chat(w http.ResponseWriter, r *http.Request) {
@@ -273,6 +280,11 @@ func (s *Service) chat(w http.ResponseWriter, r *http.Request) {
 	if !ok || key == "" {
 		writeJSON(w, 200, map[string]any{"assistant_unavailable": true})
 		return
+	}
+
+	// Set default reasoning effort if not provided
+	if q.ReasoningEffort == "" {
+		q.ReasoningEffort = ReasoningMedium
 	}
 
 	// Create resource access verifier: checks if the user can access the template.
@@ -302,7 +314,7 @@ func (s *Service) chat(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]string{"error": err.Error()})
 		return
 	}
-	resp, err := prov.Complete(r.Context(), q.Model, route.SystemPrompt, q.Messages, key)
+	resp, err := prov.Complete(r.Context(), q.Model, route.SystemPrompt, q.Messages, key, q.ReasoningEffort)
 	if err != nil {
 		writeJSON(w, 502, map[string]string{"error": err.Error()})
 		return
