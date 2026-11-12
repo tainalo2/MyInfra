@@ -17,6 +17,7 @@ import {
   type TemplateRun,
   type TemplateServer,
 } from "./api";
+import { useAssistant } from "./assistant-context";
 import { CancelDeployment } from "./deployments";
 import { currentLang, text, knownMessage } from "./i18n";
 import { Code } from "./code-lazy";
@@ -258,6 +259,7 @@ export function TemplateEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { canDeploy } = useSession();
+  const { setPageContext } = useAssistant();
   const [name, setName] = useState("");
   const [body, setBody] = useState<TemplateBody>({ servers: [], applications: [] });
   const [providers, setProviders] = useState<Secret[]>([]);
@@ -287,6 +289,12 @@ export function TemplateEditor() {
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [changed]);
+
+  // Set page context for the Harness Router to resolve the assistant context.
+  useEffect(() => {
+    setPageContext(id ? { page: 'template_editor', resource_id: id } : null);
+    return () => setPageContext(null);
+  }, [id, setPageContext]);
 
   useEffect(() => {
     api<Secret[]>("/api/secrets")

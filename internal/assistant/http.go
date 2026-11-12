@@ -21,6 +21,9 @@ type Service struct {
 	Meter     *Meter
 	Router    *harness.Router
 	Providers map[string]Provider
+	// AccessVerifier is a function to check template access.
+	// If nil, all access checks are denied.
+	AccessVerifier func(ctx context.Context, userID, templateID string) bool
 
 	// repo keeps the sealed keys at rest; nil keeps them in memory only.
 	repo KeyRepo
@@ -241,11 +244,12 @@ func (s *Service) stream(w http.ResponseWriter, r *http.Request) {
 }
 
 type chatReq struct {
-	Session  string    `json:"session"`
-	Provider string    `json:"provider"`
-	Model    string    `json:"model"`
-	Context  string    `json:"context"`
-	Messages []Message `json:"messages"`
+	Session    string    `json:"session"`
+	Provider   string    `json:"provider"`
+	Model      string    `json:"model"`
+	Page       string    `json:"page,omitempty"`       // page name for dynamic context resolution
+	ResourceID string    `json:"resource_id,omitempty"` // resource id for access control
+	Messages   []Message `json:"messages"`
 }
 
 func (s *Service) chat(w http.ResponseWriter, r *http.Request) {
@@ -270,7 +274,26 @@ func (s *Service) chat(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"assistant_unavailable": true})
 		return
 	}
-	route, err := s.Router.Route(harness.RouteRequest{Role: RoleOf(r.Context()), FunctionalContext: q.Context, ProviderKey: key})
+	
+	// Create resource access verifier: checks if the user can access the template.
+	// If no resource ID is provided or the page is not template_editor,
+	// the verifier always returns true (no restriction).
+	resourceAccessVerifier := func(userID, resourceID string) bool {
+		if q.Page != "template_editor" {
+			return true
+		}
+		// Delegate actual access check to a method that looks up the template
+		// and verifies the user's access based on role permissions.
+		return s.CanAccessTemplate(r.Context(), userID, resourceID)
+	}
+	
+	route, err := s.Router.Route(harness.RouteRequest{
+		User:        UserOf(r.Context()),
+		Role:        RoleOf(r.Context()),
+		Page:        q.Page,
+		ResourceID:  q.ResourceID,
+		ProviderKey: key,
+	}, resourceAccessVerifier)
 	if err != nil {
 		if errors.Is(err, harness.ErrReadOnly) {
 			writeJSON(w, 403, map[string]string{"error": "Droits insuffisants."})
@@ -286,4 +309,16 @@ func (s *Service) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	snap := s.Meter.Record(q.Session, q.Provider, q.Model, resp.Usage)
 	writeJSON(w, 200, map[string]any{"text": resp.Text, "usage": snap})
+}
+
+// CanAccessTemplate checks if a user can access a template for editing.
+// Returns true if the user has edit permissions on the template.
+func (s *Service) CanAccessTemplate(ctx context.Context, userID, templateID string) bool {
+	if s.AccessVerifier == nil {
+		// No verifier available; default to denying access
+		return false
+	}
+	
+	// Use the verifier to check access
+	return s.AccessVerifier(ctx, userID, templateID)
 }

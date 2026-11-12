@@ -28,7 +28,10 @@ func (a *API) assistantAuth(next http.HandlerFunc) http.HandlerFunc {
 			writeError(w, http.StatusForbidden, "Droits insuffisants.")
 			return
 		}
-		next(w, r.WithContext(assistant.WithRole(r.Context(), role)))
+		user := userID(r.Context())
+		ctx := assistant.WithRole(r.Context(), role)
+		ctx = assistant.WithUser(ctx, user)
+		next(w, r.WithContext(ctx))
 	})
 }
 
