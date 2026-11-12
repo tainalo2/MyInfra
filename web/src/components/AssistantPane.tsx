@@ -5,6 +5,13 @@ import { useAssistant } from '../assistant-context';
 import { patchesFromReply } from './diff-blocks';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
+type ReasoningEffort = 'low' | 'medium' | 'high';
+
+interface ModelCapability {
+  model: string;
+  supported_reasons: ReasoningEffort[];
+  default_reason: ReasoningEffort;
+}
 
 /**
  * Assistant chat scoped to a functional context. The whole pane hides behind one flag (/api/assistant/status).
@@ -18,8 +25,11 @@ export function AssistantPane() {
   const { pageContext } = useAssistant();
   const [enabled, setEnabled] = useState(false);
   const [providers, setProviders] = useState<string[]>([]);
+  const [models, setModels] = useState<Record<string, ModelCapability[]>>({});
   const [provider, setProvider] = useState('');
   const [model, setModel] = useState('');
+  const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>('medium');
+  const [supportedReasons, setSupportedReasons] = useState<ReasoningEffort[]>([]);
   const [session] = useState(() => crypto.randomUUID());
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
@@ -28,13 +38,54 @@ export function AssistantPane() {
   useEffect(() => {
     fetch('/api/assistant/status')
       .then((r) => r.json())
-      .then((s: { enabled: boolean; providers: string[] }) => {
+      .then((s: { enabled: boolean; providers: string[]; models: Record<string, ModelCapability[]> }) => {
         setEnabled(s.enabled);
         setProviders(s.providers);
-        setProvider(s.providers[0] ?? '');
+        setModels(s.models || {});
+        
+        // Set initial provider
+        if (s.providers && s.providers.length > 0) {
+          setProvider(s.providers[0]);
+          
+          // Set initial model from first provider
+          const providerModels = s.models?.[s.providers[0]];
+          if (providerModels && providerModels.length > 0) {
+            const firstModel = providerModels[0];
+            setModel(firstModel.model);
+            setSupportedReasons(firstModel.supported_reasons);
+            setReasoningEffort(firstModel.default_reason);
+          }
+        }
       })
       .catch(() => setEnabled(false));
   }, []);
+
+  // Update model list and reset model selection when provider changes
+  useEffect(() => {
+    if (provider && models[provider]) {
+      const providerModels = models[provider];
+      if (providerModels.length > 0) {
+        const firstModel = providerModels[0];
+        setModel(firstModel.model);
+        setSupportedReasons(firstModel.supported_reasons);
+        setReasoningEffort(firstModel.default_reason);
+      }
+    }
+  }, [provider, models]);
+
+  // Update reasoning support when model changes
+  useEffect(() => {
+    if (provider && models[provider]) {
+      const selectedModel = models[provider].find(m => m.model === model);
+      if (selectedModel) {
+        setSupportedReasons(selectedModel.supported_reasons);
+        // Ensure current reasoning effort is supported
+        if (!selectedModel.supported_reasons.includes(reasoningEffort)) {
+          setReasoningEffort(selectedModel.default_reason);
+        }
+      }
+    }
+  }, [model, provider, models, reasoningEffort]);
 
   if (!enabled) return null;
 
@@ -48,7 +99,14 @@ export function AssistantPane() {
       const r = await fetch('/api/assistant/chat', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ session, provider, model, ...pageContext, messages: next }),
+        body: JSON.stringify({ 
+          session, 
+          provider, 
+          model, 
+          reasoning_effort: reasoningEffort,
+          ...pageContext, 
+          messages: next 
+        }),
       });
       const d = await r.json();
       const text = r.status === 403
@@ -78,7 +136,12 @@ export function AssistantPane() {
         <select value={provider} onChange={(e) => setProvider(e.target.value)}>
           {providers.map((p) => <option key={p}>{p}</option>)}
         </select>
-        <input placeholder="modèle" value={model} onChange={(e) => setModel(e.target.value)} />
+        <select value={model} onChange={(e) => setModel(e.target.value)}>
+          {models[provider]?.map((m) => <option key={m.model}>{m.model}</option>)}
+        </select>
+        <select value={reasoningEffort} onChange={(e) => setReasoningEffort(e.target.value as ReasoningEffort)}>
+          {supportedReasons.map((r) => <option key={r}>{r}</option>)}
+        </select>
       </div>
       <ul className="flex-1 overflow-auto p-2">
         {msgs.map((m, i) => <li key={i}><b>{m.role}</b> {m.content}</li>)}
@@ -89,7 +152,7 @@ export function AssistantPane() {
           <button disabled={busy}>Envoyer</button>
         </form>
       ) : (
-        <p className="p-2 text-[13px] text-muted">Mode consultation : votre rôle ne permet pas de solliciter l’assistant.</p>
+        <p className="p-2 text-[13px] text-muted">Mode consultation : votre rôle ne permet pas de solliciter l'assistant.</p>
       )}
     </aside>
   );

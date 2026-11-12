@@ -84,7 +84,7 @@ func TestChatUpdatesMeterAndNoKey(t *testing.T) {
 	if got.InputTokens != 200 || got.OutputTokens != 100 || out.Usage.InputTokens != 100 {
 		t.Fatalf("%+v %+v", got, out)
 	}
-	if _, err := (Claude{up.URL}).Complete(context.Background(), "m", "", nil, "bad"); err == nil || strings.Contains(err.Error(), "bad\"") {
+	if _, err := (Claude{up.URL}).Complete(context.Background(), "m", "", nil, "bad", ReasoningMedium); err == nil || strings.Contains(err.Error(), "bad\"") {
 		t.Fatalf("err %v", err)
 	}
 }

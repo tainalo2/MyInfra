@@ -26,11 +26,16 @@ import (
 type countingProvider struct{ calls atomic.Int32 }
 
 func (p *countingProvider) Name() string { return "fake" }
-func (p *countingProvider) Complete(_ context.Context, _, _ string, _ []assistant.Message, _ string) (assistant.Response, error) {
+func (p *countingProvider) Complete(_ context.Context, _, _ string, _ []assistant.Message, _ string, _ assistant.ReasoningEffort) (assistant.Response, error) {
 	p.calls.Add(1)
 	return assistant.Response{Text: "ok", Usage: assistant.Usage{InputTokens: 1, OutputTokens: 1}}, nil
 }
 func (p *countingProvider) SupportsSubscriptionAuth() bool { return false }
+func (p *countingProvider) ListModels() []assistant.ModelCapability {
+	return []assistant.ModelCapability{
+		{Model: "fake-model", SupportedReasons: []assistant.ReasoningEffort{assistant.ReasoningLow}, DefaultReason: assistant.ReasoningLow},
+	}
+}
 
 // disposableRepo is a git repository created for one test, with one commit.
 func disposableRepo(t *testing.T) string {
