@@ -247,7 +247,7 @@ type chatReq struct {
 	Session    string    `json:"session"`
 	Provider   string    `json:"provider"`
 	Model      string    `json:"model"`
-	Page       string    `json:"page,omitempty"`       // page name for dynamic context resolution
+	Page       string    `json:"page,omitempty"`        // page name for dynamic context resolution
 	ResourceID string    `json:"resource_id,omitempty"` // resource id for access control
 	Messages   []Message `json:"messages"`
 }
@@ -274,7 +274,7 @@ func (s *Service) chat(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"assistant_unavailable": true})
 		return
 	}
-	
+
 	// Create resource access verifier: checks if the user can access the template.
 	// If no resource ID is provided or the page is not template_editor,
 	// the verifier always returns true (no restriction).
@@ -286,7 +286,7 @@ func (s *Service) chat(w http.ResponseWriter, r *http.Request) {
 		// and verifies the user's access based on role permissions.
 		return s.CanAccessTemplate(r.Context(), userID, resourceID)
 	}
-	
+
 	route, err := s.Router.Route(harness.RouteRequest{
 		User:        UserOf(r.Context()),
 		Role:        RoleOf(r.Context()),
@@ -318,7 +318,7 @@ func (s *Service) CanAccessTemplate(ctx context.Context, userID, templateID stri
 		// No verifier available; default to denying access
 		return false
 	}
-	
+
 	// Use the verifier to check access
 	return s.AccessVerifier(ctx, userID, templateID)
 }

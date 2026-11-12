@@ -26,11 +26,11 @@ func CanChat(role string) bool {
 
 // RouteRequest is the input to the router.
 type RouteRequest struct {
-	User              string `json:"user"`
-	Role              string `json:"role,omitempty"` // empty => refused
-	Page              string `json:"page,omitempty"` // page name for dynamic context resolution
-	ResourceID        string `json:"resource_id,omitempty"` // resource identifier for access control
-	ProviderKey       string `json:"provider_key,omitempty"` // empty => unavailable
+	User        string `json:"user"`
+	Role        string `json:"role,omitempty"`         // empty => refused
+	Page        string `json:"page,omitempty"`         // page name for dynamic context resolution
+	ResourceID  string `json:"resource_id,omitempty"`  // resource identifier for access control
+	ProviderKey string `json:"provider_key,omitempty"` // empty => unavailable
 }
 
 // RouteResult is returned by Route.
@@ -55,13 +55,13 @@ func NewRouter(cfg *Config) *Router { return &Router{Config: cfg} }
 
 // Route loads the appropriate context profile based on the page and resource access.
 // If no provider key is configured, returns assistant_unavailable:true immediately without any network call.
-// 
+//
 // Dynamic context resolution:
-// - If page is provided, looks up the context name via config.GetContextForPage()
-// - If ResourceID is provided and page maps to a context requiring access verification,
-//   the backend MUST verify the user has access (implementation delegated to the caller).
-// - A read-only role always falls back to "general" context regardless of page.
-// - Unknown pages fall back to "general" context.
+//   - If page is provided, looks up the context name via config.GetContextForPage()
+//   - If ResourceID is provided and page maps to a context requiring access verification,
+//     the backend MUST verify the user has access (implementation delegated to the caller).
+//   - A read-only role always falls back to "general" context regardless of page.
+//   - Unknown pages fall back to "general" context.
 func (r *Router) Route(req RouteRequest, resourceAccessVerifier func(userID, resourceID string) bool) (RouteResult, error) {
 	// Authorization first: a read-only role never reaches a provider.
 	// Always fall back to general context for read-only roles.
@@ -72,13 +72,13 @@ func (r *Router) Route(req RouteRequest, resourceAccessVerifier func(userID, res
 	if req.ProviderKey == "" {
 		return RouteResult{AssistantUnavailable: true}, nil
 	}
-	
+
 	// Resolve the functional context name from page.
 	contextName := "general"
 	if req.Page != "" {
 		contextName = r.Config.GetContextForPage(req.Page)
 	}
-	
+
 	// If the resolved context is "template_editor", verify the user has access to the resource.
 	// An empty/missing ResourceID is treated as automatic denial (access required but not provided).
 	// If verification fails, fall back to general.
@@ -88,7 +88,7 @@ func (r *Router) Route(req RouteRequest, resourceAccessVerifier func(userID, res
 			contextName = "general"
 		}
 	}
-	
+
 	profile, err := r.Config.Get(contextName)
 	if err != nil {
 		return RouteResult{}, err

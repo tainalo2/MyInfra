@@ -149,18 +149,18 @@ func TestRouteRefusesReadOnlyRole(t *testing.T) {
 func TestDynamicContextResolution(t *testing.T) {
 	cfg, _ := ParseConfig([]byte(testConfig))
 	r := NewRouter(cfg)
-	
+
 	// Verifier that grants access
 	grantingVerifier := func(userID, resourceID string) bool {
 		return userID == "alice" && resourceID == "tpl-123"
 	}
-	
+
 	// User alice with tpl-123 → template_editor context (has edit tools)
 	res, err := r.Route(RouteRequest{
-		User:       "alice",
-		Role:       RoleDeploy,
-		Page:       "template_editor",
-		ResourceID: "tpl-123",
+		User:        "alice",
+		Role:        RoleDeploy,
+		Page:        "template_editor",
+		ResourceID:  "tpl-123",
 		ProviderKey: "sk-live",
 	}, grantingVerifier)
 	if err != nil || len(res.AllowedTools) == 0 {
@@ -169,13 +169,13 @@ func TestDynamicContextResolution(t *testing.T) {
 	if !contains(res.AllowedTools, "patch_template") {
 		t.Fatal("expected patch_template tool in template_editor context")
 	}
-	
+
 	// User bob with tpl-123 → general context (access denied, falls back)
 	res2, err := r.Route(RouteRequest{
-		User:       "bob",
-		Role:       RoleDeploy,
-		Page:       "template_editor",
-		ResourceID: "tpl-123",
+		User:        "bob",
+		Role:        RoleDeploy,
+		Page:        "template_editor",
+		ResourceID:  "tpl-123",
 		ProviderKey: "sk-live",
 	}, grantingVerifier)
 	if err != nil || len(res2.AllowedTools) > 0 {
@@ -188,18 +188,18 @@ func TestDynamicContextResolution(t *testing.T) {
 func TestReadOnlyFallbackToGeneral(t *testing.T) {
 	cfg, _ := ParseConfig([]byte(testConfig))
 	r := NewRouter(cfg)
-	
+
 	// Verifier that would grant access
 	grantingVerifier := func(userID, resourceID string) bool {
 		return true
 	}
-	
+
 	// Read-only role with template_editor page → still refused (ErrReadOnly)
 	_, err := r.Route(RouteRequest{
-		User:       "alice",
-		Role:       RoleRead,
-		Page:       "template_editor",
-		ResourceID: "tpl-123",
+		User:        "alice",
+		Role:        RoleRead,
+		Page:        "template_editor",
+		ResourceID:  "tpl-123",
 		ProviderKey: "sk-live",
 	}, grantingVerifier)
 	if err != ErrReadOnly {
@@ -213,18 +213,18 @@ func TestReadOnlyFallbackToGeneral(t *testing.T) {
 func TestSecurityBypassEmptyResourceID(t *testing.T) {
 	cfg, _ := ParseConfig([]byte(testConfig))
 	r := NewRouter(cfg)
-	
+
 	// Verifier that always denies (or is never called)
 	denyAllVerifier := func(userID, resourceID string) bool {
 		return false
 	}
-	
+
 	// Case 1: page="template_editor" with empty resource_id → general context (no tools)
 	res, err := r.Route(RouteRequest{
-		User:       "attacker",
-		Role:       RoleDeploy,
-		Page:       "template_editor",
-		ResourceID: "", // EMPTY — should trigger automatic denial
+		User:        "attacker",
+		Role:        RoleDeploy,
+		Page:        "template_editor",
+		ResourceID:  "", // EMPTY — should trigger automatic denial
 		ProviderKey: "sk-live",
 	}, denyAllVerifier)
 	if err != nil {
@@ -236,16 +236,16 @@ func TestSecurityBypassEmptyResourceID(t *testing.T) {
 	if contains(res.AllowedTools, "patch_template") {
 		t.Fatal("SECURITY BUG: patch_template should not be available without resource_id")
 	}
-	
+
 	// Case 2: verify that a valid resource_id still works (positive case)
 	grantingVerifier := func(userID, resourceID string) bool {
 		return userID == "alice" && resourceID == "tpl-456"
 	}
 	res2, err := r.Route(RouteRequest{
-		User:       "alice",
-		Role:       RoleDeploy,
-		Page:       "template_editor",
-		ResourceID: "tpl-456", // Valid
+		User:        "alice",
+		Role:        RoleDeploy,
+		Page:        "template_editor",
+		ResourceID:  "tpl-456", // Valid
 		ProviderKey: "sk-live",
 	}, grantingVerifier)
 	if err != nil || !contains(res2.AllowedTools, "patch_template") {
