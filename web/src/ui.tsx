@@ -33,6 +33,9 @@ import { settingsMatch } from "./navmap";
 import { useTheme } from "./theme";
 import { AccountNav } from "./account-nav";
 import { useSession } from "./session";
+import { useAssistant } from "./assistant-context";
+import { AssistantPane } from "./components/AssistantPane";
+import { AssistantToggle } from "./assistant-toggle";
 
 export const focus =
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
@@ -562,6 +565,7 @@ export function Shell() {
   const [override, setOverride] = useState<Crumb[] | null>(null);
   const counts = useCounts(location.pathname);
   const names = useCrumbNames(location.pathname);
+  const { isOpen } = useAssistant();
   // The trail is read once here: the bar of a phone and the tree of the
   // wide screen's menu both follow it.
   const crumbs = override ?? crumbsFor(location.pathname, names);
@@ -594,6 +598,7 @@ export function Shell() {
             <UpdatesNav />
             <div className="mt-auto flex flex-col gap-1 border-t border-line pt-4">
               <NavItem {...settingsNav} />
+              <AssistantToggle />
               <AccountNav />
             </div>
           </nav>
@@ -605,32 +610,43 @@ export function Shell() {
             </div>
           </div>
         </aside>
-        {location.pathname === "/" ? (
-          <main className="relative min-w-0 flex-1 overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)] md:overflow-hidden md:pb-0 md:pt-0">
-            <div className="px-4">
-              <MobileBar />
-            </div>
-            <Suspense fallback={<LoadingLines lines={4} />}>
-              <Outlet />
-            </Suspense>
-          </main>
-        ) : (
-          // No scroll anchoring: when the plan of a page shrinks, the page must
-          // not jump back by what it saved, or the plan would grow again.
-          <main className="min-w-0 flex-1 overflow-y-auto px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)] [overflow-anchor:none] md:px-6 md:pb-12 md:pt-0">
-            <MobileBar />
-            {/* The page takes the room it is given, up to where lines grow too long
-                to read: lists add columns, forms keep their own width. */}
-            <div className="@container mx-auto w-full max-w-[1600px] md:pt-8">
-              <ReadOnlyBanner />
-              <TransferBanner />
-              <ReplicaBanner />
+        {/* Main content + optional assistant panel as a split view */}
+        <div className="flex min-w-0 flex-1">
+          {location.pathname === "/" ? (
+            <main className="relative min-w-0 flex-1 overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)] md:overflow-hidden md:pb-0 md:pt-0">
+              <div className="px-4">
+                <MobileBar />
+              </div>
               <Suspense fallback={<LoadingLines lines={4} />}>
                 <Outlet />
               </Suspense>
+            </main>
+          ) : (
+            // No scroll anchoring: when the plan of a page shrinks, the page must
+            // not jump back by what it saved, or the plan would grow again.
+            <main className="min-w-0 flex-1 overflow-y-auto px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)] [overflow-anchor:none] md:px-6 md:pb-12 md:pt-0">
+              <MobileBar />
+              {/* The page takes the room it is given, up to where lines grow too long
+                  to read: lists add columns, forms keep their own width. */}
+              <div className="@container mx-auto w-full max-w-[1600px] md:pt-8">
+                <ReadOnlyBanner />
+                <TransferBanner />
+                <ReplicaBanner />
+                <Suspense fallback={<LoadingLines lines={4} />}>
+                  <Outlet />
+                </Suspense>
+              </div>
+            </main>
+          )}
+          {/* Assistant panel - shows when isOpen and only on desktop */}
+          {isOpen ? (
+            <div className="hidden min-w-0 shrink-0 flex-col border-l border-line md:flex md:w-96">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
+                <AssistantPane />
+              </div>
             </div>
-          </main>
-        )}
+          ) : null}
+        </div>
       </div>
     <BottomTabs deployments={deploys.length} removals={jobs.length} />
     <Palette />

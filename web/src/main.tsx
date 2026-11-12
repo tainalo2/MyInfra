@@ -5,6 +5,7 @@ import { App } from "./App";
 import { detectLang, setLang } from "./i18n";
 import { SessionProvider } from "./session";
 import { ThemeProvider } from "./theme";
+import { AssistantProvider } from "./assistant-context";
 import "./index.css";
 
 setLang(detectLang());
@@ -17,7 +18,9 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider>
       <SessionProvider>
-        <RouterProvider router={router} />
+        <AssistantProvider>
+          <RouterProvider router={router} />
+        </AssistantProvider>
       </SessionProvider>
     </ThemeProvider>
   </StrictMode>,
