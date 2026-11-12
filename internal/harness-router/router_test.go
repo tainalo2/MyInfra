@@ -207,6 +207,52 @@ func TestReadOnlyFallbackToGeneral(t *testing.T) {
 	}
 }
 
+// REGRESSION TEST: page="template_editor" with empty resource_id MUST fall back to general,
+// even when a verifier is provided. This prevents an attacker from claiming edit access
+// without providing a resource ID.
+func TestSecurityBypassEmptyResourceID(t *testing.T) {
+	cfg, _ := ParseConfig([]byte(testConfig))
+	r := NewRouter(cfg)
+	
+	// Verifier that always denies (or is never called)
+	denyAllVerifier := func(userID, resourceID string) bool {
+		return false
+	}
+	
+	// Case 1: page="template_editor" with empty resource_id → general context (no tools)
+	res, err := r.Route(RouteRequest{
+		User:       "attacker",
+		Role:       RoleDeploy,
+		Page:       "template_editor",
+		ResourceID: "", // EMPTY — should trigger automatic denial
+		ProviderKey: "sk-live",
+	}, denyAllVerifier)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(res.AllowedTools) > 0 {
+		t.Fatalf("SECURITY BUG: got edit tools with no resource_id and a denying verifier. AllowedTools=%v", res.AllowedTools)
+	}
+	if contains(res.AllowedTools, "patch_template") {
+		t.Fatal("SECURITY BUG: patch_template should not be available without resource_id")
+	}
+	
+	// Case 2: verify that a valid resource_id still works (positive case)
+	grantingVerifier := func(userID, resourceID string) bool {
+		return userID == "alice" && resourceID == "tpl-456"
+	}
+	res2, err := r.Route(RouteRequest{
+		User:       "alice",
+		Role:       RoleDeploy,
+		Page:       "template_editor",
+		ResourceID: "tpl-456", // Valid
+		ProviderKey: "sk-live",
+	}, grantingVerifier)
+	if err != nil || !contains(res2.AllowedTools, "patch_template") {
+		t.Fatalf("expected patch_template with valid resource_id, got: %+v (err=%v)", res2, err)
+	}
+}
+
 // Helper function to check if a slice contains a string
 func contains(slice []string, item string) bool {
 	for _, s := range slice {

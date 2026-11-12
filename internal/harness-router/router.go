@@ -79,11 +79,12 @@ func (r *Router) Route(req RouteRequest, resourceAccessVerifier func(userID, res
 		contextName = r.Config.GetContextForPage(req.Page)
 	}
 	
-	// If the resolved context is "template_editor" and we have a resource ID,
-	// verify the user has access to that resource. If verification fails, fall back to general.
-	if contextName == "template_editor" && req.ResourceID != "" {
-		if resourceAccessVerifier == nil || !resourceAccessVerifier(req.User, req.ResourceID) {
-			// Access denied; fall back to general context
+	// If the resolved context is "template_editor", verify the user has access to the resource.
+	// An empty/missing ResourceID is treated as automatic denial (access required but not provided).
+	// If verification fails, fall back to general.
+	if contextName == "template_editor" {
+		if req.ResourceID == "" || resourceAccessVerifier == nil || !resourceAccessVerifier(req.User, req.ResourceID) {
+			// Access denied or no resource ID provided; fall back to general context
 			contextName = "general"
 		}
 	}
