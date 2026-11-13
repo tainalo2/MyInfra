@@ -10,6 +10,7 @@ export function AssistantSettings() {
   const [keyType, setKeyType] = useState<'api_key' | 'subscription_token'>('api_key');
   const [prices, setPrices] = useState<Price[]>([]);
   const [providers, setProviders] = useState<ProviderCapability[]>([]);
+  const [chatgptSignin, setChatgptSignin] = useState(false);
   
   const load = () => fetch('/api/assistant/pricing').then((r) => r.json()).then(setPrices);
   
@@ -18,6 +19,7 @@ export function AssistantSettings() {
   useEffect(() => { 
     void load(); 
     void loadProviders();
+    fetch('/api/assistant/status').then((r) => r.json()).then((s) => setChatgptSignin(!!s.chatgpt_signin)).catch(() => {});
   }, []);
 
   async function saveKey() {
@@ -68,6 +70,12 @@ export function AssistantSettings() {
         )}
       </div>
       
+      {provider === 'codex' && supportsSubscription && chatgptSignin && (
+        <p>
+          {/* Full-page navigation: the OAuth flow redirects through OpenAI and back. */}
+          <a role="button" href="/api/assistant/openai/start" data-testid="continue-with-chatgpt">Continue with ChatGPT</a>
+        </p>
+      )}
       <input type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} />
       <button onClick={() => void saveKey()}>Enregistrer</button>
       <h3>Tarifs ($ / M tokens)</h3>
