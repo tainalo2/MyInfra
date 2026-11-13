@@ -31,6 +31,9 @@ type Service struct {
 	// Persist writes them back, or the rotation would be done at each start
 	// and the previous master could never be retired.
 	rekeyed []string
+
+	// siwc runs "Sign in with ChatGPT"; nil until EnableSubscription.
+	siwc subscription
 }
 
 // KeyRepo keeps the sealed provider keys, in the exact form Export gives.
@@ -119,6 +122,7 @@ func (s *Service) Register(mux *http.ServeMux, wrap func(http.HandlerFunc) http.
 	}))
 	mux.HandleFunc("GET /api/assistant/usage/stream", wrap(s.stream))
 	mux.HandleFunc("POST /api/assistant/chat", wrap(s.chat))
+	s.registerSubscription(mux, wrap)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -149,14 +153,14 @@ func (s *Service) status(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"enabled": false, "providers": []string{}, "models": map[string][]ModelCapability{}, "assistant_unavailable": true, "reason": "no_master_key"})
 		return
 	}
-	ps := s.Keys.List()
+	ps := s.providerNames()
 	models := make(map[string][]ModelCapability)
 	for _, provider := range ps {
 		if prov, ok := s.Providers[provider]; ok {
 			models[provider] = prov.ListModels()
 		}
 	}
-	writeJSON(w, 200, map[string]any{"enabled": len(ps) > 0, "providers": ps, "models": models})
+	writeJSON(w, 200, map[string]any{"enabled": len(ps) > 0, "providers": ps, "models": models, "chatgpt_signin": s.siwcClient() != nil})
 }
 
 func (s *Service) setPrice(w http.ResponseWriter, r *http.Request) {
@@ -276,7 +280,11 @@ func (s *Service) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	prov, ok := s.Providers[q.Provider]
-	key, _ := s.Keys.Get(q.Provider)
+	key, kerr := s.credentialFor(r.Context(), q.Provider)
+	if kerr != nil {
+		writeJSON(w, 502, map[string]string{"error": kerr.Error()})
+		return
+	}
 	if !ok || key == "" {
 		writeJSON(w, 200, map[string]any{"assistant_unavailable": true})
 		return
