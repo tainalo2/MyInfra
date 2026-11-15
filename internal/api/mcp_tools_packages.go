@@ -23,8 +23,24 @@ func problemsText(problems []pack.Problem) string {
 }
 
 func mcpPackageTools() []mcpTool {
-	textArg := text("Le paquet en YAML (ou JSON), qui commence par « type: myinfra-package » et « version: 1 ». Le format est dans la ressource myinfra://guide/packages.")
+	textArg := text("Le paquet en YAML (ou JSON), qui commence par « type: myinfra-package » et « version: 1 ». Le format est dans get_package_guide (ou la ressource myinfra://guide/packages).")
 	return []mcpTool{
+		{
+			Name: "get_package_guide", Title: "Guide des paquets", Role: store.RoleRead,
+			Description: "Le format des paquets MyInfra : chaque champ, ce que MyInfra remplit, des exemples complets et comment adapter un docker-compose. À lire avant d'écrire ou de convertir un paquet.",
+			Schema:      object(nil, map[string]any{}),
+			Routes:      []string{"GET /api/packages/guide"},
+			Run: func(c *mcpCall, _ json.RawMessage) (string, error) {
+				var out struct {
+					Text string `json:"text"`
+				}
+				if err := c.get("/api/packages/guide", &out); err != nil {
+					return "", err
+				}
+				return out.Text, nil
+			},
+		},
+		readSourceTool(),
 		{
 			Name: "list_packages", Title: "Paquets enregistrés", Role: store.RoleRead,
 			Description: "Les paquets que la personne a écrits ou importés, prêts à installer.",
@@ -110,7 +126,7 @@ func mcpPackageTools() []mcpTool {
 				var out struct {
 					Format   string         `json:"format"`
 					YAML     string         `json:"yaml"`
-					Warnings []string       `json:"warnings"`
+					Warnings []pack.Warning `json:"warnings"`
 					Problems []pack.Problem `json:"problems"`
 				}
 				if err := c.send(http.MethodPost, "/api/packages/convert", args, &out); err != nil {
@@ -118,7 +134,14 @@ func mcpPackageTools() []mcpTool {
 				}
 				text := "Format lu : " + out.Format + "\n\n" + out.YAML
 				if len(out.Warnings) > 0 {
-					text += "\nAvertissements :\n - " + strings.Join(out.Warnings, "\n - ")
+					text += "\nAvertissements :"
+					for _, w := range out.Warnings {
+						if w.Service != "" {
+							text += "\n - " + w.Service + " : " + w.Message
+						} else {
+							text += "\n - " + w.Message
+						}
+					}
 				}
 				if len(out.Problems) > 0 {
 					text += "\nÀ corriger avant d'enregistrer :\n" + problemsText(out.Problems)
