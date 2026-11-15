@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { currentLocale, text } from '../i18n';
 
 export interface UsageSnapshot {
   session_id: string;
@@ -21,15 +22,14 @@ export function TokenBudgetBanner({ sessionId }: { sessionId: string }) {
     return () => es.close();
   }, [sessionId]);
 
-  const inT = u?.input_tokens ?? 0;
-  const outT = u?.output_tokens ?? 0;
+  // Nothing to say before the first turn.
+  if (!u?.provider) return null;
+  const n = (v: number) => v.toLocaleString(currentLocale());
   return (
-    <div role="status" data-testid="token-banner" className="flex gap-4 border-b px-3 py-1 text-xs">
-      <span>{u?.provider ? `${u.provider} · ${u.model}` : '—'}</span>
-      <span>in {inT.toLocaleString()}</span>
-      <span>out {outT.toLocaleString()}</span>
-      <span>total {(inT + outT).toLocaleString()}</span>
-      <span>{u && !u.price_known ? 'coût: tarif inconnu' : `≈ $${(u?.cost_usd ?? 0).toFixed(4)}`}</span>
+    <div role="status" data-testid="token-banner" className="flex flex-wrap gap-x-3 gap-y-1 border-b border-line px-4 py-2 text-[13px] text-muted">
+      <span>{`${u.provider} · ${u.model}`}</span>
+      <span>{text('assistant.usage', { in: n(u.input_tokens), out: n(u.output_tokens) })}</span>
+      <span>{u.price_known ? text('assistant.cost', { cost: u.cost_usd.toFixed(4) }) : text('assistant.costUnknown')}</span>
     </div>
   );
 }

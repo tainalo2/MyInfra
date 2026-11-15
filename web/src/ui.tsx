@@ -827,6 +827,7 @@ function crumbsFor(pathname: string, names: Record<string, string>): Crumb[] {
   const fixed: Record<string, MsgKey> = {
     "/cles": "nav.ssh",
     "/assistants": "nav.mcp",
+    "/assistant-ia": "nav.assistant",
     "/secrets": "nav.secrets",
     "/providers": "nav.providers",
     "/dns": "nav.dns",

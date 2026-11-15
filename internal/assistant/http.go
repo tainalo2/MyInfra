@@ -160,7 +160,7 @@ func (s *Service) status(w http.ResponseWriter, r *http.Request) {
 			models[provider] = prov.ListModels()
 		}
 	}
-	writeJSON(w, 200, map[string]any{"enabled": len(ps) > 0, "providers": ps, "models": models, "chatgpt_signin": s.siwcClient() != nil})
+	writeJSON(w, 200, map[string]any{"enabled": len(ps) > 0, "providers": ps, "models": models, "api_keys": s.apiKeyNames(), "chatgpt_signin": s.siwcClient() != nil, "chatgpt_connected": s.hasSubscription()})
 }
 
 func (s *Service) setPrice(w http.ResponseWriter, r *http.Request) {

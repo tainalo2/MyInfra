@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowRightLeft, Bot, Cloud, Globe, HardDrive, KeyRound, Shield, UserRound, Users, Waypoints, type LucideIcon } from "lucide-react";
+import { ArrowRightLeft, Bot, Cloud, Globe, HardDrive, KeyRound, MessageSquareText, Shield, UserRound, Users, Waypoints, type LucideIcon } from "lucide-react";
 import { api, type ApiToken, type LocalImage, type Secret } from "./api";
 import { langNames, langs, text, type MsgKey } from "./i18n";
 import { ConfirmDialog } from "./kit";
@@ -20,7 +20,7 @@ function plural(count: number, one: MsgKey, many: MsgKey) {
 
 // Counts are read once: a settings row says what is there, not live news.
 function useCounts(canDeploy: boolean, canAdmin: boolean) {
-  const [counts, setCounts] = useState<{ secrets?: Secret[]; images?: LocalImage[]; tokens?: ApiToken[]; users?: number; appSecrets?: number }>({});
+  const [counts, setCounts] = useState<{ secrets?: Secret[]; images?: LocalImage[]; tokens?: ApiToken[]; users?: number; appSecrets?: number; assistant?: string[] }>({});
   useEffect(() => {
     let stop = false;
     const put = (part: Partial<typeof counts>) => {
@@ -30,6 +30,7 @@ function useCounts(canDeploy: boolean, canAdmin: boolean) {
       api<Secret[]>("/api/secrets").then((secrets) => put({ secrets })).catch(() => undefined);
       api<LocalImage[]>("/api/images").then((images) => put({ images })).catch(() => undefined);
       api<unknown[]>("/api/app-secrets").then((rows) => put({ appSecrets: rows.length })).catch(() => undefined);
+      api<{ providers?: string[] }>("/api/assistant/status").then((status) => put({ assistant: status.providers ?? [] })).catch(() => undefined);
     }
     api<ApiToken[]>("/api/mcp/tokens").then((tokens) => put({ tokens })).catch(() => undefined);
     if (canAdmin) api<unknown[]>("/api/users").then((rows) => put({ users: rows.length })).catch(() => undefined);
@@ -55,6 +56,10 @@ export function SettingsPage() {
       ? undefined
       : { label: [registries ? plural(registries, "count.registries1", "count.registriesN") : "", images ? plural(images, "count.images1", "count.imagesN") : ""].filter(Boolean).join(" · ") || text("count.none"), tone: "muted" as Tone };
 
+  // The providers the assistant can use now, by name: Claude, Codex.
+  const assistantState =
+    counts.assistant === undefined ? undefined : counts.assistant.length === 0 ? { label: text("assistant.stateNone"), tone: "muted" as Tone } : { label: counts.assistant.map(providerName).join(" · "), tone: "ok" as Tone };
+
   const groups: { id: string; title: MsgKey; entries: Entry[] }[] = [
     {
       id: "connexions",
@@ -64,6 +69,7 @@ export function SettingsPage() {
         { to: "/dns", label: "nav.dns", hint: "settings.domainsHint", icon: Globe, deployOnly: true, state: count(kinds("dns_token"), "count.accounts1", "count.accountsN", "ok") },
         { to: "/images", label: "nav.images", hint: "settings.imagesAllHint", icon: HardDrive, deployOnly: true, state: imageState },
         { to: "/assistants", label: "nav.mcp", hint: "settings.mcpHint", icon: Bot, state: count(counts.tokens?.length, "count.tokens1", "count.tokensN", "ok") },
+        { to: "/assistant-ia", label: "nav.assistant", hint: "settings.assistantHint", icon: MessageSquareText, deployOnly: true, state: assistantState },
       ],
     },
     {
@@ -131,6 +137,10 @@ export function SettingsPage() {
       </div>
     </>
   );
+}
+
+function providerName(id: string) {
+  return id === "claude" ? "Claude" : id === "codex" ? "Codex" : id;
 }
 
 function visible(entry: Entry, canDeploy: boolean, canAdmin: boolean) {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 
@@ -46,6 +47,22 @@ func (s *Service) providerNames() []string {
 		}
 	}
 	return out
+}
+
+// apiKeyNames lists the providers holding an API key, a subscription aside.
+func (s *Service) apiKeyNames() []string {
+	out := []string{}
+	for _, n := range s.Keys.List() {
+		if !isInternal(n) {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+func (s *Service) hasSubscription() bool {
+	_, ok := s.loadSubscription()
+	return ok
 }
 
 func (s *Service) persistEntry(ctx context.Context, name, value string) error {
@@ -202,14 +219,15 @@ func (s *Service) siwcCallback(w http.ResponseWriter, r *http.Request) {
 		}
 		slog.Warn("Sign in with ChatGPT refusé", "step", step, "err", err)
 		// Nothing was saved: a failed attempt leaves no partial registration.
-		writeJSON(w, 400, map[string]string{"error": err.Error(), "step": step})
+		// The browser comes back to the page with the step, never the detail.
+		http.Redirect(w, r, "/assistant-ia?chatgpt=error&step="+url.QueryEscape(step), http.StatusFound)
 		return
 	}
 	// The attempt belongs to the account that started it: a callback delivered
 	// under another session must not bind that ChatGPT account to it.
 	if cred.User != UserOf(r.Context()) {
 		slog.Warn("Sign in with ChatGPT refusé", "step", "owner")
-		writeJSON(w, 403, map[string]string{"error": "callback does not belong to this session", "step": "owner"})
+		http.Redirect(w, r, "/assistant-ia?chatgpt=error&step=owner", http.StatusFound)
 		return
 	}
 	s.siwc.cred.Lock()
@@ -218,5 +236,5 @@ func (s *Service) siwcCallback(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 500, map[string]string{"error": "credential not saved"})
 		return
 	}
-	http.Redirect(w, r, "/parametres?chatgpt=ok", http.StatusFound)
+	http.Redirect(w, r, "/assistant-ia?chatgpt=ok", http.StatusFound)
 }
