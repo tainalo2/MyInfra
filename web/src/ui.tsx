@@ -33,9 +33,7 @@ import { settingsMatch } from "./navmap";
 import { useTheme } from "./theme";
 import { AccountNav } from "./account-nav";
 import { useSession } from "./session";
-import { useAssistant } from "./assistant-context";
-import { AssistantPane } from "./components/AssistantPane";
-import { AssistantToggle } from "./assistant-toggle";
+import { AssistantPanel, AssistantToggle } from "./assistant-toggle";
 
 export const focus =
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
@@ -565,7 +563,6 @@ export function Shell() {
   const [override, setOverride] = useState<Crumb[] | null>(null);
   const counts = useCounts(location.pathname);
   const names = useCrumbNames(location.pathname);
-  const { isOpen } = useAssistant();
   // The trail is read once here: the bar of a phone and the tree of the
   // wide screen's menu both follow it.
   const crumbs = override ?? crumbsFor(location.pathname, names);
@@ -597,8 +594,8 @@ export function Shell() {
             <ActivityNav />
             <UpdatesNav />
             <div className="mt-auto flex flex-col gap-1 border-t border-line pt-4">
-              <NavItem {...settingsNav} />
               <AssistantToggle />
+              <NavItem {...settingsNav} />
               <AccountNav />
             </div>
           </nav>
@@ -638,14 +635,7 @@ export function Shell() {
               </div>
             </main>
           )}
-          {/* Assistant panel - shows when isOpen and only on desktop */}
-          {isOpen ? (
-            <div className="hidden min-w-0 shrink-0 flex-col border-l border-line md:flex md:w-96">
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
-                <AssistantPane />
-              </div>
-            </div>
-          ) : null}
+          <AssistantPanel />
         </div>
       </div>
     <BottomTabs deployments={deploys.length} removals={jobs.length} />

@@ -168,7 +168,10 @@ func (s *Service) credentialFor(ctx context.Context, provider string) (string, e
 
 func (s *Service) registerSubscription(mux *http.ServeMux, wrap func(http.HandlerFunc) http.HandlerFunc) {
 	mux.HandleFunc("GET /api/assistant/openai/start", wrap(s.siwcStart))
-	mux.HandleFunc("GET /auth/callback", wrap(s.siwcCallback))
+	// No session wrap: the session cookie is SameSite=Strict, so the browser
+	// never sends it on the redirect back from OpenAI. The admin who started
+	// the attempt is bound to its state instead (see siwcCallback).
+	mux.HandleFunc("GET /auth/callback", s.siwcCallback)
 	mux.HandleFunc("DELETE /api/assistant/openai", wrap(func(w http.ResponseWriter, r *http.Request) {
 		if !s.Available() {
 			writeJSON(w, 503, map[string]string{"error": noMasterKey})
@@ -177,6 +180,7 @@ func (s *Service) registerSubscription(mux *http.ServeMux, wrap func(http.Handle
 		s.siwc.cred.Lock()
 		defer s.siwc.cred.Unlock()
 		s.Keys.Delete(subscriptionEntry)
+		s.forgetModels()
 		if s.repo != nil {
 			if err := s.repo.DeleteAssistantKey(r.Context(), subscriptionEntry); err != nil {
 				writeJSON(w, 500, map[string]string{"error": "not removed"})
@@ -223,9 +227,9 @@ func (s *Service) siwcCallback(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/assistant-ia?chatgpt=error&step="+url.QueryEscape(step), http.StatusFound)
 		return
 	}
-	// The attempt belongs to the account that started it: a callback delivered
-	// under another session must not bind that ChatGPT account to it.
-	if cred.User != UserOf(r.Context()) {
+	// The state is single-use, short-lived and was issued to a signed-in admin
+	// by siwcStart: it, not a cookie, says whose attempt this is.
+	if cred.User == "" {
 		slog.Warn("Sign in with ChatGPT refusé", "step", "owner")
 		http.Redirect(w, r, "/assistant-ia?chatgpt=error&step=owner", http.StatusFound)
 		return
@@ -236,5 +240,6 @@ func (s *Service) siwcCallback(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 500, map[string]string{"error": "credential not saved"})
 		return
 	}
+	s.forgetModels()
 	http.Redirect(w, r, "/assistant-ia?chatgpt=ok", http.StatusFound)
 }

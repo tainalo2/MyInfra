@@ -295,7 +295,6 @@ func TestChatGPTSigninIsAdminOnly(t *testing.T) {
 	_, h, _, _ := rolesFixture(t)
 	routes := []struct{ method, path string }{
 		{http.MethodGet, "/api/assistant/openai/start"},
-		{http.MethodGet, "/auth/callback?state=x&code=y"},
 		{http.MethodDelete, "/api/assistant/openai"},
 	}
 	for _, who := range []string{"reader", "deployer", "writer"} {
@@ -311,5 +310,18 @@ func TestChatGPTSigninIsAdminOnly(t *testing.T) {
 	}
 	if rec := call(t, h, http.MethodDelete, "/api/assistant/openai", "", "sess-admin", nil); rec.Code != http.StatusNoContent {
 		t.Fatalf("admin delete: %d", rec.Code)
+	}
+}
+
+// OpenAI redirects back with no session cookie (SameSite=Strict): the
+// callback must answer without one, never with 401.
+func TestChatGPTCallbackNeedsNoSession(t *testing.T) {
+	a, h, _, _ := rolesFixture(t)
+	if err := a.Assistant.EnableSubscription(t.Context(), "MyInfra", "http://127.0.0.1:8080/auth/callback"); err != nil {
+		t.Fatal(err)
+	}
+	rec := call(t, h, http.MethodGet, "/auth/callback?state=unknown&code=c", "", "", nil)
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/assistant-ia?chatgpt=error&step=state" {
+		t.Fatalf("%d %q", rec.Code, rec.Header().Get("Location"))
 	}
 }

@@ -34,6 +34,9 @@ type Service struct {
 
 	// siwc runs "Sign in with ChatGPT"; nil until EnableSubscription.
 	siwc subscription
+
+	// models keeps what each provider listed (see modelsFor).
+	models modelCache
 }
 
 // KeyRepo keeps the sealed provider keys, in the exact form Export gives.
@@ -156,8 +159,8 @@ func (s *Service) status(w http.ResponseWriter, r *http.Request) {
 	ps := s.providerNames()
 	models := make(map[string][]ModelCapability)
 	for _, provider := range ps {
-		if prov, ok := s.Providers[provider]; ok {
-			models[provider] = prov.ListModels()
+		if _, ok := s.Providers[provider]; ok {
+			models[provider] = s.modelsFor(r.Context(), provider)
 		}
 	}
 	writeJSON(w, 200, map[string]any{"enabled": len(ps) > 0, "providers": ps, "models": models, "api_keys": s.apiKeyNames(), "chatgpt_signin": s.siwcClient() != nil, "chatgpt_connected": s.hasSubscription()})
@@ -199,6 +202,7 @@ func (s *Service) setKey(w http.ResponseWriter, r *http.Request) {
 		b.Type = "api_key"
 	}
 
+	s.forgetModels()
 	if s.Keys.Set(provider, b.Key) != nil {
 		writeJSON(w, 400, map[string]string{"error": "invalid key"})
 		return
@@ -227,6 +231,7 @@ func (s *Service) deleteKey(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.Keys.Delete(provider)
+	s.forgetModels()
 	w.WriteHeader(204)
 }
 
