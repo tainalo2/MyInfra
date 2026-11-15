@@ -325,3 +325,40 @@ func TestChatGPTCallbackNeedsNoSession(t *testing.T) {
 		t.Fatalf("%d %q", rec.Code, rec.Header().Get("Location"))
 	}
 }
+
+// Each person keeps their own conversations: listed latest first, titled by
+// the first question, and out of reach of another account, even by id.
+func TestAssistantConversationsArePrivate(t *testing.T) {
+	_, h, _, _ := rolesFixture(t)
+	msgs := map[string]any{"messages": []map[string]any{
+		{"role": "user", "content": "Pourquoi blog ne démarre pas ?\nDepuis ce matin."},
+		{"role": "assistant", "content": "Je regarde.", "tools": []map[string]string{{"name": "get_application", "title": "Lire une application"}}},
+	}}
+	if rec := call(t, h, http.MethodPut, "/api/assistant/conversations/c1", "", "sess-admin", msgs); rec.Code != http.StatusNoContent {
+		t.Fatalf("put: %d %s", rec.Code, rec.Body.String())
+	}
+	rec := call(t, h, http.MethodGet, "/api/assistant/conversations", "", "sess-admin", nil)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"title":"Pourquoi blog ne démarre pas ?"`) {
+		t.Fatalf("list: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := call(t, h, http.MethodGet, "/api/assistant/conversations/c1", "", "sess-admin", nil); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "get_application") {
+		t.Fatalf("get: %d %s", rec.Code, rec.Body.String())
+	}
+	for _, who := range []string{"reader", "deployer"} {
+		if rec := call(t, h, http.MethodGet, "/api/assistant/conversations/c1", "", "sess-"+who, nil); rec.Code != http.StatusNotFound {
+			t.Fatalf("%s read another's conversation: %d", who, rec.Code)
+		}
+		if rec := call(t, h, http.MethodPut, "/api/assistant/conversations/c1", "", "sess-"+who, map[string]any{"messages": []any{}}); rec.Code != http.StatusNotFound {
+			t.Fatalf("%s overwrote another's conversation: %d", who, rec.Code)
+		}
+		if rec := call(t, h, http.MethodGet, "/api/assistant/conversations", "", "sess-"+who, nil); strings.Contains(rec.Body.String(), "c1") {
+			t.Fatalf("%s lists another's conversation: %s", who, rec.Body.String())
+		}
+	}
+	if rec := call(t, h, http.MethodDelete, "/api/assistant/conversations/c1", "", "sess-admin", nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete: %d", rec.Code)
+	}
+	if rec := call(t, h, http.MethodGet, "/api/assistant/conversations/c1", "", "sess-admin", nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("after delete: %d", rec.Code)
+	}
+}

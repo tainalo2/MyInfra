@@ -21,11 +21,12 @@ type ToolSpec struct {
 	Title       string
 	Description string
 	Schema      map[string]any
-	// Write marks a tool that changes something: the assistant never runs
-	// it before the person agrees in the interface.
+	// Write marks a tool that changes something. The assistant runs it with
+	// the person's rights, as they would from the interface.
 	Write bool
 	// Destructive marks a purchase or a destruction: the tool itself gives
-	// the recap and a confirmation code, which stays on the server.
+	// the recap and a confirmation code, which stays on the server, and the
+	// assistant waits for the person to agree in the interface.
 	Destructive bool
 }
 
@@ -179,9 +180,11 @@ func toolsFor(ctx context.Context, box Toolbox, guard *harness.ToolGuard) []Tool
 
 // usedTool tells the interface which tools a reply rests on.
 type usedTool struct {
-	Name    string `json:"name"`
-	Title   string `json:"title"`
-	IsError bool   `json:"is_error,omitempty"`
+	Name  string `json:"name"`
+	Title string `json:"title"`
+	// Write says the tool changed something: the interface shows it as done.
+	Write   bool `json:"write,omitempty"`
+	IsError bool `json:"is_error,omitempty"`
 }
 
 type loopResult struct {
@@ -194,8 +197,8 @@ type loopResult struct {
 const waitingText = "Nothing was done yet. The interface now shows the user this recap with a button to confirm and one to cancel; the action runs only if they confirm there. Tell them in one or two sentences what it will do, and do not ask them to type a code or to answer yes."
 
 // converse runs the turn: the model may call tools, reads their results
-// and goes on, up to maxTurns calls. A change is never run here: it waits
-// for the person as an Action.
+// and goes on, up to maxTurns calls. A purchase or a destruction is never
+// run here: it waits for the person as an Action.
 func (s *Service) converse(ctx context.Context, prov ToolUser, req ToolRequest, box Toolbox, guard *harness.ToolGuard, maxTurns int) (loopResult, error) {
 	if maxTurns <= 0 {
 		maxTurns = 10
@@ -249,22 +252,21 @@ func (s *Service) runCall(ctx context.Context, call ToolCall, byName map[string]
 	if title == "" {
 		title = spec.Name
 	}
-	if spec.Write {
-		recap := describeCall(spec, args)
-		code := ""
-		if spec.Destructive {
-			// The tool gives its own recap (prices, what goes) and a code.
-			out := box.Call(ctx, spec.Name, args, "")
-			if !out.Pending {
-				result.Text, result.IsError = clip(out.Text), true
-				if !out.IsError {
-					result.Text = "Refused: this action needs the user's confirmation and the tool gave none."
-				}
-				res.Used = append(res.Used, usedTool{Name: spec.Name, Title: title, IsError: true})
-				return result
+	// The assistant acts with the person's rights: reads and plain changes
+	// run at once, as a click of theirs would. A purchase or a destruction
+	// (Destructive, which the MCP already asks a code for) waits for them.
+	if spec.Write && spec.Destructive {
+		// The tool gives its own recap (prices, what goes) and a code.
+		out := box.Call(ctx, spec.Name, args, "")
+		if !out.Pending {
+			result.Text, result.IsError = clip(out.Text), true
+			if !out.IsError {
+				result.Text = "Refused: this action needs the user's confirmation and the tool gave none."
 			}
-			recap, code = out.Text, out.Code
+			res.Used = append(res.Used, usedTool{Name: spec.Name, Title: title, Write: true, IsError: true})
+			return result
 		}
+		recap, code := out.Text, out.Code
 		a := pendingAction{
 			Action: Action{ID: newActionID(), Tool: spec.Name, Title: title, Recap: recap},
 			user:   user, args: args, code: code, expires: time.Now().Add(pendingLife),
@@ -275,24 +277,21 @@ func (s *Service) runCall(ctx context.Context, call ToolCall, byName map[string]
 		return result
 	}
 	out := box.Call(ctx, spec.Name, args, "")
-	result.Text, result.IsError = clip(out.Text), out.IsError
-	res.Used = append(res.Used, usedTool{Name: spec.Name, Title: title, IsError: out.IsError})
-	return result
-}
-
-// describeCall is the recap of a change the tool does not recap itself:
-// its title and the arguments, as the person reads them.
-func describeCall(spec ToolSpec, args json.RawMessage) string {
-	var m map[string]any
-	_ = json.Unmarshal(args, &m)
-	var b strings.Builder
-	b.WriteString(spec.Title)
-	if len(m) > 0 {
-		pretty, _ := json.MarshalIndent(m, "", "  ")
-		b.WriteString("\n")
-		b.Write(pretty)
+	if out.Pending {
+		// A tool not marked destructive asked for a code all the same: it
+		// waits for the person like a destruction, never agreed for them.
+		a := pendingAction{
+			Action: Action{ID: newActionID(), Tool: spec.Name, Title: title, Recap: out.Text},
+			user:   user, args: args, code: out.Code, expires: time.Now().Add(pendingLife),
+		}
+		s.pending.put(a)
+		res.Actions = append(res.Actions, a.Action)
+		result.Text = "Recap:\n" + out.Text + "\n\n" + waitingText
+		return result
 	}
-	return b.String()
+	result.Text, result.IsError = clip(out.Text), out.IsError
+	res.Used = append(res.Used, usedTool{Name: spec.Name, Title: title, Write: spec.Write, IsError: out.IsError})
+	return result
 }
 
 func clip(s string) string {

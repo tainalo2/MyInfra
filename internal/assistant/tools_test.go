@@ -183,56 +183,70 @@ func TestChatRefusesToolOutsideAllowlist(t *testing.T) {
 	}
 }
 
-// A change never runs from the chat: it waits as an action, which only the
-// person who was asked can confirm, once.
-func TestChangeWaitsForConfirmation(t *testing.T) {
+// The assistant acts with the person's rights: a plain change runs at once,
+// as a click of theirs would, and the reply says it was done.
+func TestPlainChangeRunsAtOnce(t *testing.T) {
 	prov := &scripted{turns: []ToolTurn{
 		{Calls: []ToolCall{{ID: "c1", Name: "restart_application", Args: json.RawMessage(`{"name":"blog"}`)}}},
-		{Text: "Je redémarre blog si vous confirmez."},
+		{Text: "blog a redémarré."},
 	}}
 	box := &fakeBox{}
 	_, h := toolSvc(t, prov, box)
 	var out chatOut
 	call(t, h, "u1", "/api/assistant/chat", ask, &out)
-	if len(box.called()) != 0 {
-		t.Fatalf("ran before confirmation: %v", box.called())
+	if got := box.called(); len(got) != 1 || got[0] != `restart_application {"name":"blog"} ` {
+		t.Fatalf("%v", got)
 	}
-	if len(out.Actions) != 1 || out.Actions[0].Tool != "restart_application" || !strings.Contains(out.Actions[0].Recap, "blog") {
+	if len(out.Actions) != 0 || len(out.Tools) != 1 || !out.Tools[0].Write || out.Text != "blog a redémarré." {
+		t.Fatalf("%+v", out)
+	}
+}
+
+// A destruction waits as an action, which only the person who was asked can
+// confirm, once.
+func TestDestructionConfirmedOnceByThePerson(t *testing.T) {
+	prov := &scripted{turns: []ToolTurn{
+		{Calls: []ToolCall{{ID: "c1", Name: "delete_package", Args: json.RawMessage(`{"name":"wiki"}`)}}},
+		{Text: "Confirmez dans l'interface."},
+	}}
+	box := &fakeBox{}
+	_, h := toolSvc(t, prov, box)
+	var out chatOut
+	call(t, h, "u1", "/api/assistant/chat", ask, &out)
+	if len(out.Actions) != 1 {
 		t.Fatalf("%+v", out)
 	}
 	id := out.Actions[0].ID
 	if code := call(t, h, "u2", "/api/assistant/actions/"+id, `{"confirm":true}`, nil); code != 404 {
 		t.Fatalf("another person took it: %d", code)
 	}
-	if len(box.called()) != 0 {
-		t.Fatal("ran for another person")
-	}
 	var done struct {
-		Done bool   `json:"done"`
-		Text string `json:"text"`
+		Done bool `json:"done"`
 	}
 	if code := call(t, h, "u1", "/api/assistant/actions/"+id, `{"confirm":true}`, &done); code != 200 || !done.Done {
 		t.Fatalf("%d %+v", code, done)
 	}
-	if got := box.called(); len(got) != 1 || got[0] != `restart_application {"name":"blog"} ` {
-		t.Fatalf("%v", got)
-	}
 	if code := call(t, h, "u1", "/api/assistant/actions/"+id, `{"confirm":true}`, nil); code != 404 {
 		t.Fatalf("confirmed twice: %d", code)
 	}
+	// The recap call, then the one confirmed: never one for u2, never a third.
+	if got := box.called(); len(got) != 2 {
+		t.Fatalf("%v", got)
+	}
 }
 
-func TestCancelledChangeNeverRuns(t *testing.T) {
+func TestCancelledDestructionNeverRuns(t *testing.T) {
 	prov := &scripted{turns: []ToolTurn{
-		{Calls: []ToolCall{{ID: "c1", Name: "restart_application", Args: json.RawMessage(`{"name":"blog"}`)}}},
+		{Calls: []ToolCall{{ID: "c1", Name: "delete_package", Args: json.RawMessage(`{"name":"wiki"}`)}}},
 	}}
 	box := &fakeBox{}
 	_, h := toolSvc(t, prov, box)
 	var out chatOut
 	call(t, h, "u1", "/api/assistant/chat", ask, &out)
 	call(t, h, "u1", "/api/assistant/actions/"+out.Actions[0].ID, `{"confirm":false}`, nil)
-	if len(box.called()) != 0 {
-		t.Fatalf("%v", box.called())
+	// Only the recap call: the deletion itself never ran.
+	if got := box.called(); len(got) != 1 || strings.HasSuffix(got[0], "ABC-DEF") {
+		t.Fatalf("%v", got)
 	}
 }
 

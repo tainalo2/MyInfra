@@ -223,6 +223,9 @@ func (a *API) routes() http.Handler {
 		if a.Assistant.Snapshot == nil {
 			a.Assistant.Snapshot = a.assistantSnapshot
 		}
+		if a.Assistant.Conversations == nil {
+			a.Assistant.Conversations = conversationRepo{a.Store}
+		}
 		if a.Assistant.Toolbox == nil {
 			// The tools call the routes of this same router, as MCP does.
 			a.Assistant.Toolbox = a.assistantTools(mux)

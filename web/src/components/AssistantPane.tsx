@@ -1,20 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { KeyRound, SendHorizontal } from 'lucide-react';
+import { ArrowLeft, History, KeyRound, Plus, SendHorizontal, Trash2 } from 'lucide-react';
 import { TokenBudgetBanner } from './TokenBudgetBanner';
 import { useSession } from '../session';
-import { useAssistant } from '../assistant-context';
+import { useAssistant, type Action, type ActionState, type Msg } from '../assistant-context';
 import { patchesFromReply } from './diff-blocks';
-import { currentLang, text, type MsgKey } from '../i18n';
-import { Spinner } from '../kit';
+import { currentLang, currentLocale, text, type MsgKey } from '../i18n';
+import { ConfirmDialog, Spinner, useToast } from '../kit';
 import { useI18n } from '../lang';
-import { Button, Icon, Input, Select, focus } from '../ui';
-
-// A change the model asked for: nothing runs until the person confirms here.
-type ActionState = 'pending' | 'busy' | 'done' | 'cancelled' | 'failed' | 'expired';
-type Action = { id: string; tool: string; title: string; recap: string; state?: ActionState; result?: string };
-type UsedTool = { name: string; title: string; is_error?: boolean };
-type Msg = { role: 'user' | 'assistant'; content: string; tools?: UsedTool[]; actions?: Action[]; note?: boolean };
+import { Button, Icon, IconButton, Input, LoadingLines, Select, focus } from '../ui';
 
 // What the provider is sent: text only, consecutive turns of one side joined.
 function forModel(msgs: Msg[]) {
@@ -37,6 +31,8 @@ interface ModelCapability {
   default_reason: ReasoningEffort;
 }
 
+type Summary = { id: string; title: string; updated_at: string };
+
 const knownReasons = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
 
 function reasonLabel(effort: string) {
@@ -48,12 +44,13 @@ function reasonLabel(effort: string) {
  * A read-only account sees the pane in consultation mode: the history stays, the form that would open a new
  * turn with the provider is absent. The server refuses that turn anyway (403 on /api/assistant/chat).
  *
- * The context is resolved dynamically by the Harness Router based on the current page/resource.
+ * The conversation itself lives in the assistant context, above the pages: the side panel and the
+ * assistant's page show the same one, and it follows the person from page to page.
  */
 export function AssistantPane() {
   useI18n();
   const { canChat, canAdmin } = useSession();
-  const { pageContext, setIsOpen } = useAssistant();
+  const { pageContext, setIsOpen, conversationId, msgs, setMsgs, newConversation, restore } = useAssistant();
   const location = useLocation();
   const [loaded, setLoaded] = useState(false);
   const [enabled, setEnabled] = useState(false);
@@ -63,10 +60,9 @@ export function AssistantPane() {
   const [model, setModel] = useState('');
   const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>('medium');
   const [supportedReasons, setSupportedReasons] = useState<ReasoningEffort[]>([]);
-  const [session] = useState(() => crypto.randomUUID());
-  const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [browsing, setBrowsing] = useState(false);
 
   useEffect(() => {
     fetch('/api/assistant/status')
@@ -92,7 +88,9 @@ export function AssistantPane() {
       })
       .catch(() => setEnabled(false))
       .finally(() => setLoaded(true));
-  }, []);
+    // The conversation of the last visit comes back, once per visit.
+    restore();
+  }, [restore]);
 
   // Update model list and reset model selection when provider changes
   useEffect(() => {
@@ -148,7 +146,7 @@ export function AssistantPane() {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          session,
+          session: conversationId,
           provider,
           model,
           reasoning_effort: reasoningEffort,
@@ -187,8 +185,8 @@ export function AssistantPane() {
       : m)));
   }
 
-  // The person's decision on a change. Its outcome joins the conversation as
-  // a note, so the model knows on the next turn what was done.
+  // The person's decision on a purchase or a destruction. Its outcome joins
+  // the conversation as a note, so the model knows on the next turn what was done.
   async function decide(action: Action, confirm: boolean) {
     updateAction(action.id, { state: 'busy' });
     try {
@@ -221,64 +219,175 @@ export function AssistantPane() {
     }
   }
 
+  const title = msgs.find((m) => m.role === 'user' && m.content.trim())?.content.split('\n')[0] ?? text('assistant.newConversation');
+
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <TokenBudgetBanner sessionId={session} />
-      {/* The model takes a line of its own: its names are long. */}
-      <div className="flex flex-col gap-2 border-b border-line px-4 py-3">
-        <Select aria-label={text('assistant.model')} value={model} onChange={(e) => setModel(e.target.value)}>
-          {models[provider]?.map((m) => <option key={m.model} value={m.model}>{m.name || m.model}</option>)}
-        </Select>
-        <div className={`grid gap-2 ${providers.length > 1 ? 'grid-cols-2' : ''}`}>
-          {providers.length > 1 ? (
-            <Select aria-label={text('assistant.provider')} value={provider} onChange={(e) => setProvider(e.target.value)}>
-              {providers.map((p) => <option key={p} value={p}>{providerName(p)}</option>)}
-            </Select>
-          ) : null}
-          <Select aria-label={text('assistant.reasoning')} value={reasoningEffort} onChange={(e) => setReasoningEffort(e.target.value)}>
-            {supportedReasons.map((r) => <option key={r} value={r}>{`${text('assistant.reasoning')} · ${reasonLabel(r)}`}</option>)}
-          </Select>
+      {/* Which conversation this is, the others, and a new one. */}
+      <div className="flex items-center gap-3 border-b border-line px-4 py-2">
+        {browsing ? (
+          <button type="button" onClick={() => setBrowsing(false)} className={`-mx-1 flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 text-left ${focus}`}>
+            <Icon icon={ArrowLeft} />
+            <span className="truncate">{text('assistant.backToChat')}</span>
+          </button>
+        ) : (
+          <span className="min-w-0 flex-1 truncate text-[13px] text-muted" title={title}>{title}</span>
+        )}
+        <div className="flex shrink-0 items-center gap-4">
+          {!browsing ? <IconButton icon={History} label={text('assistant.conversations')} onClick={() => setBrowsing(true)} /> : null}
+          <IconButton icon={Plus} label={text('assistant.newConversation')} onClick={() => { newConversation(); setBrowsing(false); }} />
         </div>
       </div>
-      <ul className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto px-4 py-4" aria-live="polite">
-        {msgs.length === 0 ? <li className="text-muted">{text('assistant.empty')}</li> : null}
-        {msgs.map((m, i) =>
-          m.role === 'user' ? (
-            <li key={i} className="flex max-w-[85%] flex-col gap-1 self-end">
-              <span className="text-right text-[13px] text-muted">{text('assistant.you')}</span>
-              <span className="whitespace-pre-wrap break-words rounded-md bg-status px-3 py-2">{m.content}</span>
-            </li>
-          ) : m.note ? (
-            <li key={i} className="whitespace-pre-wrap break-words border-l-2 border-line pl-3 text-[13px] text-muted">{m.content}</li>
-          ) : (
-            <li key={i} className="flex flex-col gap-2">
-              <span className="text-[13px] text-muted">{text('nav.assistant')}</span>
-              {m.tools?.length ? (
-                <span className="text-[13px] text-muted">{text('assistant.toolsUsed', { tools: m.tools.map((t) => t.title).join(' · ') })}</span>
-              ) : null}
-              {m.content ? <span className="whitespace-pre-wrap break-words">{m.content}</span> : null}
-              {m.actions?.map((a) => <ActionCard key={a.id} action={a} canAct={canChat} onDecide={(ok) => void decide(a, ok)} />)}
-            </li>
-          ),
-        )}
-        {busy ? (
-          <li className="flex items-center gap-2 text-muted">
-            <Spinner />
-            {text('assistant.thinking')}
-          </li>
-        ) : null}
-      </ul>
-      {canChat ? (
-        <form className="flex gap-2 border-t border-line px-4 py-3" onSubmit={(e) => { e.preventDefault(); void send(); }}>
-          <Input aria-label={text('assistant.placeholder')} placeholder={text('assistant.placeholder')} value={input} onChange={(e) => setInput(e.target.value)} />
-          <Button type="submit" disabled={busy || !input.trim() || !model}>
-            <Icon icon={SendHorizontal} />
-            <span className="sr-only sm:not-sr-only">{text('assistant.send')}</span>
-          </Button>
-        </form>
+      {browsing ? (
+        <Conversations current={conversationId} onOpened={() => setBrowsing(false)} />
       ) : (
-        <p className="border-t border-line px-4 py-3 text-[13px] text-muted">{text('assistant.readOnly')}</p>
+        <>
+          <TokenBudgetBanner sessionId={conversationId} />
+          {/* The model takes a line of its own: its names are long. */}
+          <div className="flex flex-col gap-2 border-b border-line px-4 py-3">
+            <Select aria-label={text('assistant.model')} value={model} onChange={(e) => setModel(e.target.value)}>
+              {models[provider]?.map((m) => <option key={m.model} value={m.model}>{m.name || m.model}</option>)}
+            </Select>
+            <div className={`grid gap-2 ${providers.length > 1 ? 'grid-cols-2' : ''}`}>
+              {providers.length > 1 ? (
+                <Select aria-label={text('assistant.provider')} value={provider} onChange={(e) => setProvider(e.target.value)}>
+                  {providers.map((p) => <option key={p} value={p}>{providerName(p)}</option>)}
+                </Select>
+              ) : null}
+              <Select aria-label={text('assistant.reasoning')} value={reasoningEffort} onChange={(e) => setReasoningEffort(e.target.value)}>
+                {supportedReasons.map((r) => <option key={r} value={r}>{`${text('assistant.reasoning')} · ${reasonLabel(r)}`}</option>)}
+              </Select>
+            </div>
+          </div>
+          <ul className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto px-4 py-4" aria-live="polite">
+            {msgs.length === 0 ? <li className="text-muted">{text('assistant.empty')}</li> : null}
+            {msgs.map((m, i) =>
+              m.role === 'user' ? (
+                <li key={i} className="flex max-w-[85%] flex-col gap-1 self-end">
+                  <span className="text-right text-[13px] text-muted">{text('assistant.you')}</span>
+                  <span className="whitespace-pre-wrap break-words rounded-md bg-status px-3 py-2">{m.content}</span>
+                </li>
+              ) : m.note ? (
+                <li key={i} className="whitespace-pre-wrap break-words border-l-2 border-line pl-3 text-[13px] text-muted">{m.content}</li>
+              ) : (
+                <li key={i} className="flex flex-col gap-2">
+                  <span className="text-[13px] text-muted">{text('nav.assistant')}</span>
+                  <ToolsLine tools={m.tools} />
+                  {m.content ? <span className="whitespace-pre-wrap break-words">{m.content}</span> : null}
+                  {m.actions?.map((a) => <ActionCard key={a.id} action={a} canAct={canChat} onDecide={(ok) => void decide(a, ok)} />)}
+                </li>
+              ),
+            )}
+            {busy ? (
+              <li className="flex items-center gap-2 text-muted">
+                <Spinner />
+                {text('assistant.thinking')}
+              </li>
+            ) : null}
+          </ul>
+          {canChat ? (
+            <form className="flex gap-2 border-t border-line px-4 py-3" onSubmit={(e) => { e.preventDefault(); void send(); }}>
+              <Input aria-label={text('assistant.placeholder')} placeholder={text('assistant.placeholder')} value={input} onChange={(e) => setInput(e.target.value)} />
+              <Button type="submit" disabled={busy || !input.trim() || !model}>
+                <Icon icon={SendHorizontal} />
+                <span className="sr-only sm:not-sr-only">{text('assistant.send')}</span>
+              </Button>
+            </form>
+          ) : (
+            <p className="border-t border-line px-4 py-3 text-[13px] text-muted">{text('assistant.readOnly')}</p>
+          )}
+        </>
       )}
+    </div>
+  );
+}
+
+// ToolsLine says what a reply rests on: the tools read, and apart, what it did.
+function ToolsLine({ tools }: { tools?: Msg['tools'] }) {
+  if (!tools?.length) return null;
+  const done = tools.filter((t) => t.write && !t.is_error);
+  const read = tools.filter((t) => !t.write || t.is_error);
+  return (
+    <>
+      {read.length ? <span className="text-[13px] text-muted">{text('assistant.toolsUsed', { tools: read.map((t) => t.title).join(' · ') })}</span> : null}
+      {done.length ? (
+        <span className="inline-flex items-center gap-1.5 text-[13px] text-ok">
+          <span aria-hidden className="size-2 rounded-full bg-ok" />
+          {text('assistant.toolsDone', { tools: done.map((t) => t.title).join(' · ') })}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+// Conversations lists the person's conversations, the latest first: one opens
+// it where it stopped, the bin forgets it.
+function Conversations({ current, onOpened }: { current: string; onOpened: () => void }) {
+  const toast = useToast();
+  const { openConversation, newConversation } = useAssistant();
+  const [list, setList] = useState<Summary[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [removing, setRemoving] = useState<Summary | null>(null);
+
+  const load = () =>
+    fetch('/api/assistant/conversations')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((rows: Summary[]) => setList(rows))
+      .catch(() => setFailed(true));
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  const when = (iso: string) => {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(currentLocale(), { dateStyle: 'medium', timeStyle: 'short' });
+  };
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+      {failed ? (
+        <p className="p-4 text-muted">{text('assistant.conversationsFailed')}</p>
+      ) : list === null ? (
+        <div className="p-4"><LoadingLines lines={4} /></div>
+      ) : list.length === 0 ? (
+        <p className="p-4 text-muted">{text('assistant.conversationsEmpty')}</p>
+      ) : (
+        <ul>
+          {list.map((c) => (
+            <li key={c.id} className={`flex items-center gap-3 border-b border-line px-4 py-2 ${c.id === current ? 'bg-status' : ''}`}>
+              <button
+                type="button"
+                onClick={() => void openConversation(c.id).then((ok) => ok && onOpened())}
+                className={`-mx-1 flex min-w-0 flex-1 flex-col rounded-md px-1 py-1 text-left ${focus}`}
+                aria-current={c.id === current ? 'true' : undefined}
+              >
+                <span className="truncate">{c.title || text('assistant.untitled')}</span>
+                <span className="text-[13px] text-muted">{when(c.updated_at)}</span>
+              </button>
+              <IconButton icon={Trash2} label={text('assistant.deleteConversation')} onClick={() => setRemoving(c)} />
+            </li>
+          ))}
+        </ul>
+      )}
+      {removing ? (
+        <ConfirmDialog
+          danger
+          title={text('assistant.deleteConversationTitle', { title: removing.title || text('assistant.untitled') })}
+          confirmLabel={text('assistant.deleteConversation')}
+          onClose={() => setRemoving(null)}
+          onConfirm={async () => {
+            const r = await fetch(`/api/assistant/conversations/${encodeURIComponent(removing.id)}`, { method: 'DELETE' });
+            if (!r.ok) throw new Error(text('common.error'));
+            if (removing.id === current) newConversation();
+            setRemoving(null);
+            toast(text('assistant.conversationDeleted'));
+            await load();
+          }}
+        >
+          {text('assistant.deleteConversationHint')}
+        </ConfirmDialog>
+      ) : null}
     </div>
   );
 }

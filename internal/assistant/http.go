@@ -27,6 +27,8 @@ type Service struct {
 	// Toolbox gives the tools of MyInfra to the model, run as the person
 	// of the request. The API sets it; nil offers none.
 	Toolbox func(r *http.Request) Toolbox
+	// Conversations keeps each person's conversations; nil keeps none.
+	Conversations ConversationRepo
 	// AccessVerifier is a function to check template access.
 	// If nil, all access checks are denied.
 	AccessVerifier func(ctx context.Context, userID, templateID string) bool
@@ -137,6 +139,7 @@ func (s *Service) Register(mux *http.ServeMux, wrap func(http.HandlerFunc) http.
 	mux.HandleFunc("POST /api/assistant/chat", wrap(s.chat))
 	mux.HandleFunc("POST /api/assistant/actions/{id}", wrap(s.decideAction))
 	s.registerSubscription(mux, wrap)
+	s.registerConversations(mux, wrap)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
