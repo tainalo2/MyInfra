@@ -60,8 +60,6 @@ type composer struct {
 	// mounts are the named volumes and folders each service mounts: one
 	// mounted by several services becomes a disk they share.
 	shared []composeMount
-	// built are the services made from their sources (build:).
-	built []string
 }
 
 type composeMount struct {
@@ -145,12 +143,6 @@ func Compose(data []byte, name string) (Package, []Warning, error) {
 	c.choosePublic(published)
 	c.exposePublished(opened)
 	c.shareDisks()
-	if len(c.built) > 0 {
-		c.warn("", "Ce fichier construit %s depuis les sources : c'est souvent le compose de développement d'un projet. Partez plutôt de son compose de production, dans sa documentation : ses images sont publiées, et il laisse de côté les outils de développement.", strings.Join(c.built, ", "))
-	}
-	if len(c.pkg.Services) > maxServices {
-		c.warn("", "Ce fichier a %d services, un paquet au plus %d : retirez ceux dont l'application n'a pas besoin pour tourner (outils de développement, de test, de traduction, faux serveurs de mail).", len(c.pkg.Services), maxServices)
-	}
 	return c.pkg, c.warnings, nil
 }
 
@@ -259,7 +251,6 @@ func (c *composer) service(raw string, body map[string]any) (Service, []mapping)
 	}
 	image := c.literal(name, scalar(body["image"]), "l'image")
 	if _, builds := body["build"]; builds {
-		c.built = append(c.built, name)
 		if image == "" {
 			c.warn(name, "Ce service se construit depuis ses sources (build:) : MyInfra ne construit pas d'image. Publiez-la dans un registre et indiquez-la ici.")
 		} else {
@@ -826,84 +817,36 @@ func mebibytes(value string) int {
 }
 
 // choosePublic makes public the service the visitors reach: the one that
-// publishes 80 or 443, else a front end by its name, else the first that
-// publishes a port. A database publishing its port is never the one.
+// publishes 80 or 443, else the first that publishes a port.
 func (c *composer) choosePublic(published map[string]int) {
-	best, bestScore := -1, 0
+	best := -1
 	for i, svc := range c.pkg.Services {
 		port, ok := published[svc.Name]
-		if !ok || storeImage(svc.Image) {
+		if !ok {
 			continue
 		}
-		score := 1
-		if frontName.MatchString(svc.Name) {
-			score = 2
-		}
-		if port == 80 || port == 443 {
-			score = 3
-		}
-		if score > bestScore {
-			best, bestScore = i, score
+		if best < 0 || port == 80 || port == 443 {
+			if best < 0 || published[c.pkg.Services[best].Name] != 80 && published[c.pkg.Services[best].Name] != 443 {
+				best = i
+			}
 		}
 	}
 	if best < 0 {
-		best = c.entryService()
+		for i, svc := range c.pkg.Services {
+			if svc.Port > 0 {
+				best = i
+				break
+			}
+		}
+		if best < 0 {
+			best = 0
+		}
 		c.warn(c.pkg.Services[best].Name, "Aucun service ne publie de port sur la machine : %s reçoit le domaine. Changez-le au besoin.", c.pkg.Services[best].Name)
 	}
 	c.pkg.Services[best].Public = true
 	if c.pkg.Services[best].Port == 0 {
 		c.warn(c.pkg.Services[best].Name, "Le port du service public n'est pas indiqué : celui que l'image annonce servira.")
 	}
-}
-
-// entryService guesses the service visitors reach when none publishes a
-// port: one no other service waits for, not a database, the front end by its
-// name, else the one that waits for the most. A production compose file
-// behind its own proxy publishes nothing, and its first service is often the
-// database.
-func (c *composer) entryService() int {
-	awaited := map[string]bool{}
-	for _, svc := range c.pkg.Services {
-		for _, dep := range svc.DependsOn {
-			awaited[dep] = true
-		}
-	}
-	best, bestScore := 0, -1
-	for i, svc := range c.pkg.Services {
-		if awaited[svc.Name] || storeImage(svc.Image) || svc.NoPort {
-			continue
-		}
-		score := len(svc.DependsOn)
-		if frontName.MatchString(svc.Name) {
-			score += 100
-		}
-		if svc.Port > 0 {
-			score += 10
-		}
-		if score > bestScore {
-			best, bestScore = i, score
-		}
-	}
-	return best
-}
-
-var frontName = regexp.MustCompile(`(^|[-_])(front|frontend|web|www|nginx|proxy|caddy|traefik|gateway|ui|site)($|[-_])`)
-
-// storeImage tells the images that keep data for the others: databases,
-// caches, queues, object stores. They are never the entry of an application.
-func storeImage(image string) bool {
-	name := strings.ToLower(image)
-	if at := strings.LastIndex(name, "/"); at >= 0 {
-		name = name[at+1:]
-	}
-	if at := strings.IndexAny(name, ":@"); at >= 0 {
-		name = name[:at]
-	}
-	switch name {
-	case "postgres", "postgresql", "mysql", "mariadb", "mongo", "mongodb", "redis", "valkey", "keydb", "memcached", "elasticsearch", "opensearch", "rabbitmq", "nats", "minio", "clickhouse-server", "cassandra", "etcd", "zookeeper", "kafka":
-		return true
-	}
-	return false
 }
 
 // databasePorts are published in a compose file to reach the base from the

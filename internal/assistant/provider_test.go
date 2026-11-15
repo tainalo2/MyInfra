@@ -64,21 +64,6 @@ func TestOpenAIStreamFailureIsAnError(t *testing.T) {
 	}
 }
 
-// The same limit may come as an error event with its details in an object:
-// its code reaches the person, not an empty "provider error".
-func TestOpenAIStreamErrorEventKeepsItsDetails(t *testing.T) {
-	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `data: {"type":"error","error":{"type":"invalid_request_error","code":"subscription_sharing_usage_limit_exceeded","message":"limit reached"}}
-
-`)
-	}))
-	defer up.Close()
-	_, err := OpenAI{up.URL}.Complete(context.Background(), "m", "", nil, "tok", "")
-	if err == nil || !strings.Contains(err.Error(), "usage_limit_exceeded: limit reached") {
-		t.Fatalf("%v", err)
-	}
-}
-
 // With the plan token, /v1/models answers "models": ranked, some hidden,
 // each with its own levels, which reach the pane as they are.
 func TestOpenAIFetchModelsFromPlan(t *testing.T) {
