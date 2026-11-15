@@ -107,7 +107,18 @@ function safeHref(url: string) {
   return /^(https?:\/\/|\/(?!\/)|#)/i.test(url) ? url : null;
 }
 
-const inlineToken = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*|__[^_\n]+__)|(\[[^\]\n]+\]\([^)\s]+\))|(\*[^*\s][^*\n]*\*|(?<![\w])_[^_\s][^_\n]*_(?![\w]))/g;
+// Every link opens in a new tab, so the conversation stays where it is.
+function Link({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer noopener" className="text-link underline underline-offset-[3px] hover:no-underline">
+      {children}
+    </a>
+  );
+}
+
+// Tokens, in this order: code, strong, [text](url), <url>, a bare address,
+// emphasis. A bare address drops the punctuation that ends its sentence.
+const inlineToken = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*|__[^_\n]+__)|(\[[^\]\n]+\]\([^)\s]+\))|(<https?:\/\/[^>\s]+>)|(https?:\/\/[^\s<>()[\]`"]+)|(\*[^*\s][^*\n]*\*|(?<![\w])_[^_\s][^_\n]*_(?![\w]))/g;
 
 function inline(text: string, key = 'i'): ReactNode[] {
   const out: ReactNode[] = [];
@@ -117,7 +128,8 @@ function inline(text: string, key = 'i'): ReactNode[] {
     const at = m.index ?? 0;
     if (at > last) out.push(text.slice(last, at));
     const k = `${key}-${n++}`;
-    const [whole, code, strong, link, em] = m;
+    const [whole, code, strong, link, angled, bare, em] = m;
+    let used = whole.length;
     if (code) {
       out.push(<code key={k} className="rounded bg-status px-1 py-0.5 font-mono text-[13px]">{code.slice(1, -1)}</code>);
     } else if (strong) {
@@ -125,20 +137,18 @@ function inline(text: string, key = 'i'): ReactNode[] {
     } else if (link) {
       const parts = link.match(/^\[([^\]]+)\]\(([^)\s]+)\)$/);
       const href = parts ? safeHref(parts[2]) : null;
-      if (parts && href) {
-        const external = /^https?:/i.test(href);
-        out.push(
-          <a key={k} href={href} className="text-link underline-offset-[3px] hover:underline" {...(external ? { target: '_blank', rel: 'noreferrer noopener' } : {})}>
-            {inline(parts[1], k)}
-          </a>,
-        );
-      } else {
-        out.push(whole);
-      }
+      out.push(parts && href ? <Link key={k} href={href}>{inline(parts[1], k)}</Link> : whole);
+    } else if (angled) {
+      const url = angled.slice(1, -1);
+      out.push(<Link key={k} href={url}>{url}</Link>);
+    } else if (bare) {
+      const url = bare.replace(/[.,;:!?'*_]+$/, '');
+      used = url.length;
+      out.push(<Link key={k} href={url}>{url}</Link>);
     } else if (em) {
       out.push(<Fragment key={k}>{inline(em.slice(1, -1), k)}</Fragment>);
     }
-    last = at + whole.length;
+    last = at + used;
   }
   if (last < text.length) out.push(text.slice(last));
   return out;
