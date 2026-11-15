@@ -3,7 +3,12 @@ package assistant
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -55,5 +60,65 @@ func TestInternalEntriesNeverListedAndSubscriptionEnablesCodex(t *testing.T) {
 	s.Keys.Set("codex", "sk-api")
 	if k, _ := s.credentialFor(ctx, "codex"); k != "sk-api" {
 		t.Fatal("API key must win")
+	}
+}
+
+// OpenAI rotates the refresh token on use and refuses a spent one. Ten turns
+// arriving together with an expired token must refresh once, all succeed, and
+// leave the rotated token saved.
+func TestConcurrentTurnsRefreshOnce(t *testing.T) {
+	var mu sync.Mutex
+	valid, refreshes := "rt-0", 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		// A real round trip: without it the turns barely overlap.
+		time.Sleep(50 * time.Millisecond)
+		mu.Lock()
+		defer mu.Unlock()
+		if r.Form.Get("refresh_token") != valid {
+			w.WriteHeader(400)
+			w.Write([]byte(`{"error":"invalid_grant"}`))
+			return
+		}
+		refreshes++
+		valid = fmt.Sprintf("rt-%d", refreshes)
+		json.NewEncoder(w).Encode(map[string]any{"access_token": fmt.Sprintf("at-%d", refreshes), "refresh_token": valid, "expires_in": 3600, "scope": siwc.ScopeUse})
+	}))
+	defer srv.Close()
+
+	s := subSvc(t)
+	ctx := context.Background()
+	c, err := siwc.New(siwc.Config{Issuer: srv.URL, AppName: "MyInfra", HostID: "urn:uuid:h", RedirectURI: "http://127.0.0.1:8080/auth/callback"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.siwc.client = c
+	s.saveSubscription(ctx, siwc.Credential{ClientID: "oaiapp_x", AccessToken: "at-old", RefreshToken: "rt-0", ExpiresAt: time.Now().Add(-time.Minute)})
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 10)
+	for range 10 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			k, err := s.credentialFor(ctx, "codex")
+			if err == nil && k != "at-1" {
+				err = fmt.Errorf("token %q", k)
+			}
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if refreshes != 1 {
+		t.Fatalf("%d refreshes, want 1", refreshes)
+	}
+	if cred, _ := s.loadSubscription(); cred.RefreshToken != "rt-1" {
+		t.Fatalf("saved refresh token %q", cred.RefreshToken)
 	}
 }

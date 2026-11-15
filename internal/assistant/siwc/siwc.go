@@ -71,6 +71,7 @@ func (c Credential) HasUseScope() bool {
 
 type pending struct {
 	verifier, nonce, clientID string
+	owner                     string      // MyInfra account that started the attempt
 	hint                      *Credential // reauthorization of a known registration
 	created                   time.Time
 }
@@ -116,10 +117,12 @@ func rnd(n int) string {
 
 // Start returns the URL to open in the browser. With known == nil it starts a
 // first-time dynamic registration; otherwise it reauthorizes that registration.
-func (c *Client) Start(known *Credential) string {
+// owner is the MyInfra account starting the attempt: Complete returns it in
+// Credential.User, for the caller to check against whoever delivers the callback.
+func (c *Client) Start(known *Credential, owner string) string {
 	st, ver, nonce := rnd(24), rnd(48), rnd(24)
 	sum := sha256.Sum256([]byte(ver))
-	p := pending{verifier: ver, nonce: nonce, clientID: DynamicClientID, hint: known, created: c.cfg.Now()}
+	p := pending{verifier: ver, nonce: nonce, clientID: DynamicClientID, owner: owner, hint: known, created: c.cfg.Now()}
 	q := url.Values{
 		"response_type":         {"code"},
 		"redirect_uri":          {c.cfg.RedirectURI},
@@ -202,6 +205,7 @@ func (c *Client) Complete(ctx context.Context, q url.Values) (*Credential, error
 		return nil, fail("identity", "signed-in account differs from the selected registration")
 	}
 	cred := c.credential(clientID, claims.Sub, claims.Email, tok)
+	cred.User = p.owner
 	if !cred.HasUseScope() {
 		return &cred, fail("scope", "granted scopes lack %s: ChatGPT plan usage is not enabled", ScopeUse)
 	}

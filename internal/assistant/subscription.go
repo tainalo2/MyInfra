@@ -23,6 +23,10 @@ const (
 type subscription struct {
 	mu     sync.Mutex
 	client *siwc.Client
+	// cred serializes every read-refresh-write of the subscription entry.
+	// OpenAI rotates the refresh token on use: two turns refreshing at once
+	// would both spend the same one, and the loser is refused.
+	cred sync.Mutex
 }
 
 func isInternal(name string) bool { return strings.Contains(name, ".") }
@@ -118,6 +122,10 @@ func (s *Service) credentialFor(ctx context.Context, provider string) (string, e
 	if provider != "codex" {
 		return "", nil
 	}
+	// Loaded under the lock: a turn that waited sees the token the previous
+	// one just rotated, and does not refresh it again.
+	s.siwc.cred.Lock()
+	defer s.siwc.cred.Unlock()
 	cred, ok := s.loadSubscription()
 	if !ok {
 		return "", nil
@@ -149,6 +157,8 @@ func (s *Service) registerSubscription(mux *http.ServeMux, wrap func(http.Handle
 			writeJSON(w, 503, map[string]string{"error": noMasterKey})
 			return
 		}
+		s.siwc.cred.Lock()
+		defer s.siwc.cred.Unlock()
 		s.Keys.Delete(subscriptionEntry)
 		if s.repo != nil {
 			if err := s.repo.DeleteAssistantKey(r.Context(), subscriptionEntry); err != nil {
@@ -174,7 +184,7 @@ func (s *Service) siwcStart(w http.ResponseWriter, r *http.Request) {
 	if cur, ok := s.loadSubscription(); ok {
 		known = &cur // reauthorize the existing registration instead of creating another
 	}
-	http.Redirect(w, r, c.Start(known), http.StatusFound)
+	http.Redirect(w, r, c.Start(known, UserOf(r.Context())), http.StatusFound)
 }
 
 func (s *Service) siwcCallback(w http.ResponseWriter, r *http.Request) {
@@ -195,7 +205,15 @@ func (s *Service) siwcCallback(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]string{"error": err.Error(), "step": step})
 		return
 	}
-	cred.User = UserOf(r.Context())
+	// The attempt belongs to the account that started it: a callback delivered
+	// under another session must not bind that ChatGPT account to it.
+	if cred.User != UserOf(r.Context()) {
+		slog.Warn("Sign in with ChatGPT refusé", "step", "owner")
+		writeJSON(w, 403, map[string]string{"error": "callback does not belong to this session", "step": "owner"})
+		return
+	}
+	s.siwc.cred.Lock()
+	defer s.siwc.cred.Unlock()
 	if err := s.saveSubscription(r.Context(), *cred); err != nil {
 		writeJSON(w, 500, map[string]string{"error": "credential not saved"})
 		return

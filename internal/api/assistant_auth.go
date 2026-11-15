@@ -17,7 +17,8 @@ import (
 //     past work;
 //   - a new turn with a provider (chat): deploy or admin. The read-only
 //     role never reaches the Provider Adapter;
-//   - keys and pricing changes: admin.
+//   - keys and pricing changes, and the instance's ChatGPT sign-in (start,
+//     callback, removal): admin.
 //
 // The role also travels in the context so the Harness Router refuses a
 // read-only turn by itself, should a route be reached another way.
@@ -40,7 +41,8 @@ func assistantRouteRole(pattern string) string {
 	switch pattern {
 	case "POST /api/assistant/chat":
 		return store.RoleDeploy
-	case "PUT /api/assistant/pricing", "PUT /api/assistant/keys/{provider}", "DELETE /api/assistant/keys/{provider}":
+	case "PUT /api/assistant/pricing", "PUT /api/assistant/keys/{provider}", "DELETE /api/assistant/keys/{provider}",
+		"GET /api/assistant/openai/start", "GET /auth/callback", "DELETE /api/assistant/openai":
 		return store.RoleAdmin
 	default:
 		return store.RoleRead

@@ -288,3 +288,28 @@ func TestWriteTemplatesPermissionIsGrantedExplicitly(t *testing.T) {
 		t.Fatal(rec.Code, rec.Body.String())
 	}
 }
+
+// The ChatGPT sign-in is one credential for the whole instance, like a
+// provider key: only an admin starts it, completes it or removes it.
+func TestChatGPTSigninIsAdminOnly(t *testing.T) {
+	_, h, _, _ := rolesFixture(t)
+	routes := []struct{ method, path string }{
+		{http.MethodGet, "/api/assistant/openai/start"},
+		{http.MethodGet, "/auth/callback?state=x&code=y"},
+		{http.MethodDelete, "/api/assistant/openai"},
+	}
+	for _, who := range []string{"reader", "deployer", "writer"} {
+		for _, r := range routes {
+			if rec := call(t, h, r.method, r.path, "", "sess-"+who, nil); rec.Code != http.StatusForbidden {
+				t.Fatalf("%s %s %s: %d, want 403", who, r.method, r.path, rec.Code)
+			}
+		}
+	}
+	// Not enabled in the fixture: the admin passes the role check and gets 503.
+	if rec := call(t, h, http.MethodGet, "/api/assistant/openai/start", "", "sess-admin", nil); rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("admin start: %d", rec.Code)
+	}
+	if rec := call(t, h, http.MethodDelete, "/api/assistant/openai", "", "sess-admin", nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("admin delete: %d", rec.Code)
+	}
+}

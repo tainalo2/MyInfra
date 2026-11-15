@@ -79,7 +79,7 @@ func newFake(t *testing.T, now func() time.Time) (*fake, *Client) {
 
 // start runs Start and returns the callback query a browser would deliver.
 func start(t *testing.T, f *fake, c *Client, known *Credential) url.Values {
-	u, _ := url.Parse(c.Start(known))
+	u, _ := url.Parse(c.Start(known, "u1"))
 	q := u.Query()
 	if known == nil && (q.Get("client_id") != DynamicClientID || q.Get("agent_name_hint") != "MyInfra") {
 		t.Fatalf("registration params: %v", q)
@@ -102,7 +102,7 @@ func TestRegistrationHappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cred.ClientID != "oaiapp_test" || cred.Subject != "sub-1" || cred.RefreshToken == "" || !cred.HasUseScope() {
+	if cred.ClientID != "oaiapp_test" || cred.Subject != "sub-1" || cred.User != "u1" || cred.RefreshToken == "" || !cred.HasUseScope() {
 		t.Fatalf("%+v", cred)
 	}
 }
