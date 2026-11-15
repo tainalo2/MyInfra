@@ -14,9 +14,11 @@ import (
 // Conversation is one conversation with the assistant, kept for the person
 // who had it. Messages are kept as the interface shows them.
 type Conversation struct {
-	ID        string          `json:"id"`
-	Title     string          `json:"title"`
-	Messages  json.RawMessage `json:"messages,omitempty"`
+	ID       string          `json:"id"`
+	Title    string          `json:"title"`
+	Messages json.RawMessage `json:"messages,omitempty"`
+	// Settings are the provider, model and reasoning level chosen for it.
+	Settings  json.RawMessage `json:"settings,omitempty"`
 	UpdatedAt time.Time       `json:"updated_at"`
 }
 
@@ -27,7 +29,7 @@ var ErrNoConversation = errors.New("conversation not found")
 type ConversationRepo interface {
 	List(ctx context.Context, user string, limit int) ([]Conversation, error)
 	Get(ctx context.Context, user, id string) (Conversation, error)
-	Put(ctx context.Context, user, id, title string, messages json.RawMessage) error
+	Put(ctx context.Context, user, id, title string, messages, settings json.RawMessage) error
 	Delete(ctx context.Context, user, id string) error
 }
 
@@ -104,12 +106,14 @@ func (s *Service) putConversation(w http.ResponseWriter, r *http.Request) {
 	}
 	var body struct {
 		Messages json.RawMessage `json:"messages"`
+		Settings json.RawMessage `json:"settings"`
 	}
 	var msgs []struct {
 		Role    string `json:"role"`
 		Content string `json:"content"`
 	}
-	if json.Unmarshal(raw, &body) != nil || json.Unmarshal(body.Messages, &msgs) != nil {
+	var settings map[string]string
+	if json.Unmarshal(raw, &body) != nil || json.Unmarshal(body.Messages, &msgs) != nil || (len(body.Settings) > 0 && json.Unmarshal(body.Settings, &settings) != nil) {
 		writeJSON(w, 400, map[string]string{"error": "invalid conversation"})
 		return
 	}
@@ -120,7 +124,7 @@ func (s *Service) putConversation(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	err = s.Conversations.Put(r.Context(), user, id, title, body.Messages)
+	err = s.Conversations.Put(r.Context(), user, id, title, body.Messages, body.Settings)
 	if errors.Is(err, ErrNoConversation) {
 		writeJSON(w, 404, map[string]string{"error": "not found"})
 		return

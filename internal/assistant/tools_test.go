@@ -1,6 +1,7 @@
 package assistant
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -384,5 +385,46 @@ func TestOpenAIFunctionCallRoundTrip(t *testing.T) {
 	}
 	if out["type"] != "function_call_output" || out["call_id"] != "call_1" || out["output"] != "blog" {
 		t.Fatalf("%v", out)
+	}
+}
+
+// With stream, the person follows the turn: what the model says it will do,
+// each tool as it starts and ends, then the answer.
+func TestChatStreamsProgress(t *testing.T) {
+	prov := &scripted{turns: []ToolTurn{
+		{Text: "Je regarde vos applications.", Calls: []ToolCall{{ID: "c1", Name: "list_applications", Args: json.RawMessage(`{}`)}}},
+		{Calls: []ToolCall{{ID: "c2", Name: "restart_application", Args: json.RawMessage(`{"name":"blog"}`)}}},
+		{Text: "blog a redémarré."},
+	}}
+	_, h := toolSvc(t, prov, &fakeBox{})
+	req := httptest.NewRequest("POST", "/api/assistant/chat", strings.NewReader(
+		`{"session":"s","provider":"fake","model":"m","stream":true,"messages":[{"role":"user","content":"Redémarre blog"}]}`))
+	req.Header.Set("x-user", "u1")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if ct := rr.Header().Get("content-type"); ct != "application/x-ndjson" {
+		t.Fatalf("content-type %q", ct)
+	}
+	var got []string
+	sc := bufio.NewScanner(strings.NewReader(rr.Body.String()))
+	for sc.Scan() {
+		var ev struct {
+			Type, Text, Name, State string
+		}
+		if err := json.Unmarshal(sc.Bytes(), &ev); err != nil {
+			t.Fatalf("line %q: %v", sc.Text(), err)
+		}
+		got = append(got, strings.TrimSpace(ev.Type+" "+ev.Name+" "+ev.State+" "+ev.Text))
+	}
+	want := []string{
+		"step   Je regarde vos applications.",
+		"tool list_applications running",
+		"tool list_applications done",
+		"tool restart_application running",
+		"tool restart_application done",
+		"done   blog a redémarré.",
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("got\n%q\nwant\n%q", got, want)
 	}
 }

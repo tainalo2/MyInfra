@@ -15,6 +15,7 @@ type AssistantConversation struct {
 	ID        string          `json:"id"`
 	Title     string          `json:"title"`
 	Messages  json.RawMessage `json:"messages,omitempty"`
+	Settings  json.RawMessage `json:"settings,omitempty"`
 	UpdatedAt time.Time       `json:"updated_at"`
 }
 
@@ -44,8 +45,8 @@ func (s *Store) AssistantConversations(ctx context.Context, userID string, limit
 func (s *Store) AssistantConversationOf(ctx context.Context, userID, id string) (AssistantConversation, error) {
 	var c AssistantConversation
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, title, messages, updated_at FROM assistant_conversations
-		WHERE user_id = $1 AND id = $2`, userID, id).Scan(&c.ID, &c.Title, &c.Messages, &c.UpdatedAt)
+		SELECT id, title, messages, settings, updated_at FROM assistant_conversations
+		WHERE user_id = $1 AND id = $2`, userID, id).Scan(&c.ID, &c.Title, &c.Messages, &c.Settings, &c.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return c, ErrNotFound
 	}
@@ -54,12 +55,15 @@ func (s *Store) AssistantConversationOf(ctx context.Context, userID, id string) 
 
 // PutAssistantConversation creates or replaces one of the person's
 // conversations. An id that belongs to someone else is not touched.
-func (s *Store) PutAssistantConversation(ctx context.Context, userID, id, title string, messages json.RawMessage) error {
+func (s *Store) PutAssistantConversation(ctx context.Context, userID, id, title string, messages, settings json.RawMessage) error {
+	if len(settings) == 0 {
+		settings = json.RawMessage("{}")
+	}
 	tag, err := s.pool.Exec(ctx, `
-		INSERT INTO assistant_conversations (id, user_id, title, messages) VALUES ($1, $2, $3, $4)
-		ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, messages = EXCLUDED.messages, updated_at = now()
+		INSERT INTO assistant_conversations (id, user_id, title, messages, settings) VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, messages = EXCLUDED.messages, settings = EXCLUDED.settings, updated_at = now()
 		WHERE assistant_conversations.user_id = EXCLUDED.user_id`,
-		id, userID, title, messages)
+		id, userID, title, messages, settings)
 	if err != nil {
 		return err
 	}

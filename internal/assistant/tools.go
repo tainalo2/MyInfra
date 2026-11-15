@@ -187,6 +187,20 @@ type usedTool struct {
 	IsError bool `json:"is_error,omitempty"`
 }
 
+// Progress is what the assistant is doing while a turn runs, for the person
+// to follow: the text where the model says what it is about to do, then each
+// tool as it starts and ends.
+type Progress struct {
+	Type  string `json:"type"` // "step" or "tool"
+	Text  string `json:"text,omitempty"`
+	ID    string `json:"id,omitempty"`
+	Name  string `json:"name,omitempty"`
+	Title string `json:"title,omitempty"`
+	Write bool   `json:"write,omitempty"`
+	// State of a tool: running, done, error, or waiting for the person.
+	State string `json:"state,omitempty"`
+}
+
 type loopResult struct {
 	Text    string
 	Usage   Usage
@@ -199,7 +213,10 @@ const waitingText = "Nothing was done yet. The interface now shows the user this
 // converse runs the turn: the model may call tools, reads their results
 // and goes on, up to maxTurns calls. A purchase or a destruction is never
 // run here: it waits for the person as an Action.
-func (s *Service) converse(ctx context.Context, prov ToolUser, req ToolRequest, box Toolbox, guard *harness.ToolGuard, maxTurns int) (loopResult, error) {
+func (s *Service) converse(ctx context.Context, prov ToolUser, req ToolRequest, box Toolbox, guard *harness.ToolGuard, maxTurns int, progress func(Progress)) (loopResult, error) {
+	if progress == nil {
+		progress = func(Progress) {}
+	}
 	if maxTurns <= 0 {
 		maxTurns = 10
 	}
@@ -220,9 +237,26 @@ func (s *Service) converse(ctx context.Context, prov ToolUser, req ToolRequest, 
 			res.Text = turn.Text
 			return res, nil
 		}
+		if t := strings.TrimSpace(turn.Text); t != "" {
+			progress(Progress{Type: "step", Text: t})
+		}
 		step := ToolStep{Turn: turn}
 		for _, call := range turn.Calls {
+			spec := byName[call.Name]
+			title := spec.Title
+			if title == "" {
+				title = call.Name
+			}
+			progress(Progress{Type: "tool", ID: call.ID, Name: call.Name, Title: title, Write: spec.Write, State: "running"})
+			waiting := len(res.Actions)
 			out := s.runCall(ctx, call, byName, box, guard, user, &res)
+			state := "done"
+			if len(res.Actions) > waiting {
+				state = "waiting"
+			} else if out.IsError {
+				state = "error"
+			}
+			progress(Progress{Type: "tool", ID: call.ID, Name: call.Name, Title: title, Write: spec.Write, State: state})
 			step.Results = append(step.Results, out)
 		}
 		req.Steps = append(req.Steps, step)

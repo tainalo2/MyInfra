@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ArrowLeft, History, KeyRound, Plus, SendHorizontal, Trash2 } from 'lucide-react';
+import { ArrowLeft, Check, Clock, History, KeyRound, Plus, SendHorizontal, Trash2, X } from 'lucide-react';
+import { Markdown } from './Markdown';
 import { TokenBudgetBanner } from './TokenBudgetBanner';
 import { useSession } from '../session';
 import { useAssistant, type Action, type ActionState, type Msg } from '../assistant-context';
@@ -33,6 +34,13 @@ interface ModelCapability {
 
 type Summary = { id: string; title: string; updated_at: string };
 
+// One line of what the assistant is doing: what it says, or a tool and its state.
+type Live =
+  | { kind: 'step'; text: string }
+  | { kind: 'tool'; id: string; title: string; write?: boolean; state: 'running' | 'done' | 'error' | 'waiting' };
+
+type ChatAnswer = { text?: string; error?: string; tools?: Msg['tools']; actions?: Action[]; assistant_unavailable?: boolean; status?: number };
+
 const knownReasons = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
 
 function reasonLabel(effort: string) {
@@ -50,41 +58,32 @@ function reasonLabel(effort: string) {
 export function AssistantPane() {
   useI18n();
   const { canChat, canAdmin } = useSession();
-  const { pageContext, setIsOpen, conversationId, msgs, setMsgs, newConversation, restore } = useAssistant();
+  const { pageContext, setIsOpen, conversationId, msgs, setMsgs, settings, setSettings, newConversation, restore } = useAssistant();
   const location = useLocation();
   const [loaded, setLoaded] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [providers, setProviders] = useState<string[]>([]);
   const [models, setModels] = useState<Record<string, ModelCapability[]>>({});
-  const [provider, setProvider] = useState('');
-  const [model, setModel] = useState('');
-  const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>('medium');
-  const [supportedReasons, setSupportedReasons] = useState<ReasoningEffort[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [browsing, setBrowsing] = useState(false);
+  // What the assistant is doing while it works: what it says, each tool.
+  const [live, setLive] = useState<Live[]>([]);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  // The latest stays in sight: a new message, a step, the answer.
+  useEffect(() => {
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [msgs, live, busy, browsing]);
 
   useEffect(() => {
     fetch('/api/assistant/status')
       .then((r) => r.json())
       .then((s: { enabled: boolean; providers: string[]; models: Record<string, ModelCapability[]> }) => {
         setEnabled(s.enabled);
-        setProviders(s.providers);
+        setProviders(s.providers ?? []);
         setModels(s.models || {});
-
-        // Set initial provider
-        if (s.providers && s.providers.length > 0) {
-          setProvider(s.providers[0]);
-
-          // Set initial model from first provider
-          const providerModels = s.models?.[s.providers[0]];
-          if (providerModels && providerModels.length > 0) {
-            const firstModel = providerModels[0];
-            setModel(firstModel.model);
-            setSupportedReasons(firstModel.supported_reasons);
-            setReasoningEffort(firstModel.default_reason);
-          }
-        }
       })
       .catch(() => setEnabled(false))
       .finally(() => setLoaded(true));
@@ -92,32 +91,15 @@ export function AssistantPane() {
     restore();
   }, [restore]);
 
-  // Update model list and reset model selection when provider changes
-  useEffect(() => {
-    if (provider && models[provider]) {
-      const providerModels = models[provider];
-      if (providerModels.length > 0) {
-        const firstModel = providerModels[0];
-        setModel(firstModel.model);
-        setSupportedReasons(firstModel.supported_reasons);
-        setReasoningEffort(firstModel.default_reason);
-      }
-    }
-  }, [provider, models]);
-
-  // Update reasoning support when model changes
-  useEffect(() => {
-    if (provider && models[provider]) {
-      const selectedModel = models[provider].find(m => m.model === model);
-      if (selectedModel) {
-        setSupportedReasons(selectedModel.supported_reasons);
-        // Ensure current reasoning effort is supported
-        if (!selectedModel.supported_reasons.includes(reasoningEffort)) {
-          setReasoningEffort(selectedModel.default_reason);
-        }
-      }
-    }
-  }, [model, provider, models, reasoningEffort]);
+  // The choice is the conversation's, kept with it: what it names is used
+  // while the provider still offers it, else the provider's first and its
+  // default level. Nothing here resets it when the pane is drawn again.
+  const provider = settings.provider && providers.includes(settings.provider) ? settings.provider : providers[0] ?? '';
+  const offered = models[provider] ?? [];
+  const current = offered.find((m) => m.model === settings.model) ?? offered[0];
+  const model = current?.model ?? '';
+  const supportedReasons: ReasoningEffort[] = current?.supported_reasons ?? [];
+  const reasoningEffort = settings.effort && supportedReasons.includes(settings.effort) ? settings.effort : current?.default_reason ?? 'medium';
 
   if (!loaded) return null;
   if (!enabled) {
@@ -141,6 +123,7 @@ export function AssistantPane() {
     setMsgs(next);
     setInput('');
     setBusy(true);
+    setLive([]);
     try {
       const r = await fetch('/api/assistant/chat', {
         method: 'POST',
@@ -154,11 +137,49 @@ export function AssistantPane() {
           path: location.pathname,
           lang: currentLang(),
           ...pageContext,
-          messages: forModel(next)
+          messages: forModel(next),
+          stream: true,
         }),
       });
-      const d = await r.json();
-      const reply = r.status === 403
+      // The answer comes as a stream of JSON lines: progress, then "done" or
+      // "error". A refusal before the turn starts is plain JSON.
+      let d: ChatAnswer = {};
+      let status = r.status;
+      if (r.body && (r.headers.get('content-type') ?? '').includes('ndjson')) {
+        const reader = r.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        const handle = (raw: string) => {
+          if (!raw.trim()) return;
+          const ev = JSON.parse(raw);
+          if (ev.type === 'step') setLive((all) => [...all, { kind: 'step', text: ev.text }]);
+          else if (ev.type === 'tool') {
+            setLive((all) => {
+              const at = all.findIndex((l) => l.kind === 'tool' && l.id === ev.id);
+              const step: Live = { kind: 'tool', id: ev.id, title: ev.title, write: ev.write, state: ev.state };
+              return at < 0 ? [...all, step] : all.map((l, i) => (i === at ? step : l));
+            });
+          } else if (ev.type === 'done' || ev.type === 'error') {
+            d = ev;
+            if (ev.type === 'error') status = ev.status ?? 502;
+          }
+        };
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let at = buffer.indexOf('\n');
+          while (at >= 0) {
+            handle(buffer.slice(0, at));
+            buffer = buffer.slice(at + 1);
+            at = buffer.indexOf('\n');
+          }
+        }
+        handle(buffer);
+      } else {
+        d = await r.json();
+      }
+      const reply = status === 403
         ? text('assistant.forbidden')
         : d.assistant_unavailable ? text('assistant.unavailable') : d.text ?? d.error ?? '';
       const actions: Action[] = (d.actions ?? []).map((a: Action) => ({ ...a, state: 'pending' as const }));
@@ -245,21 +266,21 @@ export function AssistantPane() {
           <TokenBudgetBanner sessionId={conversationId} />
           {/* The model takes a line of its own: its names are long. */}
           <div className="flex flex-col gap-2 border-b border-line px-4 py-3">
-            <Select aria-label={text('assistant.model')} value={model} onChange={(e) => setModel(e.target.value)}>
+            <Select aria-label={text('assistant.model')} value={model} onChange={(e) => setSettings({ provider, model: e.target.value })}>
               {models[provider]?.map((m) => <option key={m.model} value={m.model}>{m.name || m.model}</option>)}
             </Select>
             <div className={`grid gap-2 ${providers.length > 1 ? 'grid-cols-2' : ''}`}>
               {providers.length > 1 ? (
-                <Select aria-label={text('assistant.provider')} value={provider} onChange={(e) => setProvider(e.target.value)}>
+                <Select aria-label={text('assistant.provider')} value={provider} onChange={(e) => setSettings({ provider: e.target.value, model: undefined, effort: undefined })}>
                   {providers.map((p) => <option key={p} value={p}>{providerName(p)}</option>)}
                 </Select>
               ) : null}
-              <Select aria-label={text('assistant.reasoning')} value={reasoningEffort} onChange={(e) => setReasoningEffort(e.target.value)}>
+              <Select aria-label={text('assistant.reasoning')} value={reasoningEffort} onChange={(e) => setSettings({ provider, model, effort: e.target.value })}>
                 {supportedReasons.map((r) => <option key={r} value={r}>{`${text('assistant.reasoning')} · ${reasonLabel(r)}`}</option>)}
               </Select>
             </div>
           </div>
-          <ul className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto px-4 py-4" aria-live="polite">
+          <ul ref={listRef} className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto px-4 py-4" aria-live="polite">
             {msgs.length === 0 ? <li className="text-muted">{text('assistant.empty')}</li> : null}
             {msgs.map((m, i) =>
               m.role === 'user' ? (
@@ -273,17 +294,12 @@ export function AssistantPane() {
                 <li key={i} className="flex flex-col gap-2">
                   <span className="text-[13px] text-muted">{text('nav.assistant')}</span>
                   <ToolsLine tools={m.tools} />
-                  {m.content ? <span className="whitespace-pre-wrap break-words">{m.content}</span> : null}
+                  {m.content ? <Markdown text={m.content} /> : null}
                   {m.actions?.map((a) => <ActionCard key={a.id} action={a} canAct={canChat} onDecide={(ok) => void decide(a, ok)} />)}
                 </li>
               ),
             )}
-            {busy ? (
-              <li className="flex items-center gap-2 text-muted">
-                <Spinner />
-                {text('assistant.thinking')}
-              </li>
-            ) : null}
+            {busy ? <LiveSteps live={live} /> : null}
           </ul>
           {canChat ? (
             <form className="flex gap-2 border-t border-line px-4 py-3" onSubmit={(e) => { e.preventDefault(); void send(); }}>
@@ -299,6 +315,34 @@ export function AssistantPane() {
         </>
       )}
     </div>
+  );
+}
+
+// LiveSteps follows the turn while it runs: what the model says it is doing,
+// then each tool, with its state in a word and a mark, never in colour alone.
+function LiveSteps({ live }: { live: Live[] }) {
+  return (
+    <li className="flex flex-col gap-2">
+      <span className="text-[13px] text-muted">{text('nav.assistant')}</span>
+      {live.map((l, i) =>
+        l.kind === 'step' ? (
+          <span key={i} className="border-l-2 border-line pl-3 text-muted">{l.text}</span>
+        ) : (
+          <span key={l.id || i} className="flex items-center gap-2 text-[13px]">
+            {l.state === 'running' ? <Spinner /> : null}
+            {l.state === 'done' ? <Icon icon={Check} className="text-ok" /> : null}
+            {l.state === 'error' ? <Icon icon={X} className="text-bad" /> : null}
+            {l.state === 'waiting' ? <Icon icon={Clock} className="text-warn" /> : null}
+            <span className={l.state === 'running' ? 'text-ink' : 'text-muted'}>{l.title}</span>
+            <span className="text-faint">· {text(`assistant.live.${l.state}` as MsgKey)}</span>
+          </span>
+        ),
+      )}
+      <span className="flex items-center gap-2 text-muted">
+        <Spinner />
+        {text(live.length ? 'assistant.working' : 'assistant.thinking')}
+      </span>
+    </li>
   );
 }
 

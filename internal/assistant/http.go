@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 
 	harness "myinfra/internal/harness-router"
 )
@@ -281,6 +282,7 @@ type chatReq struct {
 	ResourceID      string          `json:"resource_id,omitempty"` // resource id for access control
 	Path            string          `json:"path,omitempty"`        // page open in the interface
 	Lang            string          `json:"lang,omitempty"`        // interface language
+	Stream          bool            `json:"stream,omitempty"`      // progress as NDJSON, then the answer
 	Messages        []Message       `json:"messages"`
 }
 
@@ -350,23 +352,52 @@ func (s *Service) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	guard := harness.NewToolGuard(route.Profile)
 	tools := toolsFor(r.Context(), box, guard)
+	// With stream, the person follows the turn: one JSON line per progress
+	// event, then the answer as a "done" (or "error") line. Without it, the
+	// answer alone, as before.
+	var progress func(Progress)
+	reply := func(code int, body map[string]any) { writeJSON(w, code, body) }
+	if q.Stream {
+		fl, _ := w.(http.Flusher)
+		w.Header().Set("content-type", "application/x-ndjson")
+		w.Header().Set("cache-control", "no-cache")
+		w.WriteHeader(200)
+		var mu sync.Mutex
+		line := func(v any) {
+			mu.Lock()
+			defer mu.Unlock()
+			b, _ := json.Marshal(v)
+			_, _ = w.Write(append(b, '\n'))
+			if fl != nil {
+				fl.Flush()
+			}
+		}
+		progress = func(p Progress) { line(p) }
+		reply = func(code int, body map[string]any) {
+			body["type"] = "done"
+			if code >= 300 {
+				body["type"], body["status"] = "error", code
+			}
+			line(body)
+		}
+	}
 	user, canUse := prov.(ToolUser)
 	if !canUse || len(tools) == 0 {
 		resp, err := prov.Complete(r.Context(), q.Model, system, q.Messages, key, q.ReasoningEffort)
 		if err != nil {
-			writeJSON(w, 502, map[string]string{"error": err.Error()})
+			reply(502, map[string]any{"error": err.Error()})
 			return
 		}
 		snap := s.Meter.Record(q.Session, q.Provider, q.Model, resp.Usage)
-		writeJSON(w, 200, map[string]any{"text": resp.Text, "usage": snap})
+		reply(200, map[string]any{"text": resp.Text, "usage": snap})
 		return
 	}
 	res, err := s.converse(r.Context(), user, ToolRequest{
 		Model: q.Model, System: system, Messages: q.Messages, Tools: tools, Key: key, Effort: q.ReasoningEffort,
-	}, box, guard, route.MaxTurns)
+	}, box, guard, route.MaxTurns, progress)
 	snap := s.Meter.Record(q.Session, q.Provider, q.Model, res.Usage)
 	if err != nil {
-		writeJSON(w, 502, map[string]string{"error": err.Error()})
+		reply(502, map[string]any{"error": err.Error()})
 		return
 	}
 	out := map[string]any{"text": res.Text, "usage": snap}
@@ -376,7 +407,7 @@ func (s *Service) chat(w http.ResponseWriter, r *http.Request) {
 	if len(res.Actions) > 0 {
 		out["actions"] = res.Actions
 	}
-	writeJSON(w, 200, out)
+	reply(200, out)
 }
 
 // CanAccessTemplate checks if a user can access a template for editing.

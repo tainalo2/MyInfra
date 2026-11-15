@@ -541,3 +541,5 @@ CREATE TABLE IF NOT EXISTS assistant_conversations (
     updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS assistant_conversations_user ON assistant_conversations (user_id, updated_at DESC);
+-- Le modèle et le niveau de réflexion choisis pour la conversation.
+ALTER TABLE assistant_conversations ADD COLUMN IF NOT EXISTS settings jsonb NOT NULL DEFAULT '{}'::jsonb;

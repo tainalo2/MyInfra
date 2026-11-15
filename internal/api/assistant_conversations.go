@@ -32,11 +32,11 @@ func (c conversationRepo) Get(ctx context.Context, user, id string) (assistant.C
 	if err != nil {
 		return assistant.Conversation{}, err
 	}
-	return assistant.Conversation{ID: r.ID, Title: r.Title, Messages: r.Messages, UpdatedAt: r.UpdatedAt}, nil
+	return assistant.Conversation{ID: r.ID, Title: r.Title, Messages: r.Messages, Settings: r.Settings, UpdatedAt: r.UpdatedAt}, nil
 }
 
-func (c conversationRepo) Put(ctx context.Context, user, id, title string, messages json.RawMessage) error {
-	err := c.s.PutAssistantConversation(ctx, user, id, title, messages)
+func (c conversationRepo) Put(ctx context.Context, user, id, title string, messages, settings json.RawMessage) error {
+	err := c.s.PutAssistantConversation(ctx, user, id, title, messages, settings)
 	if errors.Is(err, store.ErrNotFound) {
 		return assistant.ErrNoConversation
 	}
