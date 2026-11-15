@@ -21,6 +21,9 @@ type Service struct {
 	Meter     *Meter
 	Router    *harness.Router
 	Providers map[string]Provider
+	// Snapshot describes the caller's infrastructure in a few lines, for the
+	// model. The API sets it, as it reads the store; nil sends none.
+	Snapshot func(ctx context.Context) string
 	// AccessVerifier is a function to check template access.
 	// If nil, all access checks are denied.
 	AccessVerifier func(ctx context.Context, userID, templateID string) bool
@@ -265,6 +268,8 @@ type chatReq struct {
 	ReasoningEffort ReasoningEffort `json:"reasoning_effort,omitempty"`
 	Page            string          `json:"page,omitempty"`        // page name for dynamic context resolution
 	ResourceID      string          `json:"resource_id,omitempty"` // resource id for access control
+	Path            string          `json:"path,omitempty"`        // page open in the interface
+	Lang            string          `json:"lang,omitempty"`        // interface language
 	Messages        []Message       `json:"messages"`
 }
 
@@ -327,7 +332,8 @@ func (s *Service) chat(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]string{"error": err.Error()})
 		return
 	}
-	resp, err := prov.Complete(r.Context(), q.Model, route.SystemPrompt, q.Messages, key, q.ReasoningEffort)
+	system := s.systemPrompt(r.Context(), route.SystemPrompt, q, RoleOf(r.Context()))
+	resp, err := prov.Complete(r.Context(), q.Model, system, q.Messages, key, q.ReasoningEffort)
 	if err != nil {
 		writeJSON(w, 502, map[string]string{"error": err.Error()})
 		return

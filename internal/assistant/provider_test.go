@@ -158,3 +158,36 @@ func TestStatusListsFetchedModelsAndCaches(t *testing.T) {
 		t.Fatalf("%d calls, want 2 after a new key", calls.Load())
 	}
 }
+
+type promptProvider struct{ system string }
+
+func (p *promptProvider) Name() string { return "fake" }
+func (p *promptProvider) Complete(_ context.Context, _, system string, _ []Message, _ string, _ ReasoningEffort) (Response, error) {
+	p.system = system
+	return Response{Text: "ok"}, nil
+}
+func (p *promptProvider) SupportsSubscriptionAuth() bool { return false }
+func (p *promptProvider) ListModels() []ModelCapability  { return nil }
+
+// The model is told where it runs: the profile, the page open, the role,
+// the language and the infrastructure as it is now.
+func TestChatGivesTheModelItsContext(t *testing.T) {
+	s := newSvc(t, "", "")
+	fake := &promptProvider{}
+	s.Providers["fake"] = fake
+	s.Keys.Set("fake", "k")
+	s.Snapshot = func(context.Context) string { return "Servers (1):\n- web-1: ready" }
+	mux := http.NewServeMux()
+	s.Register(mux, AsRole("deploy"))
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, httptest.NewRequest("POST", "/api/assistant/chat", strings.NewReader(
+		`{"session":"s","provider":"fake","model":"m","path":"/applications/42","lang":"fr","messages":[{"role":"user","content":"x"}]}`)))
+	if rr.Code != 200 {
+		t.Fatal(rr.Code, rr.Body.String())
+	}
+	for _, want := range []string{"sys", "/applications/42", "deploy", "French", "web-1: ready"} {
+		if !strings.Contains(fake.system, want) {
+			t.Fatalf("system prompt lacks %q:\n%s", want, fake.system)
+		}
+	}
+}

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { KeyRound, SendHorizontal } from 'lucide-react';
 import { TokenBudgetBanner } from './TokenBudgetBanner';
 import { useSession } from '../session';
 import { useAssistant } from '../assistant-context';
 import { patchesFromReply } from './diff-blocks';
-import { text, type MsgKey } from '../i18n';
+import { currentLang, text, type MsgKey } from '../i18n';
 import { Spinner } from '../kit';
 import { useI18n } from '../lang';
 import { Button, Icon, Input, Select, focus } from '../ui';
@@ -38,6 +38,7 @@ export function AssistantPane() {
   useI18n();
   const { canChat, canAdmin } = useSession();
   const { pageContext, setIsOpen } = useAssistant();
+  const location = useLocation();
   const [loaded, setLoaded] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [providers, setProviders] = useState<string[]>([]);
@@ -135,6 +136,9 @@ export function AssistantPane() {
           provider,
           model,
           reasoning_effort: reasoningEffort,
+          // Where the user is: the server tells the model, with the infrastructure.
+          path: location.pathname,
+          lang: currentLang(),
           ...pageContext,
           messages: next
         }),

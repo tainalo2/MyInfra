@@ -220,6 +220,9 @@ func (a *API) routes() http.Handler {
 
 	mux.HandleFunc("GET /api/secrets", a.auth(a.listSecrets))
 	if a.Assistant != nil {
+		if a.Assistant.Snapshot == nil {
+			a.Assistant.Snapshot = a.assistantSnapshot
+		}
 		a.Assistant.Register(mux, a.assistantAuth)
 	}
 	a.diffRoutes(mux)
