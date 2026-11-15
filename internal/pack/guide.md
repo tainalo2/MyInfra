@@ -187,17 +187,3 @@ services:
 ## Partir d'un fichier existant
 
 `convert_to_package` transforme un docker-compose, des manifests Kubernetes ou un chart Helm en paquet, sans rien enregistrer : relisez le résultat et ses avertissements avant `create_package`. Les ports qu'un docker-compose publie sur la machine (`"21116:21116/udp"`, plages comprises) deviennent des ports ouverts sur Internet, sauf ceux des bases de données.
-
-## Adapter un docker-compose
-
-Un docker-compose trouvé dans un dépôt est souvent celui du **développement** : des images construites depuis les sources (`build:`), le code monté dans les conteneurs, des outils (traduction, tests, faux serveur de mail, `node` pour lancer des commandes), des fichiers `env_file` absents du fichier. Il ne s'installe pas tel quel. Dans l'ordre :
-
-1. **Cherchez le compose de production** du projet, avec `read_source` : sa documentation d'installation, un dossier `examples`, `deploy` ou `docker`, ou les valeurs de son chart Helm. Ses images sont publiées dans un registre (Docker Hub, ghcr.io). Partez de lui plutôt que du compose de développement.
-2. **Gardez les services dont l'application a besoin pour tourner**, au plus 12 : le site, ses serveurs, sa base, son cache, ses tâches de fond. Retirez les outils de développement et de test, et ce qu'un paquet fait déjà (un proxy ou un nginx qui ne fait que porter le domaine et le certificat).
-3. **Remplacez chaque `build:`** par l'image publiée du projet. Une image locale comme `projet:backend-development` n'existe dans aucun registre.
-4. **Recopiez les variables des `env_file`** (lisez-les avec `read_source`) : les mots de passe et clés dans les variables communes avec `{{secret:nom}}`, l'adresse publique avec `{{url}}` ou `{{host}}`, le reste dans les variables du service. Les services se joignent par leur nom (`postgresql:5432`).
-5. **Recopiez les fichiers montés** (configuration nginx, realm.json…) dans `files`, avec leur contenu.
-6. **Donnez un disque** au dossier de données de chaque base et service qui écrit, avec une taille réaliste.
-7. **Le service public** est celui que les visiteurs ouvrent (le frontal, le site), avec son `port`. Jamais une base de données.
-
-Vérifiez avec `check_package`, puis `create_package`. Dites à la personne ce qui reste à faire avant d'installer (une clé à générer, une étape d'initialisation).

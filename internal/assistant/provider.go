@@ -352,11 +352,6 @@ func readResponseStream(r io.Reader, key string) (ToolTurn, Usage, error) {
 			Response result `json:"response"`
 			Code     string `json:"code"`
 			Message  string `json:"message"`
-			// The error event may carry its details in an object.
-			Error struct {
-				Code    string `json:"code"`
-				Message string `json:"message"`
-			} `json:"error"`
 		}
 		if json.Unmarshal([]byte(strings.TrimSpace(line[5:])), &ev) != nil {
 			continue
@@ -389,14 +384,7 @@ func readResponseStream(r io.Reader, key string) (ToolTurn, Usage, error) {
 			}
 			return ToolTurn{}, Usage{}, errors.New("provider error: response failed")
 		case "error":
-			code, message := ev.Code, ev.Message
-			if message == "" {
-				code, message = ev.Error.Code, ev.Error.Message
-			}
-			if message == "" {
-				message = strings.TrimSpace(line[5:])
-			}
-			return ToolTurn{}, Usage{}, scrub(fmt.Errorf("provider error %s: %s", code, message), key)
+			return ToolTurn{}, Usage{}, scrub(fmt.Errorf("provider error %s: %s", ev.Code, ev.Message), key)
 		}
 	}
 	if err := sc.Err(); err != nil {
