@@ -114,7 +114,9 @@ func NewToolGuard(profile ContextProfile) *ToolGuard {
 
 // Check returns nil if allowed, error otherwise.
 func (g *ToolGuard) Check(tool string) error {
-	if !g.Allowed[tool] {
+	// "*" lets the profile use every tool the caller's role may use: the
+	// role is checked again by the tool itself.
+	if !g.Allowed[tool] && !g.Allowed["*"] {
 		return fmt.Errorf("tool not allowed in this context: %s", tool)
 	}
 	return nil

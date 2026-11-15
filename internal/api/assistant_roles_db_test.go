@@ -288,3 +288,77 @@ func TestWriteTemplatesPermissionIsGrantedExplicitly(t *testing.T) {
 		t.Fatal(rec.Code, rec.Body.String())
 	}
 }
+
+// The ChatGPT sign-in is one credential for the whole instance, like a
+// provider key: only an admin starts it, completes it or removes it.
+func TestChatGPTSigninIsAdminOnly(t *testing.T) {
+	_, h, _, _ := rolesFixture(t)
+	routes := []struct{ method, path string }{
+		{http.MethodGet, "/api/assistant/openai/start"},
+		{http.MethodDelete, "/api/assistant/openai"},
+	}
+	for _, who := range []string{"reader", "deployer", "writer"} {
+		for _, r := range routes {
+			if rec := call(t, h, r.method, r.path, "", "sess-"+who, nil); rec.Code != http.StatusForbidden {
+				t.Fatalf("%s %s %s: %d, want 403", who, r.method, r.path, rec.Code)
+			}
+		}
+	}
+	// Not enabled in the fixture: the admin passes the role check and gets 503.
+	if rec := call(t, h, http.MethodGet, "/api/assistant/openai/start", "", "sess-admin", nil); rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("admin start: %d", rec.Code)
+	}
+	if rec := call(t, h, http.MethodDelete, "/api/assistant/openai", "", "sess-admin", nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("admin delete: %d", rec.Code)
+	}
+}
+
+// OpenAI redirects back with no session cookie (SameSite=Strict): the
+// callback must answer without one, never with 401.
+func TestChatGPTCallbackNeedsNoSession(t *testing.T) {
+	a, h, _, _ := rolesFixture(t)
+	if err := a.Assistant.EnableSubscription(t.Context(), "MyInfra", "http://127.0.0.1:8080/auth/callback"); err != nil {
+		t.Fatal(err)
+	}
+	rec := call(t, h, http.MethodGet, "/auth/callback?state=unknown&code=c", "", "", nil)
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/assistant-ia?chatgpt=error&step=state" {
+		t.Fatalf("%d %q", rec.Code, rec.Header().Get("Location"))
+	}
+}
+
+// Each person keeps their own conversations: listed latest first, titled by
+// the first question, and out of reach of another account, even by id.
+func TestAssistantConversationsArePrivate(t *testing.T) {
+	_, h, _, _ := rolesFixture(t)
+	msgs := map[string]any{"messages": []map[string]any{
+		{"role": "user", "content": "Pourquoi blog ne démarre pas ?\nDepuis ce matin."},
+		{"role": "assistant", "content": "Je regarde.", "tools": []map[string]string{{"name": "get_application", "title": "Lire une application"}}},
+	}}
+	if rec := call(t, h, http.MethodPut, "/api/assistant/conversations/c1", "", "sess-admin", msgs); rec.Code != http.StatusNoContent {
+		t.Fatalf("put: %d %s", rec.Code, rec.Body.String())
+	}
+	rec := call(t, h, http.MethodGet, "/api/assistant/conversations", "", "sess-admin", nil)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"title":"Pourquoi blog ne démarre pas ?"`) {
+		t.Fatalf("list: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := call(t, h, http.MethodGet, "/api/assistant/conversations/c1", "", "sess-admin", nil); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "get_application") {
+		t.Fatalf("get: %d %s", rec.Code, rec.Body.String())
+	}
+	for _, who := range []string{"reader", "deployer"} {
+		if rec := call(t, h, http.MethodGet, "/api/assistant/conversations/c1", "", "sess-"+who, nil); rec.Code != http.StatusNotFound {
+			t.Fatalf("%s read another's conversation: %d", who, rec.Code)
+		}
+		if rec := call(t, h, http.MethodPut, "/api/assistant/conversations/c1", "", "sess-"+who, map[string]any{"messages": []any{}}); rec.Code != http.StatusNotFound {
+			t.Fatalf("%s overwrote another's conversation: %d", who, rec.Code)
+		}
+		if rec := call(t, h, http.MethodGet, "/api/assistant/conversations", "", "sess-"+who, nil); strings.Contains(rec.Body.String(), "c1") {
+			t.Fatalf("%s lists another's conversation: %s", who, rec.Body.String())
+		}
+	}
+	if rec := call(t, h, http.MethodDelete, "/api/assistant/conversations/c1", "", "sess-admin", nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete: %d", rec.Code)
+	}
+	if rec := call(t, h, http.MethodGet, "/api/assistant/conversations/c1", "", "sess-admin", nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("after delete: %d", rec.Code)
+	}
+}

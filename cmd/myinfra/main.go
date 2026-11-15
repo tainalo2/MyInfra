@@ -107,6 +107,16 @@ func serve() bool {
 	} else if err := helper.Persist(ctx, db); err != nil {
 		slog.Warn("clés BYOK rechiffrées non enregistrées, rotation refaite au prochain démarrage", "err", err)
 	}
+	if helper.Available() {
+		// "Continue with ChatGPT": OpenAI only accepts a loopback callback on 127.0.0.1.
+		redirect := os.Getenv("MYINFRA_SIWC_REDIRECT")
+		if redirect == "" {
+			redirect = siwcRedirect(listenAddr())
+		}
+		if err := helper.EnableSubscription(ctx, "MyInfra", redirect); err != nil {
+			slog.Warn("Sign in with ChatGPT désactivé", "err", err)
+		}
+	}
 	// Set the access verifier to check template ownership
 	helper.AccessVerifier = func(ctx context.Context, userID, templateID string) bool {
 		_, err := db.Template(ctx, userID, templateID)
@@ -302,3 +312,12 @@ func fatal(msg string, args ...any) {
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+// siwcRedirect is the callback OpenAI requires: loopback 127.0.0.1, this instance's port.
+func siwcRedirect(addr string) string {
+	port := "8080"
+	if i := strings.LastIndex(addr, ":"); i >= 0 && addr[i+1:] != "" {
+		port = addr[i+1:]
+	}
+	return "http://127.0.0.1:" + port + "/auth/callback"
+}

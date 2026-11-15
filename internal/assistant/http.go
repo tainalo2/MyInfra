@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 
 	harness "myinfra/internal/harness-router"
 )
@@ -21,6 +22,14 @@ type Service struct {
 	Meter     *Meter
 	Router    *harness.Router
 	Providers map[string]Provider
+	// Snapshot describes the caller's infrastructure in a few lines, for the
+	// model. The API sets it, as it reads the store; nil sends none.
+	Snapshot func(ctx context.Context) string
+	// Toolbox gives the tools of MyInfra to the model, run as the person
+	// of the request. The API sets it; nil offers none.
+	Toolbox func(r *http.Request) Toolbox
+	// Conversations keeps each person's conversations; nil keeps none.
+	Conversations ConversationRepo
 	// AccessVerifier is a function to check template access.
 	// If nil, all access checks are denied.
 	AccessVerifier func(ctx context.Context, userID, templateID string) bool
@@ -31,6 +40,16 @@ type Service struct {
 	// Persist writes them back, or the rotation would be done at each start
 	// and the previous master could never be retired.
 	rekeyed []string
+
+	// siwc runs "Sign in with ChatGPT"; nil until EnableSubscription.
+	siwc subscription
+
+	// models keeps what each provider listed (see modelsFor).
+	models modelCache
+
+	// pending keeps the changes the model asked for, until the person
+	// confirms or cancels them in the interface.
+	pending actions
 }
 
 // KeyRepo keeps the sealed provider keys, in the exact form Export gives.
@@ -119,6 +138,9 @@ func (s *Service) Register(mux *http.ServeMux, wrap func(http.HandlerFunc) http.
 	}))
 	mux.HandleFunc("GET /api/assistant/usage/stream", wrap(s.stream))
 	mux.HandleFunc("POST /api/assistant/chat", wrap(s.chat))
+	mux.HandleFunc("POST /api/assistant/actions/{id}", wrap(s.decideAction))
+	s.registerSubscription(mux, wrap)
+	s.registerConversations(mux, wrap)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -149,14 +171,14 @@ func (s *Service) status(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"enabled": false, "providers": []string{}, "models": map[string][]ModelCapability{}, "assistant_unavailable": true, "reason": "no_master_key"})
 		return
 	}
-	ps := s.Keys.List()
+	ps := s.providerNames()
 	models := make(map[string][]ModelCapability)
 	for _, provider := range ps {
-		if prov, ok := s.Providers[provider]; ok {
-			models[provider] = prov.ListModels()
+		if _, ok := s.Providers[provider]; ok {
+			models[provider] = s.modelsFor(r.Context(), provider)
 		}
 	}
-	writeJSON(w, 200, map[string]any{"enabled": len(ps) > 0, "providers": ps, "models": models})
+	writeJSON(w, 200, map[string]any{"enabled": len(ps) > 0, "providers": ps, "models": models, "api_keys": s.apiKeyNames(), "chatgpt_signin": s.siwcClient() != nil, "chatgpt_connected": s.hasSubscription()})
 }
 
 func (s *Service) setPrice(w http.ResponseWriter, r *http.Request) {
@@ -195,6 +217,7 @@ func (s *Service) setKey(w http.ResponseWriter, r *http.Request) {
 		b.Type = "api_key"
 	}
 
+	s.forgetModels()
 	if s.Keys.Set(provider, b.Key) != nil {
 		writeJSON(w, 400, map[string]string{"error": "invalid key"})
 		return
@@ -223,6 +246,7 @@ func (s *Service) deleteKey(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.Keys.Delete(provider)
+	s.forgetModels()
 	w.WriteHeader(204)
 }
 
@@ -256,6 +280,9 @@ type chatReq struct {
 	ReasoningEffort ReasoningEffort `json:"reasoning_effort,omitempty"`
 	Page            string          `json:"page,omitempty"`        // page name for dynamic context resolution
 	ResourceID      string          `json:"resource_id,omitempty"` // resource id for access control
+	Path            string          `json:"path,omitempty"`        // page open in the interface
+	Lang            string          `json:"lang,omitempty"`        // interface language
+	Stream          bool            `json:"stream,omitempty"`      // progress as NDJSON, then the answer
 	Messages        []Message       `json:"messages"`
 }
 
@@ -276,7 +303,11 @@ func (s *Service) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	prov, ok := s.Providers[q.Provider]
-	key, _ := s.Keys.Get(q.Provider)
+	key, kerr := s.credentialFor(r.Context(), q.Provider)
+	if kerr != nil {
+		writeJSON(w, 502, map[string]string{"error": kerr.Error()})
+		return
+	}
 	if !ok || key == "" {
 		writeJSON(w, 200, map[string]any{"assistant_unavailable": true})
 		return
@@ -314,13 +345,69 @@ func (s *Service) chat(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]string{"error": err.Error()})
 		return
 	}
-	resp, err := prov.Complete(r.Context(), q.Model, route.SystemPrompt, q.Messages, key, q.ReasoningEffort)
-	if err != nil {
-		writeJSON(w, 502, map[string]string{"error": err.Error()})
+	system := s.systemPrompt(r.Context(), route.SystemPrompt, q, RoleOf(r.Context()))
+	var box Toolbox
+	if s.Toolbox != nil {
+		box = s.Toolbox(r)
+	}
+	guard := harness.NewToolGuard(route.Profile)
+	tools := toolsFor(r.Context(), box, guard)
+	// With stream, the person follows the turn: one JSON line per progress
+	// event, then the answer as a "done" (or "error") line. Without it, the
+	// answer alone, as before.
+	var progress func(Progress)
+	reply := func(code int, body map[string]any) { writeJSON(w, code, body) }
+	if q.Stream {
+		fl, _ := w.(http.Flusher)
+		w.Header().Set("content-type", "application/x-ndjson")
+		w.Header().Set("cache-control", "no-cache")
+		w.WriteHeader(200)
+		var mu sync.Mutex
+		line := func(v any) {
+			mu.Lock()
+			defer mu.Unlock()
+			b, _ := json.Marshal(v)
+			_, _ = w.Write(append(b, '\n'))
+			if fl != nil {
+				fl.Flush()
+			}
+		}
+		progress = func(p Progress) { line(p) }
+		reply = func(code int, body map[string]any) {
+			body["type"] = "done"
+			if code >= 300 {
+				body["type"], body["status"] = "error", code
+			}
+			line(body)
+		}
+	}
+	user, canUse := prov.(ToolUser)
+	if !canUse || len(tools) == 0 {
+		resp, err := prov.Complete(r.Context(), q.Model, system, q.Messages, key, q.ReasoningEffort)
+		if err != nil {
+			reply(502, map[string]any{"error": err.Error()})
+			return
+		}
+		snap := s.Meter.Record(q.Session, q.Provider, q.Model, resp.Usage)
+		reply(200, map[string]any{"text": resp.Text, "usage": snap})
 		return
 	}
-	snap := s.Meter.Record(q.Session, q.Provider, q.Model, resp.Usage)
-	writeJSON(w, 200, map[string]any{"text": resp.Text, "usage": snap})
+	res, err := s.converse(r.Context(), user, ToolRequest{
+		Model: q.Model, System: system, Messages: q.Messages, Tools: tools, Key: key, Effort: q.ReasoningEffort,
+	}, box, guard, route.MaxTurns, progress)
+	snap := s.Meter.Record(q.Session, q.Provider, q.Model, res.Usage)
+	if err != nil {
+		reply(502, map[string]any{"error": err.Error()})
+		return
+	}
+	out := map[string]any{"text": res.Text, "usage": snap}
+	if len(res.Used) > 0 {
+		out["tools"] = res.Used
+	}
+	if len(res.Actions) > 0 {
+		out["actions"] = res.Actions
+	}
+	reply(200, out)
 }
 
 // CanAccessTemplate checks if a user can access a template for editing.

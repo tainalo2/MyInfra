@@ -257,11 +257,18 @@ func (s *mcpSession) dispatch(method string, params json.RawMessage) (any, *rpcE
 
 // run calls one tool. A failure is an answer the assistant can read and act
 // on, never a protocol error; a panic is caught and told as such.
-func (s *mcpSession) run(tool mcpTool, args json.RawMessage) (result map[string]any) {
+func (s *mcpSession) run(tool mcpTool, args json.RawMessage) map[string]any {
+	text, isError, _ := s.runTool(tool, args)
+	return toolText(text, isError)
+}
+
+// runTool is run for any caller: the MCP server, or the assistant built
+// into the interface, which keeps a recap's code for itself (pending).
+func (s *mcpSession) runTool(tool mcpTool, args json.RawMessage) (text string, isError bool, pending *toolError) {
 	ctx := s.outer.Context()
 	if roleRank(s.a.effectiveRole(ctx)) < roleRank(tool.Role) {
 		s.journal(tool, args, "Droits insuffisants.", false)
-		return toolFailure("Droits insuffisants.")
+		return "Droits insuffisants.", true, nil
 	}
 	call := &mcpCall{session: s, tool: tool, ctx: ctx}
 	if tool.Write {
@@ -275,23 +282,23 @@ func (s *mcpSession) run(tool mcpTool, args json.RawMessage) (result map[string]
 		if v := recover(); v != nil {
 			slog.Error("outil MCP", "tool", tool.Name, "panic", v)
 			s.journal(tool, args, "erreur interne", false)
-			result = toolFailure("Erreur interne de MyInfra pendant " + tool.Name + " : rien n'a été confirmé. Consultez l'historique avant de réessayer.")
+			text, isError, pending = "Erreur interne de MyInfra pendant "+tool.Name+" : rien n'a été confirmé. Consultez l'historique avant de réessayer.", true, nil
 		}
 	}()
-	text, err := tool.Run(call, args)
+	out, err := tool.Run(call, args)
 	if err != nil {
 		var fail *toolError
 		if errors.As(err, &fail) && fail.pending {
 			// A recap waiting for agreement: nothing done, nothing logged.
-			return toolText(fail.Error(), false)
+			return fail.Error(), false, fail
 		}
 		s.journal(tool, args, err.Error(), false)
-		return toolFailure(err.Error())
+		return err.Error(), true, nil
 	}
 	if call.acted {
 		s.journal(tool, args, "", true)
 	}
-	return toolText(text, false)
+	return out, false, nil
 }
 
 // journal leaves in the history what a token changed through the MCP server.
@@ -302,6 +309,9 @@ func (s *mcpSession) journal(tool mcpTool, args json.RawMessage, failure string,
 	ctx := s.outer.Context()
 	token, _ := tokenOf(ctx)
 	message := "Via MCP (" + token.Name + ") : " + tool.Title
+	if sourceOf(ctx) == sourceAssistant {
+		message = "Via l'assistant : " + tool.Title
+	}
 	if subject := argsSubject(args); subject != "" {
 		message += " — " + subject
 	}
@@ -370,6 +380,9 @@ type toolError struct {
 	// pending marks a recap that waits for the person's agreement: it is not
 	// a failure and leaves nothing in the history.
 	pending bool
+	// recap and code are the parts of a pending answer, for the assistant
+	// of the interface: it shows the recap and keeps the code itself.
+	recap, code string
 }
 
 func (e *toolError) Error() string {
@@ -412,6 +425,10 @@ func (c *mcpCall) do(method, path string, body any) (int, []byte) {
 	req.Host = outer.Host
 	req.RemoteAddr = outer.RemoteAddr
 	req.Header.Set("Authorization", outer.Header.Get("Authorization"))
+	if cookie := outer.Header.Get("Cookie"); cookie != "" {
+		// The assistant of the interface calls as the person's session.
+		req.Header.Set("Cookie", cookie)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept-Language", "fr")
 	rec := &recorder{header: http.Header{}, status: http.StatusOK}

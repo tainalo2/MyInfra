@@ -528,3 +528,18 @@ CREATE TABLE IF NOT EXISTS assistant_keys (
     sealed text NOT NULL,
     updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- Conversations de l'assistant intégré, une personne chacune. Les messages
+-- sont gardés tels que l'interface les montre (texte, outils, actions) :
+-- ce sont ceux que la personne a écrits et lus.
+CREATE TABLE IF NOT EXISTS assistant_conversations (
+    id text PRIMARY KEY,
+    user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title text NOT NULL DEFAULT '',
+    messages jsonb NOT NULL DEFAULT '[]',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS assistant_conversations_user ON assistant_conversations (user_id, updated_at DESC);
+-- Le modèle et le niveau de réflexion choisis pour la conversation.
+ALTER TABLE assistant_conversations ADD COLUMN IF NOT EXISTS settings jsonb NOT NULL DEFAULT '{}'::jsonb;

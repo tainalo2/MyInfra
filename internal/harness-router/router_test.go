@@ -262,3 +262,14 @@ func contains(slice []string, item string) bool {
 	}
 	return false
 }
+
+// "*" opens every tool: the role is checked by the tool itself.
+func TestToolGuardWildcard(t *testing.T) {
+	g := NewToolGuard(ContextProfile{AllowedTools: []string{"*"}})
+	if g.Check("restart_application") != nil || g.Check("anything") != nil {
+		t.Fatal("wildcard refused a tool")
+	}
+	if NewToolGuard(ContextProfile{AllowedTools: []string{"a"}}).Check("b") == nil {
+		t.Fatal("a list without the wildcard let another tool through")
+	}
+}

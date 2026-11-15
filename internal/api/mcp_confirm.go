@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -55,13 +56,13 @@ func fingerprintOf(v any) string {
 // confirmed runs the two calls. recap returns the text shown to the person
 // and a fingerprint of what it depends on; act does the thing.
 func (c *mcpCall) confirmed(raw json.RawMessage, code string, recap func() (string, string, error), act func() (string, error)) (string, error) {
-	token, ok := tokenOf(c.ctx)
+	actor, ok := confirmer(c.ctx)
 	if !ok {
 		return "", failf("Jeton d'accès requis.")
 	}
 	a := c.api()
 	if code == "" {
-		return c.offer(token, raw, recap, "")
+		return c.offer(actor, raw, recap, "")
 	}
 	taken, err := a.Store.TakeConfirmation(c.ctx, hashToken(normalCode(code)))
 	if errors.Is(err, store.ErrNotFound) {
@@ -70,7 +71,7 @@ func (c *mcpCall) confirmed(raw json.RawMessage, code string, recap func() (stri
 	if err != nil {
 		return "", err
 	}
-	if taken.TokenID != token.ID || taken.Tool != c.tool.Name || taken.ArgsHash != argsHash(raw) {
+	if taken.TokenID != actor || taken.Tool != c.tool.Name || taken.ArgsHash != argsHash(raw) {
 		return "", failf("Ce code de confirmation ne correspond pas à cette demande : les arguments doivent être exactement ceux du récapitulatif. Relancez sans code pour un nouveau récapitulatif.")
 	}
 	text, fingerprint, err := recap()
@@ -78,7 +79,7 @@ func (c *mcpCall) confirmed(raw json.RawMessage, code string, recap func() (stri
 		return "", err
 	}
 	if fingerprint != taken.Fingerprint {
-		return c.offer(token, raw, func() (string, string, error) { return text, fingerprint, nil },
+		return c.offer(actor, raw, func() (string, string, error) { return text, fingerprint, nil },
 			"La situation a changé depuis le récapitulatif (prix, disponibilité ou enregistrements) : rien n'a été fait. Voici le nouveau récapitulatif.\n\n")
 	}
 	return act()
@@ -99,19 +100,32 @@ func (c *mcpCall) spentCode(code string, refusal error) error {
 	return failf(spentCodeText)
 }
 
-func (c *mcpCall) offer(token store.APIToken, raw json.RawMessage, recap func() (string, string, error), lead string) (string, error) {
+// confirmer is who a code is bound to: the access token of an MCP call, or
+// the person of a session for the assistant of the interface, which shows
+// the recap with its own buttons and never gives the code to the model.
+func confirmer(ctx context.Context) (string, bool) {
+	if token, ok := tokenOf(ctx); ok {
+		return token.ID, true
+	}
+	if sourceOf(ctx) == sourceAssistant && userID(ctx) != "" {
+		return "assistant:" + userID(ctx), true
+	}
+	return "", false
+}
+
+func (c *mcpCall) offer(actor string, raw json.RawMessage, recap func() (string, string, error), lead string) (string, error) {
 	text, fingerprint, err := recap()
 	if err != nil {
 		return "", err
 	}
 	code := newConfirmationCode()
 	if err := c.api().Store.CreateConfirmation(c.ctx, hashToken(code), store.Confirmation{
-		TokenID: token.ID, Tool: c.tool.Name, ArgsHash: argsHash(raw), Fingerprint: fingerprint,
+		TokenID: actor, Tool: c.tool.Name, ArgsHash: argsHash(raw), Fingerprint: fingerprint,
 		ExpiresAt: time.Now().Add(confirmationLife),
 	}); err != nil {
 		return "", err
 	}
-	return "", &toolError{pending: true, Message: lead + text +
+	return "", &toolError{pending: true, recap: lead + text, code: code, Message: lead + text +
 		"\nRien n'a encore été fait. Montrez ce récapitulatif à l'utilisateur. S'il est d'accord, rappelez " + c.tool.Name +
 		" avec exactement les mêmes arguments et confirmation=\"" + code + "\" (valable 10 minutes, une seule fois)."}
 }

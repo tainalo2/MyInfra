@@ -17,7 +17,9 @@ import (
 //     past work;
 //   - a new turn with a provider (chat): deploy or admin. The read-only
 //     role never reaches the Provider Adapter;
-//   - keys and pricing changes: admin.
+//   - keys and pricing changes, and the instance's ChatGPT sign-in (start,
+//     removal): admin. The callback from OpenAI is mounted outside this
+//     wrap: it carries no session cookie, its state names the admin.
 //
 // The role also travels in the context so the Harness Router refuses a
 // read-only turn by itself, should a route be reached another way.
@@ -38,9 +40,10 @@ func (a *API) assistantAuth(next http.HandlerFunc) http.HandlerFunc {
 // assistantRouteRole is the least role a mounted assistant route needs.
 func assistantRouteRole(pattern string) string {
 	switch pattern {
-	case "POST /api/assistant/chat":
+	case "POST /api/assistant/chat", "POST /api/assistant/actions/{id}":
 		return store.RoleDeploy
-	case "PUT /api/assistant/pricing", "PUT /api/assistant/keys/{provider}", "DELETE /api/assistant/keys/{provider}":
+	case "PUT /api/assistant/pricing", "PUT /api/assistant/keys/{provider}", "DELETE /api/assistant/keys/{provider}",
+		"GET /api/assistant/openai/start", "DELETE /api/assistant/openai":
 		return store.RoleAdmin
 	default:
 		return store.RoleRead
