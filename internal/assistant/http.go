@@ -24,6 +24,9 @@ type Service struct {
 	// Snapshot describes the caller's infrastructure in a few lines, for the
 	// model. The API sets it, as it reads the store; nil sends none.
 	Snapshot func(ctx context.Context) string
+	// Toolbox gives the tools of MyInfra to the model, run as the person
+	// of the request. The API sets it; nil offers none.
+	Toolbox func(r *http.Request) Toolbox
 	// AccessVerifier is a function to check template access.
 	// If nil, all access checks are denied.
 	AccessVerifier func(ctx context.Context, userID, templateID string) bool
@@ -40,6 +43,10 @@ type Service struct {
 
 	// models keeps what each provider listed (see modelsFor).
 	models modelCache
+
+	// pending keeps the changes the model asked for, until the person
+	// confirms or cancels them in the interface.
+	pending actions
 }
 
 // KeyRepo keeps the sealed provider keys, in the exact form Export gives.
@@ -128,6 +135,7 @@ func (s *Service) Register(mux *http.ServeMux, wrap func(http.HandlerFunc) http.
 	}))
 	mux.HandleFunc("GET /api/assistant/usage/stream", wrap(s.stream))
 	mux.HandleFunc("POST /api/assistant/chat", wrap(s.chat))
+	mux.HandleFunc("POST /api/assistant/actions/{id}", wrap(s.decideAction))
 	s.registerSubscription(mux, wrap)
 }
 
@@ -333,13 +341,39 @@ func (s *Service) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	system := s.systemPrompt(r.Context(), route.SystemPrompt, q, RoleOf(r.Context()))
-	resp, err := prov.Complete(r.Context(), q.Model, system, q.Messages, key, q.ReasoningEffort)
+	var box Toolbox
+	if s.Toolbox != nil {
+		box = s.Toolbox(r)
+	}
+	guard := harness.NewToolGuard(route.Profile)
+	tools := toolsFor(r.Context(), box, guard)
+	user, canUse := prov.(ToolUser)
+	if !canUse || len(tools) == 0 {
+		resp, err := prov.Complete(r.Context(), q.Model, system, q.Messages, key, q.ReasoningEffort)
+		if err != nil {
+			writeJSON(w, 502, map[string]string{"error": err.Error()})
+			return
+		}
+		snap := s.Meter.Record(q.Session, q.Provider, q.Model, resp.Usage)
+		writeJSON(w, 200, map[string]any{"text": resp.Text, "usage": snap})
+		return
+	}
+	res, err := s.converse(r.Context(), user, ToolRequest{
+		Model: q.Model, System: system, Messages: q.Messages, Tools: tools, Key: key, Effort: q.ReasoningEffort,
+	}, box, guard, route.MaxTurns)
+	snap := s.Meter.Record(q.Session, q.Provider, q.Model, res.Usage)
 	if err != nil {
 		writeJSON(w, 502, map[string]string{"error": err.Error()})
 		return
 	}
-	snap := s.Meter.Record(q.Session, q.Provider, q.Model, resp.Usage)
-	writeJSON(w, 200, map[string]any{"text": resp.Text, "usage": snap})
+	out := map[string]any{"text": res.Text, "usage": snap}
+	if len(res.Used) > 0 {
+		out["tools"] = res.Used
+	}
+	if len(res.Actions) > 0 {
+		out["actions"] = res.Actions
+	}
+	writeJSON(w, 200, out)
 }
 
 // CanAccessTemplate checks if a user can access a template for editing.

@@ -10,7 +10,23 @@ import { Spinner } from '../kit';
 import { useI18n } from '../lang';
 import { Button, Icon, Input, Select, focus } from '../ui';
 
-type Msg = { role: 'user' | 'assistant'; content: string };
+// A change the model asked for: nothing runs until the person confirms here.
+type ActionState = 'pending' | 'busy' | 'done' | 'cancelled' | 'failed' | 'expired';
+type Action = { id: string; tool: string; title: string; recap: string; state?: ActionState; result?: string };
+type UsedTool = { name: string; title: string; is_error?: boolean };
+type Msg = { role: 'user' | 'assistant'; content: string; tools?: UsedTool[]; actions?: Action[]; note?: boolean };
+
+// What the provider is sent: text only, consecutive turns of one side joined.
+function forModel(msgs: Msg[]) {
+  const out: { role: Msg['role']; content: string }[] = [];
+  for (const m of msgs) {
+    if (!m.content) continue;
+    const last = out[out.length - 1];
+    if (last && last.role === m.role) last.content += `\n\n${m.content}`;
+    else out.push({ role: m.role, content: m.content });
+  }
+  return out;
+}
 // The provider says which levels each model takes: low to ultra for OpenAI.
 type ReasoningEffort = string;
 
@@ -140,14 +156,15 @@ export function AssistantPane() {
           path: location.pathname,
           lang: currentLang(),
           ...pageContext,
-          messages: next
+          messages: forModel(next)
         }),
       });
       const d = await r.json();
       const reply = r.status === 403
         ? text('assistant.forbidden')
         : d.assistant_unavailable ? text('assistant.unavailable') : d.text ?? d.error ?? '';
-      setMsgs([...next, { role: 'assistant', content: reply }]);
+      const actions: Action[] = (d.actions ?? []).map((a: Action) => ({ ...a, state: 'pending' as const }));
+      setMsgs([...next, { role: 'assistant', content: reply, tools: d.tools, actions }]);
       // A reply carrying ```diff blocks is a patch: it joins the staging,
       // and the split view (stream) shows the hunks as they land.
       const patches = patchesFromReply(reply);
@@ -161,6 +178,46 @@ export function AssistantPane() {
       }
     } finally {
       setBusy(false);
+    }
+  }
+
+  function updateAction(id: string, patch: Partial<Action>) {
+    setMsgs((all) => all.map((m) => (m.actions?.some((a) => a.id === id)
+      ? { ...m, actions: m.actions.map((a) => (a.id === id ? { ...a, ...patch } : a)) }
+      : m)));
+  }
+
+  // The person's decision on a change. Its outcome joins the conversation as
+  // a note, so the model knows on the next turn what was done.
+  async function decide(action: Action, confirm: boolean) {
+    updateAction(action.id, { state: 'busy' });
+    try {
+      const r = await fetch(`/api/assistant/actions/${encodeURIComponent(action.id)}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ confirm }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.status === 404) {
+        updateAction(action.id, { state: 'expired' });
+        return;
+      }
+      if (!r.ok) {
+        updateAction(action.id, { state: 'failed', result: d.error ?? String(r.status) });
+        return;
+      }
+      if (d.action) {
+        // What the recap showed changed meanwhile: a new recap to agree to.
+        updateAction(action.id, { ...d.action, state: 'pending' });
+        return;
+      }
+      const state: ActionState = !confirm ? 'cancelled' : d.done ? 'done' : 'failed';
+      updateAction(action.id, { state, result: d.text });
+      const noteState = text(state === 'done' ? 'assistant.actionNoteDone' : state === 'cancelled' ? 'assistant.actionNoteCancelled' : 'assistant.actionNoteFailed');
+      const note = text('assistant.actionNote', { title: action.title, state: noteState }) + (d.text ? `\n${d.text}` : '');
+      setMsgs((all) => [...all, { role: 'assistant', content: note, note: true }]);
+    } catch {
+      updateAction(action.id, { state: 'pending' });
     }
   }
 
@@ -191,10 +248,16 @@ export function AssistantPane() {
               <span className="text-right text-[13px] text-muted">{text('assistant.you')}</span>
               <span className="whitespace-pre-wrap break-words rounded-md bg-status px-3 py-2">{m.content}</span>
             </li>
+          ) : m.note ? (
+            <li key={i} className="whitespace-pre-wrap break-words border-l-2 border-line pl-3 text-[13px] text-muted">{m.content}</li>
           ) : (
-            <li key={i} className="flex flex-col gap-1">
+            <li key={i} className="flex flex-col gap-2">
               <span className="text-[13px] text-muted">{text('nav.assistant')}</span>
-              <span className="whitespace-pre-wrap break-words">{m.content}</span>
+              {m.tools?.length ? (
+                <span className="text-[13px] text-muted">{text('assistant.toolsUsed', { tools: m.tools.map((t) => t.title).join(' · ') })}</span>
+              ) : null}
+              {m.content ? <span className="whitespace-pre-wrap break-words">{m.content}</span> : null}
+              {m.actions?.map((a) => <ActionCard key={a.id} action={a} canAct={canChat} onDecide={(ok) => void decide(a, ok)} />)}
             </li>
           ),
         )}
@@ -216,6 +279,34 @@ export function AssistantPane() {
       ) : (
         <p className="border-t border-line px-4 py-3 text-[13px] text-muted">{text('assistant.readOnly')}</p>
       )}
+    </div>
+  );
+}
+
+function ActionCard({ action, canAct, onDecide }: { action: Action; canAct: boolean; onDecide: (confirm: boolean) => void }) {
+  const state = action.state ?? 'pending';
+  const outcome =
+    state === 'done' ? text('assistant.actionDone', { title: action.title })
+    : state === 'cancelled' ? text('assistant.actionCancelled', { title: action.title })
+    : state === 'failed' ? text('assistant.actionFailed', { title: action.title })
+    : state === 'expired' ? text('assistant.actionExpired')
+    : '';
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-line bg-surface px-3 py-2">
+      <span className="text-[13px] font-medium">{state === 'pending' || state === 'busy' ? `${text('assistant.toConfirm')} · ${action.title}` : outcome}</span>
+      <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-[13px]">{action.recap}</pre>
+      {action.result && state !== 'pending' ? <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words text-[13px] text-muted">{action.result}</pre> : null}
+      {canAct && (state === 'pending' || state === 'busy') ? (
+        <div className="flex gap-2">
+          <Button type="button" disabled={state === 'busy'} onClick={() => onDecide(true)}>
+            {state === 'busy' ? <Spinner /> : null}
+            {text('assistant.confirm')}
+          </Button>
+          <Button type="button" variant="secondary" disabled={state === 'busy'} onClick={() => onDecide(false)}>
+            {text('assistant.cancel')}
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

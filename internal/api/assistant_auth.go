@@ -40,7 +40,7 @@ func (a *API) assistantAuth(next http.HandlerFunc) http.HandlerFunc {
 // assistantRouteRole is the least role a mounted assistant route needs.
 func assistantRouteRole(pattern string) string {
 	switch pattern {
-	case "POST /api/assistant/chat":
+	case "POST /api/assistant/chat", "POST /api/assistant/actions/{id}":
 		return store.RoleDeploy
 	case "PUT /api/assistant/pricing", "PUT /api/assistant/keys/{provider}", "DELETE /api/assistant/keys/{provider}",
 		"GET /api/assistant/openai/start", "DELETE /api/assistant/openai":

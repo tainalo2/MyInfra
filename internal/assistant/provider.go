@@ -286,30 +286,40 @@ func (o OpenAI) Complete(ctx context.Context, model, system string, msgs []Messa
 	if reasoningEffort != "" {
 		body["reasoning"] = map[string]any{"effort": reasoningEffort}
 	}
+	turn, usage, err := o.respond(ctx, body, key)
+	if err != nil {
+		return Response{}, err
+	}
+	return Response{turn.Text, usage}, nil
+}
+
+// respond posts to /v1/responses and reads the stream to its end.
+func (o OpenAI) respond(ctx context.Context, body map[string]any, key string) (ToolTurn, Usage, error) {
 	b, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, "POST", o.base()+"/v1/responses", bytes.NewReader(b))
 	if err != nil {
-		return Response{}, scrub(err, key)
+		return ToolTurn{}, Usage{}, scrub(err, key)
 	}
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set("accept", "text/event-stream")
 	req.Header.Set("authorization", "Bearer "+key)
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return Response{}, scrub(err, key)
+		return ToolTurn{}, Usage{}, scrub(err, key)
 	}
 	defer res.Body.Close()
 	if res.StatusCode >= 300 {
 		data, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
-		return Response{}, scrub(fmt.Errorf("provider status %d: %s", res.StatusCode, data), key)
+		return ToolTurn{}, Usage{}, scrub(fmt.Errorf("provider status %d: %s", res.StatusCode, data), key)
 	}
 	return readResponseStream(res.Body, key)
 }
 
 // readResponseStream reads the events until response.completed, whose
-// response carries the whole output and the usage. A failure can come after
-// the stream started (a plan's usage limit, for one).
-func readResponseStream(r io.Reader, key string) (Response, error) {
+// response carries the whole output and the usage: the text, and the
+// function calls when tools were offered. A failure can come after the
+// stream started (a plan's usage limit, for one).
+func readResponseStream(r io.Reader, key string) (ToolTurn, Usage, error) {
 	type result struct {
 		Output []struct {
 			Type    string `json:"type"`
@@ -317,6 +327,9 @@ func readResponseStream(r io.Reader, key string) (Response, error) {
 				Type string `json:"type"`
 				Text string `json:"text"`
 			} `json:"content"`
+			CallID    string `json:"call_id"`
+			Name      string `json:"name"`
+			Arguments string `json:"arguments"`
 		} `json:"output"`
 		Usage struct {
 			In  int `json:"input_tokens"`
@@ -345,29 +358,37 @@ func readResponseStream(r io.Reader, key string) (Response, error) {
 		}
 		switch ev.Type {
 		case "response.completed", "response.incomplete":
+			var turn ToolTurn
 			var sb strings.Builder
 			for _, item := range ev.Response.Output {
-				if item.Type != "message" {
-					continue
-				}
-				for _, part := range item.Content {
-					if part.Type == "output_text" {
-						sb.WriteString(part.Text)
+				switch item.Type {
+				case "message":
+					for _, part := range item.Content {
+						if part.Type == "output_text" {
+							sb.WriteString(part.Text)
+						}
 					}
+				case "function_call":
+					args := json.RawMessage(item.Arguments)
+					if !json.Valid(args) {
+						args = json.RawMessage("{}")
+					}
+					turn.Calls = append(turn.Calls, ToolCall{ID: item.CallID, Name: item.Name, Args: args})
 				}
 			}
-			return Response{sb.String(), Usage{ev.Response.Usage.In, ev.Response.Usage.Out}}, nil
+			turn.Text = sb.String()
+			return turn, Usage{ev.Response.Usage.In, ev.Response.Usage.Out}, nil
 		case "response.failed":
 			if e := ev.Response.Error; e != nil {
-				return Response{}, scrub(fmt.Errorf("provider error %s: %s", e.Code, e.Message), key)
+				return ToolTurn{}, Usage{}, scrub(fmt.Errorf("provider error %s: %s", e.Code, e.Message), key)
 			}
-			return Response{}, errors.New("provider error: response failed")
+			return ToolTurn{}, Usage{}, errors.New("provider error: response failed")
 		case "error":
-			return Response{}, scrub(fmt.Errorf("provider error %s: %s", ev.Code, ev.Message), key)
+			return ToolTurn{}, Usage{}, scrub(fmt.Errorf("provider error %s: %s", ev.Code, ev.Message), key)
 		}
 	}
 	if err := sc.Err(); err != nil {
-		return Response{}, scrub(err, key)
+		return ToolTurn{}, Usage{}, scrub(err, key)
 	}
-	return Response{}, errors.New("provider stream ended before the response completed")
+	return ToolTurn{}, Usage{}, errors.New("provider stream ended before the response completed")
 }
