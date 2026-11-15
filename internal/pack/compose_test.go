@@ -140,3 +140,76 @@ func TestComposeOpensPublishedPorts(t *testing.T) {
 		t.Fatal(joined)
 	}
 }
+
+// A production compose file behind its own proxy publishes no port: the
+// domain goes to the front end, never to the database listed first.
+func TestComposeEntryWithoutPublishedPort(t *testing.T) {
+	data := []byte(`services:
+  postgresql:
+    image: postgres:16
+  redis:
+    image: redis:8
+  backend:
+    image: example/backend:1
+    depends_on: [postgresql, redis]
+  worker:
+    image: example/backend:1
+  frontend:
+    image: example/frontend:1
+    depends_on: [backend]
+`)
+	p, _, err := Compose(data, "app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, svc := range p.Services {
+		if svc.Public != (svc.Name == "frontend") {
+			t.Fatalf("%s public=%v", svc.Name, svc.Public)
+		}
+	}
+}
+
+// A development compose file builds its images and runs tools: the warnings
+// send to the production one, and say what to remove past twelve services.
+func TestComposeDevelopmentFile(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("services:\n  app:\n    build: .\n    image: app:dev\n    ports: [\"8000:8000\"]\n")
+	for i := 0; i < 12; i++ {
+		fmt.Fprintf(&b, "  tool%d:\n    image: busybox\n", i)
+	}
+	_, warnings, err := Compose([]byte(b.String()), "app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var built, many bool
+	for _, w := range warnings {
+		built = built || strings.Contains(w.Message, "compose de production")
+		many = many || strings.Contains(w.Message, "13 services, un paquet au plus 12")
+	}
+	if !built || !many {
+		t.Fatalf("%+v", warnings)
+	}
+}
+
+// A database publishing its port to the machine is not the entry: the front
+// end by its name is, before a tool listed earlier.
+func TestComposeEntryAmongPublishedPorts(t *testing.T) {
+	data := []byte(`services:
+  postgresql:
+    image: postgres:16
+    ports: ["15432:5432"]
+  mailcatcher:
+    image: sj26/mailcatcher
+    ports: ["1081:1080"]
+  nginx:
+    image: nginx:1.25
+    ports: ["8083:8083"]
+`)
+	p, _, err := Compose(data, "app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !service(p, "nginx").Public || service(p, "postgresql").Public || service(p, "mailcatcher").Public {
+		t.Fatalf("%+v", p.Services)
+	}
+}

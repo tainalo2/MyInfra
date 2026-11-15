@@ -277,9 +277,10 @@ func (a *API) importPackage(w http.ResponseWriter, r *http.Request) {
 	a.keepPackage(w, r, p, true)
 }
 
-// fetchText reads a package or a compose file from an https link.
+// fetchText reads a package or a compose file from an https link. A link to
+// a file's page on GitHub or GitLab reads the file itself.
 func fetchText(ctx context.Context, link string) ([]byte, int, string) {
-	target, err := url.Parse(strings.TrimSpace(link))
+	target, err := url.Parse(rawLink(strings.TrimSpace(link)))
 	if err != nil || target.Scheme != "https" || target.Host == "" {
 		return nil, http.StatusBadRequest, "Indiquez une URL https:// vers un fichier YAML ou JSON."
 	}
@@ -299,7 +300,33 @@ func fetchText(ctx context.Context, link string) ([]byte, int, string) {
 	if err != nil {
 		return nil, http.StatusBadGateway, "Le fichier est injoignable."
 	}
+	if strings.HasPrefix(res.Header.Get("Content-Type"), "text/html") {
+		return nil, http.StatusBadRequest, "Cette adresse est une page web, pas un fichier : donnez le lien du fichier brut (« Raw » sur GitHub)."
+	}
 	return raw, 0, ""
+}
+
+// rawLink turns the page of a file on GitHub or GitLab into the file itself:
+// github.com/o/r/blob/main/compose.yml is raw.githubusercontent.com/o/r/main/compose.yml,
+// gitlab.com/o/r/-/blob/main/x is gitlab.com/o/r/-/raw/main/x.
+func rawLink(link string) string {
+	u, err := url.Parse(link)
+	if err != nil {
+		return link
+	}
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	switch {
+	case u.Host == "github.com" && len(parts) > 4 && parts[2] == "blob":
+		u.Host = "raw.githubusercontent.com"
+		u.Path = "/" + strings.Join(append(parts[:2:2], parts[3:]...), "/")
+		u.RawQuery, u.Fragment = "", ""
+	case strings.Contains(u.Path, "/-/blob/"):
+		u.Path = strings.Replace(u.Path, "/-/blob/", "/-/raw/", 1)
+		u.Fragment = ""
+	default:
+		return link
+	}
+	return u.String()
 }
 
 func (a *API) importPackageURL(w http.ResponseWriter, r *http.Request) {
